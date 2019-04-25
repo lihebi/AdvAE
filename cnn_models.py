@@ -5,111 +5,16 @@ import sys
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# train(CIFAR(), "models/cifar", [64, 64, 128, 128, 256, 256], num_epochs=50)
-# train(MNIST(), "models/mnist", [32, 32, 64, 64, 200, 200], num_epochs=50)
-def load_mnist_data():
-    (train_x, train_y), (test_x, test_y) = keras.datasets.mnist.load_data()
-    # convert data
-    train_x = train_x.astype('float32') / 255 - 0.5
-    test_x = test_x.astype('float32') / 255 - 0.5
-    train_x.shape
-    train_x = np.reshape(train_x, (train_x.shape[0], 28,28,1))
-    test_x = np.reshape(test_x, (test_x.shape[0], 28,28,1))
-    
-    train_y = keras.utils.to_categorical(train_y, 10)
-    test_y = keras.utils.to_categorical(test_y, 10)
-    
-    # split validation
-    nval = train_x.shape[0] // 10
-    val_x = train_x[-nval:]
-    val_y = train_y[-nval:]
-    train_x = train_x[:-nval]
-    train_y = train_y[:-nval]
-    return (train_x, train_y), (val_x, val_y), (test_x, test_y)
-
-    
-
-def get_mnist_model():
-    img = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-    label = keras.layers.Input(shape=(10,), dtype='float32')
-    
-    x = keras.layers.Conv2D(32, 3)(img)
-    x = keras.layers.Activation('relu')(x)
-    x = keras.layers.Conv2D(32, 3)(x)
-    x = keras.layers.Activation('relu')(x)
-    x = keras.layers.MaxPool2D((2,2))(x)
-    
-    x = keras.layers.Conv2D(64, 3)(x)
-    x = keras.layers.Activation('relu')(x)
-    x = keras.layers.Conv2D(64, 3)(x)
-    x = keras.layers.Activation('relu')(x)
-    x = keras.layers.MaxPool2D((2,2))(x)
-
-    x = keras.layers.Flatten()(x)
-    x = keras.layers.Dense(200)(x)
-    x = keras.layers.Activation('relu')(x)
-    x = keras.layers.Dropout(rate=0.5)(x)
-    x = keras.layers.Dense(200)(x)
-    x = keras.layers.Activation('relu')(x)
-
-    logits = keras.layers.Dense(10)(x)
-
-    
-    # x = keras.layers.Softmax()(x)
-
-    
-    ce_loss = tf.losses.softmax_cross_entropy(label, logits)
-    
-    # vi_loss = tf.reduce_mean(tf.gradients(logits, img))
-    # define many templates
-    # mast the loss through the templates
-    # loss = ce_loss + vi_loss
-    loss = ce_loss
-
-    model = keras.models.Model([img, label], logits)
-    model.add_loss(loss)
-    model.compile(optimizer='rmsprop', metrics=['accuracy'])
-    return model
-
-BATCH_SIZE = 128
-NUM_EPOCHS = 100
-
-
-def train_model(model, train_x, train_y, val_x, val_y):
-    # sgd = keras.optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
-    # def fn(correct, predicted):
-    #     # keras.losses.categorical_crossentropy
-    #     return tf.nn.softmax_cross_entropy_with_logits(labels=correct,
-    #                                                    logits=predicted)
-    # model.add_loss(tf.nn.softmax_cross_entropy_with_logits)
-    # model.add_loss(fn)
-    def fn(y, yhat):
-        return tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=yhat)
-        # return keras.losses.categorical_crossentropy(y, yhat)
-    model.compile(loss=fn, optimizer=sgd, metrics=['accuracy'])
-    # model.compile(optimizer=sgd, metrics=['accuracy'])
-    # es = keras.callbacks.EarlyStopping(monitor='val_loss',
-    #                                    min_delta=0, patience=3,
-    #                                    verbose=0, mode='auto')
-    model.fit([train_x, train_y],
-              batch_size=BATCH_SIZE,
-              # validation_data=(val_x, val_y),
-              nb_epoch=NUM_EPOCHS,
-              # callbacks=[es],
-              shuffle=True)
-
-    # if file_name != None:
-    #     model.save(file_name)
-
-    return model
+from utils import *
 
 # VISUAL_LAMBDA = 100
 class VisualCNNModel():
     # model.image_size: size of the image (e.g., 28 for MNIST, 32 for CIFAR)
     # model.num_channels: 1 for greyscale, 3 for color images
     # model.num_labels: total number of valid labels (e.g., 10 for MNIST/CIFAR)
-    def __init__(self, loss_type, visual_lambda):
-        assert loss_type in ['l1', 'l0', 'group_lasso', None]
+    def __init__(self, loss_type, grad_type, visual_lambda):
+        assert loss_type in ['l2', 'l1', 'l0', 'group_lasso', None]
+        assert grad_type in ['xent', 'logit']
         self.image_size = 28
         self.num_channels = 1
         self.num_labels = 10
@@ -139,7 +44,11 @@ class VisualCNNModel():
         self.preds = tf.argmax(self.logits, axis=1)
         self.label = tf.placeholder(dtype='float32', shape=(None,10))
         self.ce_loss = tf.losses.softmax_cross_entropy(self.label, self.logits)
-        grads = tf.abs(tf.gradients(tf.math.reduce_max(self.logits), self.img))
+
+        if grad_type == 'logit':
+            grads = tf.abs(tf.gradients(tf.math.reduce_max(self.logits), self.img))
+        else:
+            grads = tf.abs(tf.gradients(self.ce_loss, self.img))
 
         # L2 loss
         # self.vi_loss = tf.square(grads)
@@ -166,6 +75,8 @@ class VisualCNNModel():
                 tf.to_float(
                     tf.logical_not(
                         tf.equal(grads, tf.zeros_like(grads)))))
+        elif loss_type == 'l2':
+            self.vi_loss = tf.sqrt(tf.reduce_mean(tf.square(grads)))
         else:
             # no visual loss term
             #
@@ -255,20 +166,23 @@ def generate_victim(test_x, test_y):
     return inputs, targets
 
 def __test():
-    visual_defense_exp(None, visual_lambda=0, fname='cwl2-orig.png')
-    visual_defense_exp('l1', visual_lambda=10, fname='test.png')
-    for loss_type in ['l1', 'group_lasso']:
-        for visual_lambda in [1, 10, 50, 200, 500, 1000]:
-            print('======', loss_type, visual_lambda)
-            fname = 'cwl2-{}-{:=04}.png'.format(loss_type, visual_lambda)
-            visual_defense_exp(loss_type, visual_lambda=visual_lambda,
-                               fname=fname)
+    visual_defense_exp(None, 'logit', visual_lambda=0, fname='cwl2-orig.png')
+    for loss_type in ['group_lasso', 'l2', 'l1']:
+        for grad_type in ['xent', 'logit']:
+            for visual_lambda in [1, 10, 50, 200, 500, 1000]:
+                print('======', loss_type, visual_lambda)
+                fname = 'cwl2-{}-{}-{:=04}.png'.format(loss_type, grad_type, visual_lambda)
+                visual_defense_exp(loss_type, grad_type,
+                                   visual_lambda=visual_lambda,
+                                   fname=fname)
     
-def visual_defense_exp(loss_type, visual_lambda, fname):
+def visual_defense_exp(loss_type, grad_type, visual_lambda, fname):
     # loss_type=group_lasso
+    # loss_type=l2
     # loss_type=None
     # visual_lambda=100
     model = VisualCNNModel(loss_type=loss_type,
+                           grad_type=grad_type,
                            visual_lambda=visual_lambda)
     (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
     # sess = tf.Session()
@@ -317,10 +231,9 @@ def visual_defense_exp(loss_type, visual_lambda, fname):
         l2_dist = mynorm(adv_l2, inputs, 2).mean()
         l1_dist = mynorm(adv_l2, inputs, 1).mean()
         l0_dist = mynorm(adv_l2, inputs, 0).mean()
-        l2_dist_0 = mynorm(adv_l2, inputs, 2)[0]
-        l1_dist_0 = mynorm(adv_l2, inputs, 1)[0]
-        l0_dist_0 = mynorm(adv_l2, inputs, 0)[0]
-
+        # TODO print li_dist
+        li_dist = mynorm(adv_l2, inputs, np.inf).mean()
+        
         # save the draw of the distortion
         # mynorm(adv_l2, inputs, 2, 0.1)
         print('saving distortion plot ..')
@@ -331,99 +244,21 @@ def visual_defense_exp(loss_type, visual_lambda, fname):
 
         plt.figure()
         # plt.imshow((adv_l2-inputs)[0].reshape((28,28)), cmap='hot')
+        # TODO Add more figures
         sns.heatmap(np.abs((adv_l2-inputs)[0]).reshape((28,28)),
                     linewidth=0.5, cmap='Reds', vmin=0, vmax=0.8)
         # plt.hist((adv_l2.reshape(10,-1) - inputs.reshape(10,-1))[0])
-        title = ('Lambda: {}, loss: {}, '.format(visual_lambda, loss_type)
-                 + 'Model Acc: {:.4f} ASR: {:.1f}\n'
-                 .format(model_acc, attack_acc)
-                 + 'distortion: L2: {:.2f}, L1: {:.2f}, L0: {:.2f}'
-                 .format(l2_dist_0, l1_dist_0, l0_dist_0))
-        plt.title(title)
-        plt.savefig('images/'+fname + '.dist.heat.png')
-        
-        # plt.show()
-        
-        print('Distortion: L2: {:.4f}, L1: {:.4f}, L0: {:.4f}'
-              .format(l2_dist, l1_dist, l0_dist))
-        # thresholded norm
-        l2_dist_t = mynorm(adv_l2, inputs, 2, t=0.005).mean()
-        l1_dist_t = mynorm(adv_l2, inputs, 1, t=0.005).mean()
-        l0_dist_t = mynorm(adv_l2, inputs, 0, t=0.005).mean()
-        print('Distortion (thresholded): L2: {:.4f}, L1: {:.4f}, L0: {:.4f}'
-              .format(l2_dist_t, l1_dist_t, l0_dist_t))
-        l2_dist_t = mynorm(adv_l2, inputs, 2, t=0.05).mean()
-        l1_dist_t = mynorm(adv_l2, inputs, 1, t=0.05).mean()
-        l0_dist_t = mynorm(adv_l2, inputs, 0, t=0.05).mean()
-        print('Distortion (thresholded): L2: {:.4f}, L1: {:.4f}, L0: {:.4f}'
-              .format(l2_dist_t, l1_dist_t, l0_dist_t))
-        l2_dist_t = mynorm(adv_l2, inputs, 2, t=0.1).mean()
-        l1_dist_t = mynorm(adv_l2, inputs, 1, t=0.1).mean()
-        l0_dist_t = mynorm(adv_l2, inputs, 0, t=0.1).mean()
-        print('Distortion (thresholded): L2: {:.4f}, L1: {:.4f}, L0: {:.4f}'
-              .format(l2_dist_t, l1_dist_t, l0_dist_t))
-        l2_dist_t = mynorm(adv_l2, inputs, 2, t=0.2).mean()
-        l1_dist_t = mynorm(adv_l2, inputs, 1, t=0.2).mean()
-        l0_dist_t = mynorm(adv_l2, inputs, 0, t=0.2).mean()
-        print('Distortion (thresholded): L2: {:.4f}, L1: {:.4f}, L0: {:.4f}'
-              .format(l2_dist_t, l1_dist_t, l0_dist_t))
-        l2_dist_t = mynorm(adv_l2, inputs, 2, t=0.5).mean()
-        l1_dist_t = mynorm(adv_l2, inputs, 1, t=0.5).mean()
-        l0_dist_t = mynorm(adv_l2, inputs, 0, t=0.5).mean()
-        print('Distortion (thresholded): L2: {:.4f}, L1: {:.4f}, L0: {:.4f}'
-              .format(l2_dist_t, l1_dist_t, l0_dist_t))
-        
-def convert_image_255(img):
-    return np.round(255 - (img + 0.5) * 255).reshape((28, 28))
-    # return np.round(img).reshape((28, 28))
-    # return np.round((img + 0.5) * 255).reshape((32, 32, 3))
+        setting_report = 'Lambda: {}, loss: {}, grad: {}'.format(visual_lambda, loss_type, grad_type)
+        acc_report = 'Model Acc: {:.4f} ASR: {:.1f}' .format(model_acc, attack_acc)
+        distort_report = 'distortion: L2: {:.2f}, L1: {:.2f}, L0: {:.2f}, Li: {:.2f}'.format(l2_dist, l1_dist, l0_dist, li_dist)
+        full_report = setting_report + '\n' + acc_report + '\n' + distort_report
 
-def grid_show_image(images, width, height, filename='out.png'):
-    """
-    Sample 10 images, and save it.
-    """
-    assert len(images) == width * height
-    plt.ioff()
-    figure = plt.figure()
-    # figure = plt.figure(figsize=(6.4, 1.2))
-    figure.canvas.set_window_title('My Grid Visualization')
-    for x in range(height):
-        for y in range(width):
-            # print(x,y)
-            # figure.add_subplot(height, width, x*width + y + 1)
-            ax = plt.subplot(height, width, x*width + y + 1)
-            ax.set_axis_off()
-            ax.get_xaxis().set_visible(False)
-            ax.get_yaxis().set_visible(False)
-            # ax.set_visible(False)
-            # plt.axis('off')
-            # plt.imshow(images[x*width+y], cmap='gray')
-            plt.imshow(convert_image_255(images[x*width+y]), cmap='gray')
-            # plt.imshow(convert_image_255(images[x*width+y]))
-            # plt.imshow(images[x*width+y])
-    # plt.show()
-    # plt.tight_layout()
-    plt.savefig(filename, bbox_inches='tight', pad_inches=0)
-    # plt.savefig(filename)
-    return figure
-    
-def keras_main():
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
-    train_x
-    train_y
-    val_x
-    test_x
-    model = get_mnist_model()
-    model.summary()
-    model.fit([train_x, train_y],
-              batch_size=BATCH_SIZE,
-              validation_split=0.1,
-              # validation_data=((val_x, val_y)),
-              nb_epoch=NUM_EPOCHS,
-              # callbacks=[es],
-              shuffle=True)
-    # train_model(model, train_x, train_y, val_x, val_y)
-    loss, acc = model.evaluate((test_x, test_y))
-    print('loss: {:.5f}, acc: {:.5f}'.format(loss, acc))
-if __name__ == '__main__':
-    raw_tf_main()
+        print(full_report)
+        with open('log.txt', 'a') as f:
+            f.write(setting_report + '\n')
+            f.write('\t' + acc_report + '\n')
+            f.write('\t' + distort_report + '\n')
+        
+        plt.title(full_report)
+        plt.savefig('images/'+fname + '.dist.heat.png')
+

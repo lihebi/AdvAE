@@ -1,1 +1,5 @@
 models
+*.png
+__pycache__
+saved_model
+tmp

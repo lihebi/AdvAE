@@ -56,6 +56,38 @@ I need checkpoint to reduce experiment time
 
 ** TODO define a lasso that sets the gradients to 0 when lower than a threshold
 
+* Adv Denoiser Training
+
+4. (optional) alternatively train denoiser and CNN, so that
+the precision is still good. This may have equivalent effect as
+training denoiser using high level feature guidance
+
+4.1 FIXME probably also consider training for from clean x to x and to
+logits, as that is the whole model
+
+5. (optional) ensamble for different CNN architecture
+
+This will affect the loaded variables. So load variables after this.
+
+** TODOs        
+        
+- test whether this works for CW
+- test whether this works for different CNN structure out of box, or even FC
+- test for CIFAR and ImageNet
+- visualize what the denoiser is doing on adv images
+- plot the training and loss
+- analyze how the different loss terms work. Even if the loss does
+  not seem to decrease, it might act as a regularizer. Try removing it
+  in the train step, and observe if that term increases and goes out
+  of control.
+- see whether it is necessary any more to use high layers of CNN.
+- investigate whether increasing denoiser capacity helps with defense
+  against CW
+- ensemble different CNN architecture. I suspect that the rec terms
+  actually act as regularizer for different CNNs. We'll see.
+- analyze the difference, pros and cons, compared to generative methods.
+
+
 * Archive
 ** DONE group lasso?
    CLOSED: [2019-04-10 Wed 01:01]

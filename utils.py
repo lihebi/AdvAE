@@ -11,8 +11,8 @@ import seaborn as sns
 def load_mnist_data():
     (train_x, train_y), (test_x, test_y) = keras.datasets.mnist.load_data()
     # convert data
-    train_x = train_x.astype('float32') / 255 - 0.5
-    test_x = test_x.astype('float32') / 255 - 0.5
+    train_x = train_x.astype('float32') / 255
+    test_x = test_x.astype('float32') / 255
     train_x.shape
     train_x = np.reshape(train_x, (train_x.shape[0], 28,28,1))
     test_x = np.reshape(test_x, (test_x.shape[0], 28,28,1))
@@ -30,7 +30,7 @@ def load_mnist_data():
 
     
 def convert_image_255(img):
-    return np.round(255 - (img + 0.5) * 255).reshape((28, 28))
+    return np.round(255 - (img) * 255).reshape((28, 28))
     # return np.round(img).reshape((28, 28))
     # return np.round((img + 0.5) * 255).reshape((32, 32, 3))
 

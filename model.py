@@ -17,55 +17,9 @@ from utils import *
 BATCH_SIZE = 128
 NUM_EPOCHS = 100
 
-class DenoisingEncoder():
-    """Implement a denoising auto encoder.
-    """
-    def __init__(self):
-        self.x = tf.placeholder(shape=self.x_shape(), dtype='float32')
-        with tf.variable_scope("encoder"):
-            self.code_digits = self.auto_encoder(self.x_image)
-            self.reconstructed = tf.nn.sigmoid(self.code_digits)
-        # self.code_loss = tf.reduce_mean((self.reconstructed - self.x_image)**2)
-        self.code_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits
-                                        (labels=self.x_image, logits=self.code_digits))
+CLIP_MIN = 0.
+CLIP_MAX = 1.
 
-        self.encoder_variables = tf.trainable_variables()[pre_var_num:]
-    def auto_encoder(self, noise_x, clean_x):
-        """From noise_x to x."""
-        x = Conv2D(32, (3, 3), activation='relu', padding='same')(noise_x)
-        x = MaxPooling2D((2, 2), padding='same')(x)
-        x = Conv2D(32, (3, 3), activation='relu', padding='same')(x)
-        encoded = MaxPooling2D((2, 2), padding='same')(x)
-
-        # at this point the representation is (7, 7, 32)
-
-        x = Conv2D(32, (3, 3), activation='relu', padding='same')(encoded)
-        x = UpSampling2D((2, 2))(x)
-        x = Conv2D(32, (3, 3), activation='relu', padding='same')(x)
-        x = UpSampling2D((2, 2))(x)
-        decoded = Conv2D(1, (3, 3), activation='sigmoid', padding='same')(x)
-
-        autoencoder = Model(input_img, decoded)
-        # first convolutional layer
-        with tf.variable_scope("conv1"):
-            h_conv1 = tf.nn.relu(self._conv(input_images, [3, 3, 1, 32], [32]))
-        h_pool1 = self._max_pool_2x2(h_conv1)
-        # second convolutional layer
-        with tf.variable_scope("conv2"):
-            h_conv2 = tf.nn.relu(self._conv(h_pool1, [3, 3, 32, 32], [32]))
-        encoded = self._max_pool_2x2(h_conv2)
-
-        # at this point the representation is (7, 7, 32)
-        with tf.variable_scope("conv3"):
-            h_conv3 = tf.nn.relu(self._conv(encoded, [3, 3, 32, 32], [32]))
-        upsampled = self._upsample(h_conv3)
-        with tf.variable_scope("conv4"):
-            h_conv4 = tf.nn.relu(self._conv(upsampled, [3, 3, 32, 32], [32]))
-        upsampled2 = self._upsample(h_conv4)
-        decoded = self._conv(upsampled2, [3, 3, 32, 1], [1])
-        return decoded
-        
-        pass
 
 class CNNModel(cleverhans.model.Model):
     def __init__(self):
@@ -166,38 +120,365 @@ class CNNModel(cleverhans.model.Model):
         return tf.reduce_mean(tf.sqrt(
             keras.layers.AvgPool3D(4, 4, 'valid')(tf.square(grads))
             + 1e-10))
-
-    # training
-    def evaluate_np(self, sess, test_x, test_y):
-        return sess.run([accuracy()],
-                        feed_dict={self.x: test_x, self.y: test_y})
-    def predict_np(self, sess, test_x):
-        # FIXME can I just supply only one placeholder?
-        return sess.run(self.preds, feed_dict={self.x: test_x})
-
-    def save(self):
-        raise NotImplementedError()
-        pass
-    def load(self):
-        raise NotImplementedError()
-        pass
-    # attacks
-    def my_FGSM(self, sess, x, y, eps):
-        clip_min = np.min(x)
-        clip_max = np.max(x)
-        feed = { self.x: x, self.y: y }
-        grads = sess.run(self.cross_entropy_grads(), feed_dict=feed)
-        x = np.clip(x + np.sign(grads)*eps, clip_min, clip_max)
-        return x
-    def my_PGD(self, sess, x, y):
-        pass
-    def my_jsma(self, sess, x, y):
-        pass
-    def my_cw(self, sess, x, y):
-        pass
     
+class MNIST_CNN(CNNModel):
+    def x_shape(self):
+        # return [None, 28*28]
+        return (28,28,1,)
+    def y_shape(self):
+        return [None, 10]
+        # return (10,)
+    def rebuild_model(self, xin):
+        # FIXME may not need reshape layer
+        x = keras.layers.Reshape([28, 28, 1])(xin)
+        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
 
-def my_adv_training(sess, model, loss, batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS):
+        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+
+        x = keras.layers.Flatten()(x)
+        x = keras.layers.Dense(200)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Dropout(rate=0.5)(x)
+        x = keras.layers.Dense(200)(x)
+        x = keras.layers.Activation('relu')(x)
+        logits = keras.layers.Dense(10)(x)
+        return logits
+    
+# model = DenoisedCNN()
+
+class DenoisedCNN(cleverhans.model.Model):
+    """Implement a denoising auto encoder.
+    """
+    def __init__(self):
+        # FIXME I need to make sure these setups are only called
+        # once. Otherwise I need to set the AE_vars variables accordingly
+        with tf.variable_scope('my_AE'):
+            self.setup_AE()
+        with tf.variable_scope('my_CNN'):
+            self.setup_CNN()
+        with tf.variable_scope('my_FC'):
+            self.setup_FC()
+
+        self.AE_vars = tf.trainable_variables('my_AE')
+        self.CNN_vars = tf.trainable_variables('my_CNN')
+        self.FC_vars = tf.trainable_variables('my_FC')
+        
+        self.x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        self.y = keras.layers.Input(shape=(10,), dtype='float32')
+        # when self.x is feeding adv input, this acts as the clean reference
+        self.x_ref = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+
+        rec = self.AE(self.x)
+        self.rec_loss = tf.reduce_mean(
+            tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=rec, labels=self.x_ref))
+
+        clean_rec = self.AE(self.x_ref)
+        self.clean_rec_loss = tf.reduce_mean(
+            tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=clean_rec, labels=self.x_ref))
+        
+        self.logits = self.FC(self.CNN(self.AE(self.x)))
+        self.ce_loss = tf.reduce_mean(
+            tf.nn.softmax_cross_entropy_with_logits(
+                logits=self.logits, labels=self.y))
+        self.ce_grad = tf.gradients(self.ce_loss, self.x)[0]
+
+        clean_logits = self.FC(self.CNN(self.AE(self.x_ref)))
+        self.clean_ce_loss = tf.reduce_mean(
+            tf.nn.softmax_cross_entropy_with_logits(
+                logits=clean_logits, labels=self.y))
+        
+        self.preds = tf.argmax(self.logits, axis=1)
+        # self.probs = tf.nn.softmax(self.logits)
+        self.accuracy = tf.reduce_mean(tf.cast(tf.equal(
+            self.preds, tf.argmax(self.y, 1)), dtype=tf.float32))
+        self.adv_train_step = tf.train.AdamOptimizer(0.001).minimize(self.ce_loss, var_list=self.AE_vars)
+        self.adv_rec_train_step = tf.train.AdamOptimizer(0.001).minimize(self.rec_loss, var_list=self.AE_vars)
+
+        # TODO monitoring each of these losses and adjust weights
+        self.unified_adv_loss = self.rec_loss + self.clean_rec_loss + self.ce_loss + self.clean_ce_loss
+        self.unified_adv_train_step = tf.train.AdamOptimizer(0.001).minimize(self.unified_adv_loss, var_list=self.AE_vars)
+
+        # self.clean_x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        # self.noise_x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        # # self.x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        # self.y = tf.placeholder(shape=[None, 10], dtype='float32')
+
+        # loss function
+        # ce_grad, used for my_fast_PGD
+        # self.ce_grad = tf.gradients(ce_loss, self.noise_x)[0]
+        # denoising objective
+    @staticmethod
+    def compute_accuracy(sess, x, y, preds, x_test, y_test):
+        acc = tf.reduce_mean(tf.cast(
+            tf.equal(tf.argmax(y, 1), tf.argmax(preds, 1)),
+            dtype=tf.float32))
+        return sess.run(acc, feed_dict={x: x_test, y: y_test})
+    # cleverhans
+    def predict(self, x):
+        return self.FC(self.CNN(self.AE(x)))
+    # cleverhans
+    def fprop(self, x, **kwargs):
+        logits = self.predict(x)
+        return {self.O_LOGITS: logits,
+                self.O_PROBS: tf.nn.softmax(logits=logits)}
+    def setup_AE(self):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        # x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        """From noise_x to x."""
+        # denoising
+        x = keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
+        x = keras.layers.MaxPooling2D((2, 2), padding='same')(x)
+        x = keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same')(x)
+        encoded = keras.layers.MaxPooling2D((2, 2), padding='same')(x)
+        # at this point the representation is (7, 7, 32)
+
+        x = keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same')(encoded)
+        x = keras.layers.UpSampling2D((2, 2))(x)
+        x = keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same')(x)
+        x = keras.layers.UpSampling2D((2, 2))(x)
+        decoded = keras.layers.Conv2D(1, (3, 3), activation='sigmoid', padding='same')(x)
+        self.AE = keras.models.Model(inputs, decoded)
+        
+    def save_CNN(self, sess, path):
+        """Save AE weights to checkpoint."""
+        saver = tf.train.Saver(var_list=self.CNN_vars)
+        saver.save(sess, path)
+
+    def save_AE(self, sess, path):
+        """Save AE weights to checkpoint."""
+        saver = tf.train.Saver(var_list=self.AE_vars)
+        saver.save(sess, path)
+
+    def load_CNN(self, sess, path):
+        saver = tf.train.Saver(var_list=self.CNN_vars)
+        saver.restore(sess, path)
+
+    def load_AE(self, sess, path):
+        saver = tf.train.Saver(var_list=self.AE_vars)
+        saver.restore(sess, path)
+
+    def setup_CNN(self):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        # FIXME this also assigns self.conv_layers
+        x = keras.layers.Reshape([28, 28, 1])(inputs)
+        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+
+        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+        self.CNN = keras.models.Model(inputs, x)
+
+    def setup_FC(self):
+        # (None, 5, 5, 64)
+        shape = self.CNN.output_shape
+        # (4,4,64,)
+        inputs = keras.layers.Input(batch_shape=shape, dtype='float32')
+        x = keras.layers.Flatten()(inputs)
+        x = keras.layers.Dense(200)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Dropout(rate=0.5)(x)
+        x = keras.layers.Dense(200)(x)
+        x = keras.layers.Activation('relu')(x)
+        logits = keras.layers.Dense(10)(x)
+        self.FC = keras.models.Model(inputs, logits)
+        
+
+    def train_CNN(self, sess, clean_x, clean_y):
+        """Train CNN part of the graph."""
+        # TODO I'm going to compute a hash of current CNN
+        # architecture. If the file already there, I'm just going to
+        # load it.
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        logits = self.FC(self.CNN(inputs))
+        model = keras.models.Model(inputs, logits)
+        def loss(y_true, y_pred):
+            return tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(
+                    logits=y_pred, labels=y_true))
+        optimizer = keras.optimizers.Adam(0.001)
+        # 'rmsprop'
+        model.compile(optimizer=optimizer,
+                      loss=loss,
+                      metrics=['accuracy'])
+        with sess.as_default():
+            model.fit(clean_x, clean_y, verbose=2)
+
+    def test_CNN(self, sess, clean_x, clean_y):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        labels = keras.layers.Input(shape=(10,), dtype='float32')
+        
+        logits = self.FC(self.CNN(inputs))
+        preds = tf.argmax(logits, axis=1)
+        probs = tf.nn.softmax(logits)
+        # self.acc = tf.reduce_mean(
+        #     tf.to_float(tf.equal(tf.argmax(self.logits, axis=1),
+        #                          tf.argmax(self.label, axis=1))))
+        accuracy = tf.reduce_mean(tf.cast(tf.equal(
+            preds, tf.argmax(labels, 1)), dtype=tf.float32))
+        acc = sess.run(accuracy, feed_dict={inputs: clean_x, labels: clean_y})
+        print('accuracy: {}'.format(acc))
+        
+    def train_AE(self, sess, clean_x):
+        noise_factor = 0.5
+        noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
+        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
+        
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        rec = self.AE(inputs)
+        model = keras.models.Model(inputs, rec)
+        # def loss(y_true, y_pred):
+        #     return tf.reduce_mean(
+        #         tf.nn.softmax_cross_entropy_with_logits(
+        #             logits=y_pred, labels=y_true))
+        # model.compile(optimizer='rmsprop', loss=loss, metrics=['accuracy'])
+        optimizer = keras.optimizers.Adam(0.001)
+        # 'adadelta'
+        model.compile(optimizer=optimizer,
+                      loss='binary_crossentropy')
+        with sess.as_default():
+            model.fit(noisy_x, clean_x, epochs=5, batch_size=128, verbose=2)
+
+    def test_AE(self, sess, clean_x):
+        # Testing denoiser
+        noise_factor = 0.5
+        # clean_x = test_x
+        noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
+        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
+
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        rec = self.AE(inputs)
+        model = keras.models.Model(inputs, rec)
+
+        rec = sess.run(rec, feed_dict={inputs: noisy_x[:5]})
+        print('generating png ..')
+        to_view = np.concatenate((noisy_x[:5], rec), 0)
+        grid_show_image(to_view, 5, 2, 'AE_out.png')
+        print('done')
+
+    def test_Entire(self, sess, clean_x, clean_y):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        labels = keras.layers.Input(shape=(10,), dtype='float32')
+        
+        logits = self.FC(self.CNN(self.AE(inputs)))
+        preds = tf.argmax(logits, axis=1)
+        probs = tf.nn.softmax(logits)
+        # self.acc = tf.reduce_mean(
+        #     tf.to_float(tf.equal(tf.argmax(self.logits, axis=1),
+        #                          tf.argmax(self.label, axis=1))))
+        accuracy = tf.reduce_mean(tf.cast(tf.equal(
+            preds, tf.argmax(labels, 1)), dtype=tf.float32))
+        acc = sess.run(accuracy, feed_dict={inputs: clean_x, labels: clean_y})
+        print('accuracy: {}'.format(acc))
+
+    def test_Adv_Denoiser(self, sess, clean_x, clean_y):
+        """Visualize the denoised image against adversarial examples."""
+        # TODO
+        # FIXME can I pass this self?
+        adv_x_concrete = my_fast_PGD(sess, self, clean_x, clean_y)
+        
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        labels = keras.layers.Input(shape=(10,), dtype='float32')
+
+        rec = self.AE(inputs)
+        
+        logits = self.FC(self.CNN(self.AE(inputs)))
+        preds = tf.argmax(logits, axis=1)
+        probs = tf.nn.softmax(logits)
+        
+        accuracy = tf.reduce_mean(tf.cast(tf.equal(
+            preds, tf.argmax(labels, 1)), dtype=tf.float32))
+        acc = sess.run(accuracy, feed_dict={inputs: adv_x_concrete, labels: clean_y})
+
+        print('accuracy: {}'.format(acc))
+        denoised_x = sess.run(rec, feed_dict={inputs: adv_x_concrete, labels: clean_y})
+        print('generating png ..')
+        to_view = np.concatenate((noisy_x[:5], rec), 0)
+        grid_show_image(to_view, 5, 2, 'AE_out.png')
+        print('done')
+
+
+    def train_AE_high(self, sess, clean_x):
+        """Train AE using high level feature guidance."""
+        # high-level guided loss function
+        high_rec_loss = tf.reduce_mean(
+            tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=self.CNN(self.clean_x),
+                labels=self.CNN(self.decoded)))
+        pass
+        
+    def train_AE_adv(self, sess):
+        # FIXME can I pass myself as a class instance like this?
+        my_adv_training(sess, self, self.ce_loss,
+                        var_list=self.AE_vars, do_init=False)
+
+class DenoisedCNN_Var0(DenoisedCNN):
+    def setup_CNN(self):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        # FIXME this also assigns self.conv_layers
+        x = keras.layers.Reshape([28, 28, 1])(inputs)
+        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+
+        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+        self.CNN = keras.models.Model(inputs, x)
+class DenoisedCNN_Var1(DenoisedCNN):
+    def setup_CNN(self):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        x = keras.layers.Reshape([28, 28, 1])(inputs)
+        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        # x = keras.layers.Conv2D(32, 3)(x)
+        # x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+
+        # x = keras.layers.Conv2D(64, 3)(x)
+        # x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+        self.CNN = keras.models.Model(inputs, x)
+class DenoisedCNN_Var2(DenoisedCNN):
+    def setup_CNN(self):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        x = keras.layers.Reshape([28, 28, 1])(inputs)
+        x = keras.layers.Conv2D(32, 5)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(32, 5)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+
+        x = keras.layers.Conv2D(64, 5)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(64, 5)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+        self.CNN = keras.models.Model(inputs, x)
+
+
+def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS):
     """Adversarially training the model. Each batch, use PGD to generate
     adv examples, and use that to train the model.
 
@@ -209,18 +490,13 @@ def my_adv_training(sess, model, loss, batch_size=BATCH_SIZE, num_epochs=NUM_EPO
     """
     # FIXME refactor this with train.
     (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
-    
-    train_step = tf.train.AdamOptimizer(0.001).minimize(loss)
-    
+
     best_loss = math.inf
     best_epoch = 0
     # DEBUG
     PATIENCE = 2
     patience = PATIENCE
     print_interval = 20
-
-    init = tf.global_variables_initializer()
-    sess.run(init)
 
     saver = tf.train.Saver(max_to_keep=10)
     for i in range(num_epochs):
@@ -233,7 +509,7 @@ def my_adv_training(sess, model, loss, batch_size=BATCH_SIZE, num_epochs=NUM_EPO
             end = (j+1) * batch_size
             batch_x = train_x[shuffle_idx[start:end]]
             batch_y = train_y[shuffle_idx[start:end]]
-            clean_dict = {model.x: batch_x, model.y: batch_y}
+            clean_dict = {model.x: batch_x, model.y: batch_y, model.x_ref: batch_x}
 
             # generate adv examples
 
@@ -249,7 +525,7 @@ def my_adv_training(sess, model, loss, batch_size=BATCH_SIZE, num_epochs=NUM_EPO
             
             adv_x_concrete = my_fast_PGD(sess, model, batch_x, batch_y)
             
-            adv_dict = {model.x: adv_x_concrete, model.y: batch_y}
+            adv_dict = {model.x: adv_x_concrete, model.y: batch_y, model.x_ref: batch_x}
             # evaluate current accuracy
             clean_acc = sess.run(model.accuracy, feed_dict=clean_dict)
             adv_acc = sess.run(model.accuracy, feed_dict=adv_dict)
@@ -262,44 +538,44 @@ def my_adv_training(sess, model, loss, batch_size=BATCH_SIZE, num_epochs=NUM_EPO
             # since the running time of cleverhans PGD is so slow, the
             # overall running time is still far worse.
             #
-            _, l, a = sess.run([train_step, loss, model.accuracy],
-                               feed_dict=clean_dict)
-            _, l, a = sess.run([train_step, loss, model.accuracy],
+            # _, l, a, m = sess.run([train_step, loss, model.accuracy, metrics],
+            #                    feed_dict=clean_dict)
+            _, l, a, m = sess.run([train_step, loss, model.accuracy, metrics],
                                feed_dict=adv_dict)
             ct += 1
             if ct % print_interval == 0:
-                print('{} / {}: clean acc: {:.5f}, \tadv acc: {:.5f}, \tloss: {:.5f}'
-                      .format(ct, nbatch, clean_acc, adv_acc, l))
+                print('{} / {}: clean acc: {:.5f}, \tadv acc: {:.5f}, \tloss: {:.5f}, \tmetrics: {}'
+                      .format(ct, nbatch, clean_acc, adv_acc, l, m))
         print('EPOCH ends, calculating total loss')
         # evaluate the loss for whole epoch
         adv_x_concrete = my_fast_PGD(sess, model, val_x, val_y)
-        adv_dict = {model.x: adv_x_concrete, model.y: val_y}
-        adv_acc, l = sess.run([model.accuracy, loss], feed_dict=adv_dict)
+        adv_dict = {model.x: adv_x_concrete, model.y: val_y, model.x_ref: val_x}
+        adv_acc, l, m = sess.run([model.accuracy, loss, metrics], feed_dict=adv_dict)
 
         # save the weights
         save_path = saver.save(sess, 'tmp/epoch-{}'.format(i))
-        print('EPOCH {}: loss: {:.5f}, adv acc: {:.5f}' .format(i, l, adv_acc))
         
         if best_loss < l:
             patience -= 1
-            if patience <= 0:
-                # restore the best model
-                saver.restore(sess, 'tmp/epoch-{}'.format(best_epoch))
-                # verify if the best model is restored
-                adv_x_concrete = my_fast_PGD(sess, model, val_x, val_y)
-                adv_dict = {model.x: adv_x_concrete, model.y: val_y}
-                adv_acc, l = sess.run([model.accuracy, loss], feed_dict=adv_dict)
-                print('Best loss: {}, restored loss: {}'.format(l, best_loss))
-                # FIXME this is not equal, as there's randomness in PGD?
-                # assert abs(l - best_loss) < 0.001
-                print('Early stopping .., best loss: {}'.format(best_loss))
-                break
         else:
             best_loss = l
             best_epoch = i
             patience = PATIENCE
+        print('EPOCH {}: loss: {:.5f}, adv acc: {:.5f}, patience: {}, metrics: {}'
+              .format(i, l, adv_acc, patience, m))
+        if patience <= 0:
+            # restore the best model
+            saver.restore(sess, 'tmp/epoch-{}'.format(best_epoch))
+            # verify if the best model is restored
+            adv_x_concrete = my_fast_PGD(sess, model, val_x, val_y)
+            adv_dict = {model.x: adv_x_concrete, model.y: val_y, model.x_ref: val_x}
+            adv_acc, l = sess.run([model.accuracy, loss], feed_dict=adv_dict)
+            print('Best loss: {}, restored loss: {}'.format(l, best_loss))
+            # FIXME this is not equal, as there's randomness in PGD?
+            # assert abs(l - best_loss) < 0.001
+            print('Early stopping .., best loss: {}'.format(best_loss))
+            break
     
-
 def train(sess, model, loss):
     (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
     
@@ -350,38 +626,6 @@ def train(sess, model, loss):
             best_epoch = i
             patience = 5
 
-    
-class MNIST_CNN(CNNModel):
-    def x_shape(self):
-        # return [None, 28*28]
-        return (28,28,1,)
-    def y_shape(self):
-        return [None, 10]
-        # return (10,)
-    def rebuild_model(self, xin):
-        # FIXME may not need reshape layer
-        x = keras.layers.Reshape([28, 28, 1])(xin)
-        x = keras.layers.Conv2D(32, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Conv2D(32, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.MaxPool2D((2,2))(x)
-
-        x = keras.layers.Conv2D(64, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Conv2D(64, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.MaxPool2D((2,2))(x)
-
-        x = keras.layers.Flatten()(x)
-        x = keras.layers.Dense(200)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Dropout(rate=0.5)(x)
-        x = keras.layers.Dense(200)(x)
-        x = keras.layers.Activation('relu')(x)
-        logits = keras.layers.Dense(10)(x)
-        return logits
-
 
 def generate_victim(test_x, test_y):
     inputs = []
@@ -408,8 +652,8 @@ def my_FGSM(sess, model):
     # FGSM attack
     fgsm_params = {
         'eps': 0.3,
-        'clip_min': -0.5,
-        'clip_max': 0.5
+        'clip_min': CLIP_MIN,
+        'clip_max': CLIP_MAX
     }
     fgsm = FastGradientMethod(model, sess=sess)
     adv_x = fgsm.generate(model.x, **fgsm_params)
@@ -420,8 +664,8 @@ def my_PGD(sess, model):
     pgd_params = {'eps': 0.3,
                   'nb_iter': 40,
                   'eps_iter': 0.01,
-                  'clip_min': -0.5,
-                  'clip_max': 0.5}
+                  'clip_min': CLIP_MIN,
+                  'clip_max': CLIP_MAX}
     adv_x = pgd.generate(model.x, **pgd_params)
     return adv_x
 
@@ -447,13 +691,13 @@ def my_fast_PGD(sess, model, x, y):
         adv_x += a * np.sign(g)
         adv_x = np.clip(adv_x, x - epsilon, x + epsilon)
         # adv_x = np.clip(adv_x, 0., 1.)
-        adv_x = np.clip(adv_x, -0.5, 0.5)
+        adv_x = np.clip(adv_x, CLIP_MIN, CLIP_MAX)
     return adv_x
 
 def my_JSMA(sess, model):
     jsma = SaliencyMapMethod(model, sess=sess)
     jsma_params = {'theta': 1., 'gamma': 0.1,
-                   'clip_min': -0.5, 'clip_max': 0.5,
+                   'clip_min': CLIP_MIN, 'clip_max': CLIP_MAX,
                    'y_target': None}
     return jsma.generate(model.x, **jsma_params)
     
@@ -472,8 +716,8 @@ def my_CW(sess, model):
                  # exception
                  'batch_size': 100,
                  'initial_const': 10,
-                 'clip_min': -0.5,
-                 'clip_max': 0.5}
+                 'clip_min': CLIP_MIN,
+                 'clip_max': CLIP_MAX}
     adv_x = cw.generate(model.x, **cw_params)
     return adv_x
 
@@ -491,8 +735,8 @@ def my_CW_targeted(sess, model):
                  # exception
                  'batch_size': 10,
                  'initial_const': 10,
-                 'clip_min': -0.5,
-                 'clip_max': 0.5}
+                 'clip_min': CLIP_MIN,
+                 'clip_max': CLIP_MAX}
     adv_x = cw.generate(model.x, **cw_params)
     return adv_x
 
@@ -546,6 +790,7 @@ def train_double_backprop(path):
         save_path = saver.save(sess, path)
         print("Model saved in path: %s" % save_path)
 
+
 def train_group_lasso(path):
     tf.reset_default_graph()
     with tf.Session() as sess:
@@ -573,7 +818,13 @@ def train_adv(path):
     with tf.Session() as sess:
         model = MNIST_CNN()
         loss = model.cross_entropy()
-        my_adv_training(sess, model, loss, batch_size=128, num_epochs=50)
+        train_step = tf.train.AdamOptimizer(0.001).minimize(model.ce_loss)
+
+        # my_adv_training does not contain initialization of variable
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
+        my_adv_training(sess, model, loss, train_step=train_step, batch_size=128, num_epochs=50)
         saver = tf.train.Saver()
         save_path = saver.save(sess, path)
         print("Model saved in path: %s" % save_path)
@@ -621,6 +872,73 @@ def my_distillation():
 
     """
     pass
+
+def train_denoising(path):
+    tf.reset_default_graph()
+    with tf.Session() as sess:
+        model = DenoisedCNN()
+        (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
+        # 1. train CNN
+        # TODO train more epochs
+        model.train_CNN(sess, train_x, train_y)
+        model.test_CNN(sess, test_x, test_y)
+        # 2. train denoiser
+        model.train_AE(sess, train_x)
+        model.test_AE(sess, test_x)
+        model.test_Entire(sess, test_x, test_y)
+        # 3. train denoiser using adv training, with high level feature guidance
+        acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
+        print('Model accuracy on clean data: {}'.format(acc))
+        
+        # my_adv_training(sess, model, model.ce_loss, [],
+        #                 model.adv_train_step)
+        # my_adv_training(sess, model, model.rec_loss, [],
+        #                 model.adv_rec_train_step)
+
+        print('Adv training ..')
+        my_adv_training(sess, model, model.unified_adv_loss,
+                        [model.rec_loss, model.clean_rec_loss, model.ce_loss, model.clean_ce_loss],
+                        model.unified_adv_train_step,
+                        num_epochs=2)
+        print('Done. Saving model ..')
+        pCNN = os.path.join(path, 'CNN.ckpt')
+        pAE = os.path.join(path, 'AE.ckpt')
+        model.save_CNN(sess, pCNN)
+        model.save_AE(sess, pAE)
+    
+def __test_denoising(path):
+    train_denoising('saved_model/AdvDenoiser')
+    
+    tf.reset_default_graph()
+    
+    sess = tf.Session()
+    
+    model = DenoisedCNN()
+    model = DenoisedCNN_Var1()
+    model = DenoisedCNN_Var2()
+    
+    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
+    
+    init = tf.global_variables_initializer()
+    sess.run(init)
+
+    model.train_CNN(sess, train_x, train_y)
+    model.test_CNN(sess, test_x, test_y)
+    
+    model.load_CNN(sess, 'saved_model/AdvDenoiser/CNN.ckpt')
+    
+    model.load_AE(sess, 'saved_model/AdvDenoiser/AE.ckpt')
+
+    
+    model.test_CNN(sess, test_x, test_y)
+    model.test_AE(sess, test_x)
+    model.test_Entire(sess, test_x, test_y)
+    acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
+    print('Model accuracy on clean data: {}'.format(acc))
+
+def __test():
+    from tensorflow.python.tools import inspect_checkpoint as chkp
+    chkp.print_tensors_in_checkpoint_file('saved_model/AE.ckpt', tensor_name='', all_tensors=True)
 
 def __test():
     train_double_backprop("saved_model/double-backprop.ckpt")

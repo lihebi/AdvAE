@@ -14,11 +14,8 @@ from cleverhans.attacks import CarliniWagnerL2
 
 from utils import *
 
-BATCH_SIZE = 128
-NUM_EPOCHS = 100
-
-CLIP_MIN = 0.
-CLIP_MAX = 1.
+from attacks import CLIP_MIN, CLIP_MAX
+from attacks import my_fast_PGD
 
 
 class CNNModel(cleverhans.model.Model):
@@ -181,17 +178,17 @@ class DenoisedCNN(cleverhans.model.Model):
             tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=rec, labels=self.x_ref))
 
-        clean_rec = self.AE(self.x_ref)
-        self.clean_rec_loss = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=clean_rec, labels=self.x_ref))
-        
         self.logits = self.FC(self.CNN(self.AE(self.x)))
         self.ce_loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(
                 logits=self.logits, labels=self.y))
         self.ce_grad = tf.gradients(self.ce_loss, self.x)[0]
 
+        clean_rec = self.AE(self.x_ref)
+        self.clean_rec_loss = tf.reduce_mean(
+            tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=clean_rec, labels=self.x_ref))
+        
         clean_logits = self.FC(self.CNN(self.AE(self.x_ref)))
         self.clean_ce_loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(
@@ -204,9 +201,49 @@ class DenoisedCNN(cleverhans.model.Model):
         self.adv_train_step = tf.train.AdamOptimizer(0.001).minimize(self.ce_loss, var_list=self.AE_vars)
         self.adv_rec_train_step = tf.train.AdamOptimizer(0.001).minimize(self.rec_loss, var_list=self.AE_vars)
 
+        # TODO I also want to add the Gaussian noise training
+        # objective into the unified loss, such that the resulting
+        # AE will still acts as a denoiser
+        noise_factor = 0.3
+        # none -> -1
+        
+        # shape = [-1] + self.x_ref.shape.as_list()[1:]
+        # batch = keras.backend.shape(self.x_ref)[0]
+        # dim = keras.backend.int_shape(self.x_ref)[1]
+        # epsilon = keras.backend.random_normal(shape=(batch, dim), mean=0., stddev=1.)
+        # keras.backend.shape(model.x)
+        # tf.shape(model.x)
+        # keras.backend.int_shape(model.x)[1]
+        
+        # self.x_ref.shape
+        # noisy_x = self.x_ref + noise_factor * tf.random.normal(shape=shape, mean=0., stddev=1.)
+        # noisy_x = self.x_ref + noise_factor * tf.random.normal(shape=(-1, 28, 28, 1))
+        noisy_x = self.x_ref + noise_factor * tf.random.normal(shape=tf.shape(self.x_ref))
+        # noisy_x = self.x_ref
+        
+        noisy_x = tf.clip_by_value(noisy_x, CLIP_MIN, CLIP_MAX)
+        # noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
+        # noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
+        noisy_rec = self.AE(noisy_x)
+        self.noisy_rec_loss = tf.reduce_mean(
+            tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=noisy_rec, labels=self.x_ref))
+        noisy_logits = self.FC(self.CNN(self.AE(noisy_x)))
+        self.noisy_ce_loss = tf.reduce_mean(
+            tf.nn.softmax_cross_entropy_with_logits(
+                logits=noisy_logits, labels=self.y))
+        
         # TODO monitoring each of these losses and adjust weights
-        self.unified_adv_loss = self.rec_loss + self.clean_rec_loss + self.ce_loss + self.clean_ce_loss
-        self.unified_adv_train_step = tf.train.AdamOptimizer(0.001).minimize(self.unified_adv_loss, var_list=self.AE_vars)
+        self.unified_adv_loss = (self.rec_loss
+                                 + self.clean_rec_loss
+                                 + self.ce_loss
+                                 + self.clean_ce_loss
+                                 + self.noisy_rec_loss
+                                 + self.noisy_ce_loss)
+        self.unified_adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
+            self.unified_adv_loss, var_list=self.AE_vars)
+
+        
 
         # self.clean_x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
         # self.noise_x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
@@ -251,7 +288,7 @@ class DenoisedCNN(cleverhans.model.Model):
         
     def save_CNN(self, sess, path):
         """Save AE weights to checkpoint."""
-        saver = tf.train.Saver(var_list=self.CNN_vars)
+        saver = tf.train.Saver(var_list=self.CNN_vars + self.FC_vars)
         saver.save(sess, path)
 
     def save_AE(self, sess, path):
@@ -260,7 +297,7 @@ class DenoisedCNN(cleverhans.model.Model):
         saver.save(sess, path)
 
     def load_CNN(self, sess, path):
-        saver = tf.train.Saver(var_list=self.CNN_vars)
+        saver = tf.train.Saver(var_list=self.CNN_vars + self.FC_vars)
         saver.restore(sess, path)
 
     def load_AE(self, sess, path):
@@ -317,7 +354,16 @@ class DenoisedCNN(cleverhans.model.Model):
                       loss=loss,
                       metrics=['accuracy'])
         with sess.as_default():
-            model.fit(clean_x, clean_y, verbose=2)
+            es = keras.callbacks.EarlyStopping(monitor='val_loss',
+                                               min_delta=0,
+                                               patience=5, verbose=0,
+                                               mode='auto')
+            mc = keras.callbacks.ModelCheckpoint('best_model.ckpt',
+                                                 monitor='val_loss', mode='auto', verbose=0,
+                                                 save_weights_only=True,
+                                                 save_best_only=True)
+            model.fit(clean_x, clean_y, epochs=100, validation_split=0.1, verbose=2, callbacks=[es, mc])
+            model.load_weights('best_model.ckpt')
 
     def test_CNN(self, sess, clean_x, clean_y):
         inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
@@ -352,24 +398,33 @@ class DenoisedCNN(cleverhans.model.Model):
         model.compile(optimizer=optimizer,
                       loss='binary_crossentropy')
         with sess.as_default():
-            model.fit(noisy_x, clean_x, epochs=5, batch_size=128, verbose=2)
+            es = keras.callbacks.EarlyStopping(monitor='val_loss',
+                                               min_delta=0,
+                                               patience=5, verbose=0,
+                                               mode='auto')
+            mc = keras.callbacks.ModelCheckpoint('best_model.ckpt',
+                                                 monitor='val_loss', mode='auto', verbose=0,
+                                                 save_weights_only=True,
+                                                 save_best_only=True)
+            model.fit(noisy_x, clean_x, epochs=100, validation_split=0.1, verbose=2, callbacks=[es, mc])
+            model.load_weights('best_model.ckpt')
 
     def test_AE(self, sess, clean_x):
         # Testing denoiser
         noise_factor = 0.5
-        # clean_x = test_x
         noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
         noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
 
         inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        
         rec = self.AE(inputs)
         model = keras.models.Model(inputs, rec)
 
-        rec = sess.run(rec, feed_dict={inputs: noisy_x[:5]})
+        rec = sess.run(rec, feed_dict={inputs: noisy_x})
         print('generating png ..')
-        to_view = np.concatenate((noisy_x[:5], rec), 0)
+        to_view = np.concatenate((noisy_x[:5], rec[:5]), 0)
         grid_show_image(to_view, 5, 2, 'AE_out.png')
-        print('done')
+        print('PNG generatetd to AE_out.png')
 
     def test_Entire(self, sess, clean_x, clean_y):
         inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
@@ -377,19 +432,20 @@ class DenoisedCNN(cleverhans.model.Model):
         
         logits = self.FC(self.CNN(self.AE(inputs)))
         preds = tf.argmax(logits, axis=1)
-        probs = tf.nn.softmax(logits)
-        # self.acc = tf.reduce_mean(
-        #     tf.to_float(tf.equal(tf.argmax(self.logits, axis=1),
-        #                          tf.argmax(self.label, axis=1))))
         accuracy = tf.reduce_mean(tf.cast(tf.equal(
             preds, tf.argmax(labels, 1)), dtype=tf.float32))
         acc = sess.run(accuracy, feed_dict={inputs: clean_x, labels: clean_y})
-        print('accuracy: {}'.format(acc))
+        print('clean accuracy: {}'.format(acc))
+        
+        # I'm adding testing for accuracy of noisy input
+        noise_factor = 0.5
+        noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
+        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
+        acc = sess.run(accuracy, feed_dict={inputs: noisy_x, labels: clean_y})
+        print('noisy x accuracy: {}'.format(acc))
 
     def test_Adv_Denoiser(self, sess, clean_x, clean_y):
         """Visualize the denoised image against adversarial examples."""
-        # TODO
-        # FIXME can I pass this self?
         adv_x_concrete = my_fast_PGD(sess, self, clean_x, clean_y)
         
         inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
@@ -399,7 +455,6 @@ class DenoisedCNN(cleverhans.model.Model):
         
         logits = self.FC(self.CNN(self.AE(inputs)))
         preds = tf.argmax(logits, axis=1)
-        probs = tf.nn.softmax(logits)
         
         accuracy = tf.reduce_mean(tf.cast(tf.equal(
             preds, tf.argmax(labels, 1)), dtype=tf.float32))
@@ -408,9 +463,9 @@ class DenoisedCNN(cleverhans.model.Model):
         print('accuracy: {}'.format(acc))
         denoised_x = sess.run(rec, feed_dict={inputs: adv_x_concrete, labels: clean_y})
         print('generating png ..')
-        to_view = np.concatenate((noisy_x[:5], rec), 0)
-        grid_show_image(to_view, 5, 2, 'AE_out.png')
-        print('done')
+        to_view = np.concatenate((adv_x_concrete[:5], denoised_x[:5]), 0)
+        grid_show_image(to_view, 5, 2, 'AdvAE_out.png')
+        print('PNG generatetd to AdvAE_out.png')
 
 
     def train_AE_high(self, sess, clean_x):
@@ -428,6 +483,7 @@ class DenoisedCNN(cleverhans.model.Model):
                         var_list=self.AE_vars, do_init=False)
 
 class DenoisedCNN_Var0(DenoisedCNN):
+    "This is the same as DenoisedCNN. I'm not using it, just use as a reference."
     def setup_CNN(self):
         inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
         # FIXME this also assigns self.conv_layers
@@ -477,365 +533,11 @@ class DenoisedCNN_Var2(DenoisedCNN):
         x = keras.layers.MaxPool2D((2,2))(x)
         self.CNN = keras.models.Model(inputs, x)
 
-
-def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS):
-    """Adversarially training the model. Each batch, use PGD to generate
-    adv examples, and use that to train the model.
-
-    Print clean and adv rate each time.
-
-    Early stopping when the clean rate is good and adv rate does not
-    improve.
-
-    """
-    # FIXME refactor this with train.
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
-
-    best_loss = math.inf
-    best_epoch = 0
-    # DEBUG
-    PATIENCE = 2
-    patience = PATIENCE
-    print_interval = 20
-
-    saver = tf.train.Saver(max_to_keep=10)
-    for i in range(num_epochs):
-        shuffle_idx = np.arange(train_x.shape[0])
-        np.random.shuffle(shuffle_idx)
-        nbatch = train_x.shape[0] // batch_size
-        ct = 0
-        for j in range(nbatch):
-            start = j * batch_size
-            end = (j+1) * batch_size
-            batch_x = train_x[shuffle_idx[start:end]]
-            batch_y = train_y[shuffle_idx[start:end]]
-            clean_dict = {model.x: batch_x, model.y: batch_y, model.x_ref: batch_x}
-
-            # generate adv examples
-
-            # Using cleverhans library to generate PGD intances. This
-            # approach is constructing a lot of graph strucutres, and
-            # it is not clear what it does. The runnning is quite slow.
-            
-            # adv_x = my_PGD(sess, model)
-            # adv_x_concrete = sess.run(adv_x, feed_dict=clean_dict)
-
-            # Using a homemade PGD adapted from mnist_challenge is
-            # much faster. But there is a caveat. See below.
-            
-            adv_x_concrete = my_fast_PGD(sess, model, batch_x, batch_y)
-            
-            adv_dict = {model.x: adv_x_concrete, model.y: batch_y, model.x_ref: batch_x}
-            # evaluate current accuracy
-            clean_acc = sess.run(model.accuracy, feed_dict=clean_dict)
-            adv_acc = sess.run(model.accuracy, feed_dict=adv_dict)
-            # actual training
-            #
-            # clean training turns out to be important when using
-            # homemade PGD. Otherwise the training does not
-            # progress. Using cleverhans PGD won't need a clean data,
-            # and still approaches the clean accuracy fast. However
-            # since the running time of cleverhans PGD is so slow, the
-            # overall running time is still far worse.
-            #
-            # _, l, a, m = sess.run([train_step, loss, model.accuracy, metrics],
-            #                    feed_dict=clean_dict)
-            _, l, a, m = sess.run([train_step, loss, model.accuracy, metrics],
-                               feed_dict=adv_dict)
-            ct += 1
-            if ct % print_interval == 0:
-                print('{} / {}: clean acc: {:.5f}, \tadv acc: {:.5f}, \tloss: {:.5f}, \tmetrics: {}'
-                      .format(ct, nbatch, clean_acc, adv_acc, l, m))
-        print('EPOCH ends, calculating total loss')
-        # evaluate the loss for whole epoch
-        adv_x_concrete = my_fast_PGD(sess, model, val_x, val_y)
-        adv_dict = {model.x: adv_x_concrete, model.y: val_y, model.x_ref: val_x}
-        adv_acc, l, m = sess.run([model.accuracy, loss, metrics], feed_dict=adv_dict)
-
-        # save the weights
-        save_path = saver.save(sess, 'tmp/epoch-{}'.format(i))
-        
-        if best_loss < l:
-            patience -= 1
-        else:
-            best_loss = l
-            best_epoch = i
-            patience = PATIENCE
-        print('EPOCH {}: loss: {:.5f}, adv acc: {:.5f}, patience: {}, metrics: {}'
-              .format(i, l, adv_acc, patience, m))
-        if patience <= 0:
-            # restore the best model
-            saver.restore(sess, 'tmp/epoch-{}'.format(best_epoch))
-            # verify if the best model is restored
-            adv_x_concrete = my_fast_PGD(sess, model, val_x, val_y)
-            adv_dict = {model.x: adv_x_concrete, model.y: val_y, model.x_ref: val_x}
-            adv_acc, l = sess.run([model.accuracy, loss], feed_dict=adv_dict)
-            print('Best loss: {}, restored loss: {}'.format(l, best_loss))
-            # FIXME this is not equal, as there's randomness in PGD?
-            # assert abs(l - best_loss) < 0.001
-            print('Early stopping .., best loss: {}'.format(best_loss))
-            break
-    
-def train(sess, model, loss):
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
-    
-    train_step = tf.train.AdamOptimizer(0.001).minimize(loss)
-    
-    best_loss = math.inf
-    best_epoch = 0
-    patience = 5
-    print_interval = 500
-
-    init = tf.global_variables_initializer()
-    sess.run(init)
-    
-    saver = tf.train.Saver(max_to_keep=10)
-    for i in range(NUM_EPOCHS):
-        shuffle_idx = np.arange(train_x.shape[0])
-        np.random.shuffle(shuffle_idx)
-        nbatch = train_x.shape[0] // BATCH_SIZE
-        
-        for j in range(nbatch):
-            start = j * BATCH_SIZE
-            end = (j+1) * BATCH_SIZE
-            batch_x = train_x[shuffle_idx[start:end]]
-            batch_y = train_y[shuffle_idx[start:end]]
-            _, l, a = sess.run([train_step, loss, model.accuracy],
-                               feed_dict={model.x: batch_x,
-                                          model.y: batch_y})
-        print('EPOCH ends, calculating total loss')
-        l, a = sess.run([loss, model.accuracy],
-                        feed_dict={model.x: val_x,
-                                   model.y: val_y})
-        print('EPOCH {}: loss: {:.5f}, acc: {:.5f}' .format(i, l, a,))
-        save_path = saver.save(sess, 'tmp/epoch-{}'.format(i))
-        if best_loss < l:
-            patience -= 1
-            if patience <= 0:
-                # restore the best model
-                saver.restore(sess, 'tmp/epoch-{}'.format(best_epoch))
-                print('Early stopping .., best loss: {}'.format(best_loss))
-                # verify if the best model is restored
-                l, a = sess.run([loss, model.accuracy],
-                                feed_dict={model.x: val_x,
-                                           model.y: val_y})
-                assert l == best_loss
-                break
-        else:
-            best_loss = l
-            best_epoch = i
-            patience = 5
-
-
-def generate_victim(test_x, test_y):
-    inputs = []
-    labels = []
-    targets = []
-    nlabels = 10
-    for i in range(nlabels):
-        for j in range(1000):
-            x = test_x[j]
-            y = test_y[j]
-            if i == np.argmax(y):
-                inputs.append(x)
-                labels.append(y)
-                onehot = np.zeros(nlabels)
-                onehot[(i+1) % 10] = 1
-                targets.append(onehot)
-                break
-    inputs = np.array(inputs)
-    targets = np.array(targets)
-    labels = np.array(labels)
-    return inputs, labels, targets
-
-def my_FGSM(sess, model):
-    # FGSM attack
-    fgsm_params = {
-        'eps': 0.3,
-        'clip_min': CLIP_MIN,
-        'clip_max': CLIP_MAX
-    }
-    fgsm = FastGradientMethod(model, sess=sess)
-    adv_x = fgsm.generate(model.x, **fgsm_params)
-    return adv_x
-
-def my_PGD(sess, model):
-    pgd = ProjectedGradientDescent(model, sess=sess)
-    pgd_params = {'eps': 0.3,
-                  'nb_iter': 40,
-                  'eps_iter': 0.01,
-                  'clip_min': CLIP_MIN,
-                  'clip_max': CLIP_MAX}
-    adv_x = pgd.generate(model.x, **pgd_params)
-    return adv_x
-
-def my_fast_PGD(sess, model, x, y):
-    epsilon = 0.3
-    k = 40
-    a = 0.01
-    
-    # loss = model.cross_entropy()
-    # grad = tf.gradients(loss, model.x)[0]
-    
-    # FGSM, PGD, JSMA, CW
-    # without random
-    # 0.97, 0.97, 0.82, 0.87
-    # using random, the performance improved a bit:
-    # 0.99, 0.98, 0.87, 0.93
-    #
-    # adv_x = np.copy(x)
-    adv_x = x + np.random.uniform(-epsilon, epsilon, x.shape)
-    
-    for i in range(k):
-        g = sess.run(model.ce_grad, feed_dict={model.x: adv_x, model.y: y})
-        adv_x += a * np.sign(g)
-        adv_x = np.clip(adv_x, x - epsilon, x + epsilon)
-        # adv_x = np.clip(adv_x, 0., 1.)
-        adv_x = np.clip(adv_x, CLIP_MIN, CLIP_MAX)
-    return adv_x
-
-def my_JSMA(sess, model):
-    jsma = SaliencyMapMethod(model, sess=sess)
-    jsma_params = {'theta': 1., 'gamma': 0.1,
-                   'clip_min': CLIP_MIN, 'clip_max': CLIP_MAX,
-                   'y_target': None}
-    return jsma.generate(model.x, **jsma_params)
-    
-
-def my_CW(sess, model):
-    """When feeding, remember to put target as y."""
-    # CW attack
-    cw = CarliniWagnerL2(model, sess)
-    cw_params = {'binary_search_steps': 1,
-                 # 'y_target': model.y,
-                 'y': model.y,
-                 'max_iterations': 10000,
-                 'learning_rate': 0.2,
-                 # setting to 100 instead of 128, because the test_x
-                 # has 10000, and the last 16 left over will cause
-                 # exception
-                 'batch_size': 100,
-                 'initial_const': 10,
-                 'clip_min': CLIP_MIN,
-                 'clip_max': CLIP_MAX}
-    adv_x = cw.generate(model.x, **cw_params)
-    return adv_x
-
-def my_CW_targeted(sess, model):
-    """When feeding, remember to put target as y."""
-    # CW attack
-    cw = CarliniWagnerL2(model, sess)
-    cw_params = {'binary_search_steps': 1,
-                 'y_target': model.y,
-                 # 'y': model.y,
-                 'max_iterations': 10000,
-                 'learning_rate': 0.2,
-                 # setting to 100 instead of 128, because the test_x
-                 # has 10000, and the last 16 left over will cause
-                 # exception
-                 'batch_size': 10,
-                 'initial_const': 10,
-                 'clip_min': CLIP_MIN,
-                 'clip_max': CLIP_MAX}
-    adv_x = cw.generate(model.x, **cw_params)
-    return adv_x
-
-        
-def mynorm(a, b, p):
-    size = a.shape[0]
-    delta = a.reshape((size,-1)) - b.reshape((size,-1))
-    return np.linalg.norm(delta, ord=p, axis=1)
-
-def test_model_against_attack(sess, model, attack_func, inputs, labels, targets, prefix=''):
-    """
-    testing against several attacks
-    """
-    # generate victims
-    adv_x = attack_func(sess, model)
-    # adv_x = my_CW(sess, model)
-    adv_preds = model.predict(adv_x)
-    if targets is None:
-        adv_x_concrete = sess.run(adv_x, feed_dict={model.x: inputs, model.y: labels})
-        adv_preds_concrete = sess.run(adv_preds, feed_dict={model.x: inputs, model.y: labels})
-        adv_acc = model.compute_accuracy(sess, model.x, model.y, adv_preds, inputs, labels)
-    else:
-        adv_x_concrete = sess.run(adv_x, feed_dict={model.x: inputs, model.y: targets})
-        adv_preds_concrete = sess.run(adv_preds, feed_dict={model.x: inputs, model.y: targets})
-        adv_acc = model.compute_accuracy(sess, model.x, model.y, model.logits, adv_x_concrete, labels)
-
-    l2 = np.mean(mynorm(inputs, adv_x_concrete, 2))
-
-    pngfile = prefix + '-out.png'
-    print('Writing adv examples to {} ..'.format(pngfile))
-    grid_show_image(adv_x_concrete[:10], 5, 2, pngfile)
-    
-    print('True label: {}'.format(np.argmax(labels, 1)))
-    print('Predicted label: {}'.format(np.argmax(adv_preds_concrete, 1)))
-    print('Adv input accuracy: {}'.format(adv_acc))
-    print("L2: {}".format(l2))
-    if targets is not None:
-        target_acc = model.compute_accuracy(sess, model.x, model.y, model.logits, adv_x_concrete, targets)
-        print('Targeted label: {}'.format(np.argmax(targets, 1)))
-        print('Targeted accuracy: {}'.format(target_acc))
-
-def train_double_backprop(path):
-    tf.reset_default_graph()
-    with tf.Session() as sess:
-        model = MNIST_CNN()
-        c=100
-        # TODO verify the results in their paper
-        loss = model.cross_entropy() + c * model.l2_double_backprop()
-        train(sess, model, loss)
-        saver = tf.train.Saver()
-        save_path = saver.save(sess, path)
-        print("Model saved in path: %s" % save_path)
-
-
-def train_group_lasso(path):
-    tf.reset_default_graph()
-    with tf.Session() as sess:
-        model = MNIST_CNN()
-        # group lasso
-        c=100
-        loss = model.cross_entropy() + c * model.gradients_group_lasso()
-        train(sess, model, loss)
-        saver = tf.train.Saver()
-        save_path = saver.save(sess, path)
-        print("Model saved in path: %s" % save_path)
-
-def train_ce(path):
-    tf.reset_default_graph()
-    with tf.Session() as sess:
-        model = MNIST_CNN()
-        loss = model.cross_entropy()
-        train(sess, model, loss)
-        saver = tf.train.Saver()
-        save_path = saver.save(sess, path)
-        print("Model saved in path: %s" % save_path)
-
-def train_adv(path):
-    tf.reset_default_graph()
-    with tf.Session() as sess:
-        model = MNIST_CNN()
-        loss = model.cross_entropy()
-        train_step = tf.train.AdamOptimizer(0.001).minimize(model.ce_loss)
-
-        # my_adv_training does not contain initialization of variable
-        init = tf.global_variables_initializer()
-        sess.run(init)
-
-        my_adv_training(sess, model, loss, train_step=train_step, batch_size=128, num_epochs=50)
-        saver = tf.train.Saver()
-        save_path = saver.save(sess, path)
-        print("Model saved in path: %s" % save_path)
-
 def __test():
     sess = tf.Session()
     model = MNIST_CNN()
     loss = model.cross_entropy()
     my_adv_training(sess, model, loss)
-
-        
 
 def restore_model(path):
     tf.reset_default_graph()
@@ -846,14 +548,6 @@ def restore_model(path):
     print("Model restored.")
     return sess, model
     
-
-def train_models_main():
-    # training of CNN models
-    
-    with tf.Session() as sess:
-        saver = tf.train.Saver()
-        saver.restore(sess, "saved_model/double-backprop.ckpt")
-        
     
 def my_distillation():
     """1. train a normal model, save the weights
@@ -873,68 +567,7 @@ def my_distillation():
     """
     pass
 
-def train_denoising(path):
-    tf.reset_default_graph()
-    with tf.Session() as sess:
-        model = DenoisedCNN()
-        (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
-        # 1. train CNN
-        # TODO train more epochs
-        model.train_CNN(sess, train_x, train_y)
-        model.test_CNN(sess, test_x, test_y)
-        # 2. train denoiser
-        model.train_AE(sess, train_x)
-        model.test_AE(sess, test_x)
-        model.test_Entire(sess, test_x, test_y)
-        # 3. train denoiser using adv training, with high level feature guidance
-        acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
-        print('Model accuracy on clean data: {}'.format(acc))
-        
-        # my_adv_training(sess, model, model.ce_loss, [],
-        #                 model.adv_train_step)
-        # my_adv_training(sess, model, model.rec_loss, [],
-        #                 model.adv_rec_train_step)
-
-        print('Adv training ..')
-        my_adv_training(sess, model, model.unified_adv_loss,
-                        [model.rec_loss, model.clean_rec_loss, model.ce_loss, model.clean_ce_loss],
-                        model.unified_adv_train_step,
-                        num_epochs=2)
-        print('Done. Saving model ..')
-        pCNN = os.path.join(path, 'CNN.ckpt')
-        pAE = os.path.join(path, 'AE.ckpt')
-        model.save_CNN(sess, pCNN)
-        model.save_AE(sess, pAE)
-    
-def __test_denoising(path):
-    train_denoising('saved_model/AdvDenoiser')
-    
-    tf.reset_default_graph()
-    
-    sess = tf.Session()
-    
-    model = DenoisedCNN()
-    model = DenoisedCNN_Var1()
-    model = DenoisedCNN_Var2()
-    
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
-    
-    init = tf.global_variables_initializer()
-    sess.run(init)
-
-    model.train_CNN(sess, train_x, train_y)
-    model.test_CNN(sess, test_x, test_y)
-    
-    model.load_CNN(sess, 'saved_model/AdvDenoiser/CNN.ckpt')
-    
-    model.load_AE(sess, 'saved_model/AdvDenoiser/AE.ckpt')
-
-    
-    model.test_CNN(sess, test_x, test_y)
-    model.test_AE(sess, test_x)
-    model.test_Entire(sess, test_x, test_y)
-    acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
-    print('Model accuracy on clean data: {}'.format(acc))
+   
 
 def __test():
     from tensorflow.python.tools import inspect_checkpoint as chkp

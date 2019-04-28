@@ -62,3 +62,8 @@ def grid_show_image(images, width, height, filename='out.png'):
     plt.savefig(filename, bbox_inches='tight', pad_inches=0)
     # plt.savefig(filename)
     return figure
+def mynorm(a, b, p):
+    size = a.shape[0]
+    delta = a.reshape((size,-1)) - b.reshape((size,-1))
+    return np.linalg.norm(delta, ord=p, axis=1)
+

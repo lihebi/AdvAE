@@ -1,0 +1,98 @@
+#+TITLE: Adversarially trained denoising Auto-Encoder (AdvAE)
+#+LATEX_CLASS: nips
+
+* Introduction
+
+* Thread Model
+* Approach
+
+** Loss
+We use the addition of four loss terms as loss function.
+
+** Training
+4. (optional) alternatively train denoiser and CNN, so that
+the precision is still good. This may have equivalent effect as
+training denoiser using high level feature guidance
+
+4.1 FIXME probably also consider training for from clean x to x and to
+logits, as that is the whole model
+
+* Experiment
+
+** TODO test on CIFAR and ImageNet
+** TODO compare with other defenses
+- HAE: high-level feature guided AE
+- Adv training
+
+*** TODO Compare to generative models
+analyze the difference, pros and cons, compared to generative methods.
+- Defense-GAN
+- PuVAE
+
+
+** AdvAE against different attacks
+- test whether this works for CW
+
+| attacks | accuracy | l2-distortion |
+|---------+----------+---------------|
+| FGSM    |          |               |
+| PGD     |          |               |
+| JSMA    |          |               |
+| CW      |          |               |
+
+
+** TODO AdvAE transferability to other CNN architectures
+
+- test whether this works for different CNN structure out of box, or
+  even FC
+
+different CNN architecture:
+- different kernel filter size
+- different number of layers
+- different activation functions
+- different pooling size and scheme
+- residual connections
+- dropout
+
+*** TODO Ensemble training
+- ensemble different CNN architecture. I suspect that the rec terms
+  actually act as regularizer for different CNNs. We'll see.
+
+How to ensemble? Create many CNN layers. When training, add all loss
+terms of different CNNs together.
+
+** STARTED Analyze of different loss terms
+- [ ] plot the training and loss
+- analyze how the different loss terms work. Even if the loss does
+  not seem to decrease, it might act as a regularizer. Try removing it
+  in the train step, and observe if that term increases and goes out
+  of control.
+- see whether it is necessary any more to use high layers of CNN.
+- add weights to the different terms, and apply weight decay
+
+|   | term1 | term2 | term3 | term4 | adv accuracy |
+|---+-------+-------+-------+-------+--------------|
+|   | Y     |       |       |       |              |
+|   |       | Y     |       |       |              |
+|   |       |       | Y     |       |              |
+|   |       |       |       | Y     |              |
+|---+-------+-------+-------+-------+--------------|
+|   | Y     | Y     |       |       |              |
+|   | Y     |       | Y     |       |              |
+
+** Denoiser capacity
+- investigate whether increasing denoiser capacity helps with defense
+  against CW
+- test whether using FC instead of AE can also achieve similar results
+** visualize what the denoiser is doing on adv images
+** TODO visualize and analyze the successful attacks
+
+** TODO Another idea
+- add adv noise at CNN input
+
+* Related Work
+* Conclusion
+
+* Appendix
+
+

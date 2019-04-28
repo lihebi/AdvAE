@@ -3,3 +3,4 @@ models
 __pycache__
 saved_model
 tmp
+*.ckpt

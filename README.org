@@ -56,10 +56,6 @@ I need checkpoint to reduce experiment time
 
 ** TODO define a lasso that sets the gradients to 0 when lower than a threshold
 
-* Adv Denoiser Training
-
-
-
 * Archive
 ** DONE group lasso?
    CLOSED: [2019-04-10 Wed 01:01]

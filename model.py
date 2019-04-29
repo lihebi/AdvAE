@@ -201,29 +201,12 @@ class DenoisedCNN(cleverhans.model.Model):
         self.adv_train_step = tf.train.AdamOptimizer(0.001).minimize(self.ce_loss, var_list=self.AE_vars)
         self.adv_rec_train_step = tf.train.AdamOptimizer(0.001).minimize(self.rec_loss, var_list=self.AE_vars)
 
-        # TODO I also want to add the Gaussian noise training
-        # objective into the unified loss, such that the resulting
-        # AE will still acts as a denoiser
-        noise_factor = 0.3
-        # none -> -1
-        
-        # shape = [-1] + self.x_ref.shape.as_list()[1:]
-        # batch = keras.backend.shape(self.x_ref)[0]
-        # dim = keras.backend.int_shape(self.x_ref)[1]
-        # epsilon = keras.backend.random_normal(shape=(batch, dim), mean=0., stddev=1.)
-        # keras.backend.shape(model.x)
-        # tf.shape(model.x)
-        # keras.backend.int_shape(model.x)[1]
-        
-        # self.x_ref.shape
-        # noisy_x = self.x_ref + noise_factor * tf.random.normal(shape=shape, mean=0., stddev=1.)
-        # noisy_x = self.x_ref + noise_factor * tf.random.normal(shape=(-1, 28, 28, 1))
-        noisy_x = self.x_ref + noise_factor * tf.random.normal(shape=tf.shape(self.x_ref))
-        # noisy_x = self.x_ref
-        
+        # I also want to add the Gaussian noise training objective
+        # into the unified loss, such that the resulting AE will still
+        # acts as a denoiser
+        noise_factor = 0.5
+        noisy_x = self.x_ref + noise_factor * tf.random.normal(shape=tf.shape(self.x_ref), mean=0., stddev=1.)
         noisy_x = tf.clip_by_value(noisy_x, CLIP_MIN, CLIP_MAX)
-        # noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
-        # noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
         noisy_rec = self.AE(noisy_x)
         self.noisy_rec_loss = tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(
@@ -234,12 +217,14 @@ class DenoisedCNN(cleverhans.model.Model):
                 logits=noisy_logits, labels=self.y))
         
         # TODO monitoring each of these losses and adjust weights
-        self.unified_adv_loss = (self.rec_loss
-                                 + self.clean_rec_loss
+        self.unified_adv_loss = (0.
+                                 # + self.rec_loss
+                                 # + self.clean_rec_loss
                                  + self.ce_loss
-                                 + self.clean_ce_loss
+                                 # + self.clean_ce_loss
                                  + self.noisy_rec_loss
-                                 + self.noisy_ce_loss)
+                                 # + self.noisy_ce_loss
+        )
         self.unified_adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
             self.unified_adv_loss, var_list=self.AE_vars)
 

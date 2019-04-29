@@ -15,6 +15,35 @@ from utils import *
 BATCH_SIZE = 128
 NUM_EPOCHS = 100
 
+def adv_training_plot(data, filename, split):
+    names = ['rec_loss', 'ce_loss', 'clean_rec_loss',
+             'clean_ce_loss', 'noisy_rec_loss',
+             'noisy_ce_loss']
+    print('Plotting internal training process ..')
+    if split:
+        fig, axes = plt.subplots(nrows=2, ncols=3)
+        for ax, metric, name in zip(axes.reshape(-1), np.transpose(data), names):
+            # print(type(ax))
+            ax.plot(metric, label=name)
+            ax.set_title(name)
+            legend = ax.legend()
+    else:
+        fig, ax = plt.subplots()
+        for metric, name in zip(np.transpose(data), names):
+            ax.plot(metric, label=name)
+        legend = ax.legend()
+    plt.savefig(filename)
+    plt.close(fig)
+    print('saved to {}'.format(filename))
+
+def adv_training_plot_split(data, names):
+    names = ['rec_loss', 'ce_loss', 'clean_rec_loss',
+             'clean_ce_loss', 'noisy_rec_loss',
+             'noisy_ce_loss']
+    filename = '{}-{}.png'.format(prefix, i)
+    plt.savefig(filename)
+    print('saved to {}'.format(filename))
+
 
 def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS):
     """Adversarially training the model. Each batch, use PGD to generate
@@ -36,6 +65,9 @@ def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZ
     patience = PATIENCE
     print_interval = 20
 
+    plot_data = []
+    plot_data_simple = []
+
     saver = tf.train.Saver(max_to_keep=10)
     for i in range(num_epochs):
         shuffle_idx = np.arange(train_x.shape[0])
@@ -50,17 +82,9 @@ def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZ
             clean_dict = {model.x: batch_x, model.y: batch_y, model.x_ref: batch_x}
 
             # generate adv examples
-
-            # Using cleverhans library to generate PGD intances. This
-            # approach is constructing a lot of graph strucutres, and
-            # it is not clear what it does. The runnning is quite slow.
             
             # adv_x = my_PGD(sess, model)
             # adv_x_concrete = sess.run(adv_x, feed_dict=clean_dict)
-
-            # Using a homemade PGD adapted from mnist_challenge is
-            # much faster. But there is a caveat. See below.
-            
             adv_x_concrete = my_fast_PGD(sess, model, batch_x, batch_y)
             
             adv_dict = {model.x: adv_x_concrete, model.y: batch_y, model.x_ref: batch_x}
@@ -68,18 +92,11 @@ def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZ
             clean_acc = sess.run(model.accuracy, feed_dict=clean_dict)
             adv_acc = sess.run(model.accuracy, feed_dict=adv_dict)
             # actual training
-            #
-            # clean training turns out to be important when using
-            # homemade PGD. Otherwise the training does not
-            # progress. Using cleverhans PGD won't need a clean data,
-            # and still approaches the clean accuracy fast. However
-            # since the running time of cleverhans PGD is so slow, the
-            # overall running time is still far worse.
-            #
             # _, l, a, m = sess.run([train_step, loss, model.accuracy, metrics],
             #                    feed_dict=clean_dict)
             _, l, a, m = sess.run([train_step, loss, model.accuracy, metrics],
                                feed_dict=adv_dict)
+            plot_data.append(m)
             ct += 1
             if ct % print_interval == 0:
                 print('{} / {}: clean acc: {:.5f}, \tadv acc: {:.5f}, \tloss: {:.5f}, \tmetrics: {}'
@@ -89,6 +106,11 @@ def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZ
         adv_x_concrete = my_fast_PGD(sess, model, val_x, val_y)
         adv_dict = {model.x: adv_x_concrete, model.y: val_y, model.x_ref: val_x}
         adv_acc, l, m = sess.run([model.accuracy, loss, metrics], feed_dict=adv_dict)
+        plot_data_simple.append(m)
+
+        adv_training_plot(plot_data, 'training-process.png', False)
+        adv_training_plot(plot_data, 'training-process-split.png', True)
+        adv_training_plot(plot_data_simple, 'training-process-simple.png', False)
 
         # save the weights
         save_path = saver.save(sess, 'tmp/epoch-{}'.format(i))

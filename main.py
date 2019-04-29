@@ -6,6 +6,7 @@ import math
 import matplotlib.pyplot as plt
 import seaborn as sns
 import random
+import os
 import cleverhans.model
 from cleverhans.attacks import FastGradientMethod
 from cleverhans.attacks import ProjectedGradientDescent, SaliencyMapMethod
@@ -104,22 +105,49 @@ def test_model_against_attack(sess, model, attack_func, inputs, labels, targets,
     if targets is None:
         adv_x_concrete = sess.run(adv_x, feed_dict={model.x: inputs, model.y: labels})
         adv_preds_concrete = sess.run(adv_preds, feed_dict={model.x: inputs, model.y: labels})
+        
+        correct_indices = np.equal(np.argmax(adv_preds_concrete, 1), np.argmax(labels, 1))
+        incorrect_indices = np.not_equal(np.argmax(adv_preds_concrete, 1), np.argmax(labels, 1))
+        
+        incorrect_x = inputs[incorrect_indices]
+        incorrect_adv_x = adv_x_concrete[incorrect_indices]
+        incorrect_y = labels[incorrect_indices]
+        incorrect_pred = adv_preds_concrete[incorrect_indices]
+        
+        # FIXME seems the tf acc is different from np calculated acc
         adv_acc = model.compute_accuracy(sess, model.x, model.y, adv_preds, inputs, labels)
     else:
+        # FIXME incorrect instances
         adv_x_concrete = sess.run(adv_x, feed_dict={model.x: inputs, model.y: targets})
         adv_preds_concrete = sess.run(adv_preds, feed_dict={model.x: inputs, model.y: targets})
         adv_acc = model.compute_accuracy(sess, model.x, model.y, model.logits, adv_x_concrete, labels)
 
     l2 = np.mean(mynorm(inputs, adv_x_concrete, 2))
+    if attack_func == my_CW:
+        # CW l2 is a bit problematic, because in case it fails, it
+        # will output the same value, and thus 0 l2. In general, I
+        # need to calculate L2 only for successful attacks.
+        l2old = l2
+        l2 = np.mean(mynorm(inputs[incorrect_indices], adv_x_concrete[incorrect_indices], 2))
+        print('CW, calculate l2 only for incorrect examples {} (old l2: {}).'.format(l2, l2old))
 
-    pngfile = prefix + '-out.png'
-    print('Writing adv examples to {} ..'.format(pngfile))
-    grid_show_image(adv_x_concrete[:10], 5, 2, pngfile)
+    filename = 'attack-result-{}.png'.format(prefix)
+    print('Writing adv examples to {} ..'.format(filename))
+    # correct: row1: clean, row2: adv
+    images = np.concatenate((inputs[correct_indices][:5],
+                             inputs[incorrect_indices][:5],
+                             adv_x_concrete[correct_indices][:5],
+                             adv_x_concrete[incorrect_indices][:5]))
+    titles = np.concatenate((np.argmax(labels[correct_indices][:5], 1),
+                             np.argmax(labels[incorrect_indices][:5], 1),
+                             np.argmax(adv_preds_concrete[correct_indices][:5], 1),
+                             np.argmax(adv_preds_concrete[incorrect_indices][:5], 1)))
+    grid_show_image(images, int(len(images)/2), 2, filename=filename, titles=titles)
     
-    print('True label: {}'.format(np.argmax(labels, 1)))
-    print('Predicted label: {}'.format(np.argmax(adv_preds_concrete, 1)))
-    print('Adv input accuracy: {}'.format(adv_acc))
-    print("L2: {}".format(l2))
+    # print('True label: {}'.format(np.argmax(labels, 1)))
+    # print('Predicted label: {}'.format(np.argmax(adv_preds_concrete, 1)))
+    # print('Adv input accuracy: {}'.format(adv_acc))
+    # print("L2: {}".format(l2))
     if targets is not None:
         target_acc = model.compute_accuracy(sess, model.x, model.y, model.logits, adv_x_concrete, targets)
         print('Targeted label: {}'.format(np.argmax(targets, 1)))
@@ -148,16 +176,16 @@ def test_against_attacks(sess, model):
     print('{} acc: {}, l2: {}'.format('JSMA', acc, l2))
     
     print('testing CW ..')
-    # FIXME CW l2 is a bit problematic, because in case it fails, it
-    # will output the same value, and thus 0 l2. In general, I need to
-    # calculate L2 only for successful attacks.
     acc, l2 = test_model_against_attack(sess, model, my_CW, inputs, labels, None, prefix='CW')
     print('{} acc: {}, l2: {}'.format('CW', acc, l2))
 
+if __name__ == '__main__':
+    train_denoising(DenoisedCNN, 'saved_model/AdvDenoiser', '0', '5', overwrite=True)
+    
 def main():
     # training
     train_denoising(DenoisedCNN, 'saved_model/AdvDenoiser', '0', '0')
-    train_denoising(DenoisedCNN, 'saved_model/AdvDenoiser', '0', '4')
+    train_denoising(DenoisedCNN, 'saved_model/AdvDenoiser', '0', '5')
     # only train CNN and AE for these CNN architecture. The AdvAE weights will be loaded.
     train_denoising(DenoisedCNN_Var1, 'saved_model/AdvDenoiser', '1', '1', run_adv=False)
     train_denoising(DenoisedCNN_Var2, 'saved_model/AdvDenoiser', '2', '2', run_adv=False)
@@ -186,9 +214,12 @@ def __test_denoising(path):
     model.load_CNN(sess, 'saved_model/AdvDenoiser/2-CNN.ckpt')
 
     # load the same AE
+    model.load_AE(sess, 'saved_model/AdvDenoiser/0-AE.ckpt')
+    # model.train_AE(sess, train_x)
+    
     model.load_AE(sess, 'saved_model/AdvDenoiser/0-AdvAE.ckpt')
     model.load_AE(sess, 'saved_model/AdvDenoiser/3-AdvAE.ckpt')
-    model.load_AE(sess, 'saved_model/AdvDenoiser/4-AdvAE.ckpt')
+    model.load_AE(sess, 'saved_model/AdvDenoiser/5-AdvAE.ckpt')
 
     # testing
     model.test_CNN(sess, test_x, test_y)

@@ -61,7 +61,7 @@ different CNN architecture:
 How to ensemble? Create many CNN layers. When training, add all loss
 terms of different CNNs together.
 
-** STARTED Analyze of different loss terms
+** TODO Analyze of different loss terms
 - [ ] plot the training and loss
 - analyze how the different loss terms work. Even if the loss does
   not seem to decrease, it might act as a regularizer. Try removing it

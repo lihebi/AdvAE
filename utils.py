@@ -34,34 +34,30 @@ def convert_image_255(img):
     # return np.round(img).reshape((28, 28))
     # return np.round((img + 0.5) * 255).reshape((32, 32, 3))
 
-def grid_show_image(images, width, height, filename='out.png'):
+def grid_show_image(images, width, height, filename='out.png', titles=None):
     """
     Sample 10 images, and save it.
     """
     assert len(images) == width * height
+    assert titles is None or len(images) == len(titles)
     plt.ioff()
-    figure = plt.figure()
-    # figure = plt.figure(figsize=(6.4, 1.2))
-    figure.canvas.set_window_title('My Grid Visualization')
-    for x in range(height):
-        for y in range(width):
-            # print(x,y)
-            # figure.add_subplot(height, width, x*width + y + 1)
-            ax = plt.subplot(height, width, x*width + y + 1)
-            ax.set_axis_off()
-            ax.get_xaxis().set_visible(False)
-            ax.get_yaxis().set_visible(False)
-            # ax.set_visible(False)
-            # plt.axis('off')
-            # plt.imshow(images[x*width+y], cmap='gray')
-            plt.imshow(convert_image_255(images[x*width+y]), cmap='gray')
-            # plt.imshow(convert_image_255(images[x*width+y]))
-            # plt.imshow(images[x*width+y])
-    # plt.show()
-    # plt.tight_layout()
+    fig, axes = plt.subplots(nrows=height, ncols=width)
+    fig.canvas.set_window_title('My Grid Visualization')
+    if titles is None:
+        titles = [''] * len(images)
+    for image, ax, title in zip(images, axes.reshape(-1), titles):
+        ax.set_axis_off()
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.set_title(title)
+        ax.imshow(convert_image_255(image), cmap='gray')
     plt.savefig(filename, bbox_inches='tight', pad_inches=0)
-    # plt.savefig(filename)
-    return figure
+    plt.close(fig)
+
+def __test():
+    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
+    grid_show_image(train_x[:10], 5, 2, ['hell'] * 10)
+
 def mynorm(a, b, p):
     size = a.shape[0]
     delta = a.reshape((size,-1)) - b.reshape((size,-1))

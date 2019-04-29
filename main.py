@@ -80,9 +80,7 @@ def train_denoising(model_cls, saved_folder, prefix, advprefix, run_adv=True, ov
             if not os.path.exists(pAdvAE+'.meta') or overwrite:
                 print('Adv training AdvAE ..')
                 my_adv_training(sess, model, model.unified_adv_loss,
-                                [model.rec_loss, model.ce_loss,
-                                 model.clean_rec_loss,model.clean_ce_loss,
-                                 model.noisy_rec_loss, model.noisy_ce_loss],
+                                model.metrics,
                                 model.unified_adv_train_step,
                                 num_epochs=50)
                 print('Saving model ..')

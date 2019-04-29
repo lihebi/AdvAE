@@ -15,18 +15,16 @@ from utils import *
 BATCH_SIZE = 128
 NUM_EPOCHS = 100
 
-def adv_training_plot(data, filename, split):
-    names = ['rec_loss', 'ce_loss', 'clean_rec_loss',
-             'clean_ce_loss', 'noisy_rec_loss',
-             'noisy_ce_loss']
-    print('Plotting internal training process ..')
+def adv_training_plot(data, names, filename, split):
+    # print('Plotting internal training process ..')
     if split:
-        fig, axes = plt.subplots(nrows=2, ncols=3)
+        fig, axes = plt.subplots(nrows=3, ncols=3)
         for ax, metric, name in zip(axes.reshape(-1), np.transpose(data), names):
             # print(type(ax))
             ax.plot(metric, label=name)
             ax.set_title(name)
-            legend = ax.legend()
+            # legend = ax.legend()
+        plt.subplots_adjust(hspace=0.5)
     else:
         fig, ax = plt.subplots()
         for metric, name in zip(np.transpose(data), names):
@@ -34,15 +32,7 @@ def adv_training_plot(data, filename, split):
         legend = ax.legend()
     plt.savefig(filename)
     plt.close(fig)
-    print('saved to {}'.format(filename))
-
-def adv_training_plot_split(data, names):
-    names = ['rec_loss', 'ce_loss', 'clean_rec_loss',
-             'clean_ce_loss', 'noisy_rec_loss',
-             'noisy_ce_loss']
-    filename = '{}-{}.png'.format(prefix, i)
-    plt.savefig(filename)
-    print('saved to {}'.format(filename))
+    # print('saved to {}'.format(filename))
 
 
 def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS):
@@ -67,6 +57,7 @@ def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZ
 
     plot_data = []
     plot_data_simple = []
+    plot_data_loss_acc = []
 
     saver = tf.train.Saver(max_to_keep=10)
     for i in range(num_epochs):
@@ -97,8 +88,33 @@ def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZ
             _, l, a, m = sess.run([train_step, loss, model.accuracy, metrics],
                                feed_dict=adv_dict)
             plot_data.append(m)
+            plot_data_loss_acc.append([l,a])
             ct += 1
             if ct % print_interval == 0:
+                # FIXME this should introduce only small overhead
+                adv_training_plot(plot_data, model.metric_names, 'training-process.png', False)
+                adv_training_plot(plot_data, model.metric_names, 'training-process-split.png', True)
+
+                # plot loss acc
+                fig, ax = plt.subplots()
+                losses, accs = np.transpose(plot_data_loss_acc)
+
+                color = 'tab:red'
+                ax.set_ylabel('loss', color=color)
+                ax.tick_params(axis='y', labelcolor=color)
+                ax.plot(losses, label='loss', color=color)
+                
+                axnew = ax.twinx()
+                color = 'tab:blue'
+                axnew.set_ylabel('acc', color=color)
+                axnew.tick_params(axis='y', labelcolor=color)
+                axnew.plot(accs, label='acc', color=color)
+                
+                legend = ax.legend()
+                legend = axnew.legend()
+                plt.savefig('training-process-acc.png')
+                plt.close(fig)
+                
                 print('{} / {}: clean acc: {:.5f}, \tadv acc: {:.5f}, \tloss: {:.5f}, \tmetrics: {}'
                       .format(ct, nbatch, clean_acc, adv_acc, l, m))
         print('EPOCH ends, calculating total loss')
@@ -108,9 +124,7 @@ def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZ
         adv_acc, l, m = sess.run([model.accuracy, loss, metrics], feed_dict=adv_dict)
         plot_data_simple.append(m)
 
-        adv_training_plot(plot_data, 'training-process.png', False)
-        adv_training_plot(plot_data, 'training-process-split.png', True)
-        adv_training_plot(plot_data_simple, 'training-process-simple.png', False)
+        adv_training_plot(plot_data_simple, model.metric_names, 'training-process-simple.png', True)
 
         # save the weights
         save_path = saver.save(sess, 'tmp/epoch-{}'.format(i))

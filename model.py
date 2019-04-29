@@ -178,6 +178,12 @@ class DenoisedCNN(cleverhans.model.Model):
             tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=rec, labels=self.x_ref))
 
+        high = self.CNN(self.AE(self.x))
+        high_ref = self.CNN(self.x_ref)
+        self.high_loss = tf.reduce_mean(
+            tf.nn.softmax_cross_entropy_with_logits(
+                logits=high, labels=high_ref))
+        
         self.logits = self.FC(self.CNN(self.AE(self.x)))
         self.ce_loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(
@@ -189,17 +195,20 @@ class DenoisedCNN(cleverhans.model.Model):
             tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=clean_rec, labels=self.x_ref))
         
+        clean_high = self.CNN(self.AE(self.x_ref))
+        self.clean_high_loss = tf.reduce_mean(
+            tf.nn.softmax_cross_entropy_with_logits(
+                logits=clean_high, labels=high_ref))
+        
         clean_logits = self.FC(self.CNN(self.AE(self.x_ref)))
         self.clean_ce_loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(
                 logits=clean_logits, labels=self.y))
-        
+
         self.preds = tf.argmax(self.logits, axis=1)
         # self.probs = tf.nn.softmax(self.logits)
         self.accuracy = tf.reduce_mean(tf.cast(tf.equal(
             self.preds, tf.argmax(self.y, 1)), dtype=tf.float32))
-        self.adv_train_step = tf.train.AdamOptimizer(0.001).minimize(self.ce_loss, var_list=self.AE_vars)
-        self.adv_rec_train_step = tf.train.AdamOptimizer(0.001).minimize(self.rec_loss, var_list=self.AE_vars)
 
         # I also want to add the Gaussian noise training objective
         # into the unified loss, such that the resulting AE will still
@@ -215,16 +224,31 @@ class DenoisedCNN(cleverhans.model.Model):
         self.noisy_ce_loss = tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(
                 logits=noisy_logits, labels=self.y))
-        
+
+        noisy_high = self.CNN(self.AE(noisy_x))
+        self.noisy_high_loss = tf.reduce_mean(
+            tf.nn.softmax_cross_entropy_with_logits(
+                logits=noisy_high, labels=high_ref))
+
         # TODO monitoring each of these losses and adjust weights
-        self.unified_adv_loss = (0.
-                                 # + self.rec_loss
-                                 # + self.clean_rec_loss
-                                 + self.ce_loss
-                                 # + self.clean_ce_loss
-                                 + self.noisy_rec_loss
-                                 # + self.noisy_ce_loss
-        )
+        self.metrics = [
+            # adv data
+            self.rec_loss, self.ce_loss, self.high_loss,
+            # clean data
+            self.clean_rec_loss, self.clean_ce_loss, self.clean_high_loss,
+            # noisy data
+            self.noisy_rec_loss, self.noisy_ce_loss, self.noisy_high_loss]
+        self.metric_names = [
+            # adv data
+            'rec_loss', 'ce_loss', 'high_loss',
+            # clean data
+            'clean_rec_loss', 'clean_ce_loss', 'clean_high_loss',
+            # noisy data
+            'noisy_rec_loss', 'noisy_ce_loss', 'noisy_high_loss']
+        # DEBUG adjust here for different loss terms and weights
+        self.unified_adv_loss = (self.ce_loss
+                                 + self.noisy_ce_loss
+                                 + self.high_loss)
         self.unified_adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
             self.unified_adv_loss, var_list=self.AE_vars)
 

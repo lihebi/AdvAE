@@ -67,11 +67,6 @@ def train_denoising(model_cls, saved_folder, prefix, advprefix, run_adv=True, ov
         acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
         print('Model accuracy on clean data: {}'.format(acc))
 
-
-        # my_adv_training(sess, model, model.ce_loss, [],
-        #                 model.adv_train_step)
-        # my_adv_training(sess, model, model.rec_loss, [],
-        #                 model.adv_rec_train_step)
         if run_adv:
             pAdvAE = os.path.join(saved_folder, '{}-AdvAE.ckpt'.format(advprefix))
             # overwrite controls only the AdvAE weights. CNN and AE
@@ -79,9 +74,13 @@ def train_denoising(model_cls, saved_folder, prefix, advprefix, run_adv=True, ov
             # experimenting with changing training or loss for that.
             if not os.path.exists(pAdvAE+'.meta') or overwrite:
                 print('Adv training AdvAE ..')
-                my_adv_training(sess, model, model.unified_adv_loss,
+                my_adv_training(sess, model,
+                                model.unified_adv_loss,
+                                # DEBUG
+                                # model.unified_postadv_loss,
                                 model.metrics,
                                 model.unified_adv_train_step,
+                                # model.unified_postadv_train_step,
                                 num_epochs=50)
                 print('Saving model ..')
                 model.save_AE(sess, pAdvAE)
@@ -178,7 +177,7 @@ def test_against_attacks(sess, model):
     print('{} acc: {}, l2: {}'.format('CW', acc, l2))
 
 if __name__ == '__main__':
-    train_denoising(DenoisedCNN, 'saved_model/AdvDenoiser', '0', '5', overwrite=True)
+    train_denoising(DenoisedCNN, 'saved_model/AdvDenoiser', '0', '6', overwrite=True)
     
 def main():
     # training
@@ -218,15 +217,22 @@ def __test_denoising(path):
     model.load_AE(sess, 'saved_model/AdvDenoiser/0-AdvAE.ckpt')
     model.load_AE(sess, 'saved_model/AdvDenoiser/3-AdvAE.ckpt')
     model.load_AE(sess, 'saved_model/AdvDenoiser/5-AdvAE.ckpt')
+    model.load_AE(sess, 'saved_model/AdvDenoiser/6-AdvAE.ckpt')
 
     # testing
+    # test whether CNN part is functioning
     model.test_CNN(sess, test_x, test_y)
+    # TODO test whether AE part is functioning, by auto encoding noisy and
+    # clean image and plot image
     model.test_AE(sess, test_x)
+    # test clean image and noisy image, the final accuracy
     model.test_Entire(sess, test_x, test_y)
+    # FIXME remove
     model.test_Adv_Denoiser(sess, test_x[:10], test_y[:10])
     
     acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
     print('Model accuracy on clean data: {}'.format(acc))
 
     # testing against adv
+    # TODO test PGD attacks, and plot the denoised images
     test_against_attacks(sess, model)

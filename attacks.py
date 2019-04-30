@@ -56,31 +56,6 @@ def my_PGD(sess, model):
     adv_x = pgd.generate(model.x, **pgd_params)
     return adv_x
 
-def my_fast_PGD(sess, model, x, y):
-    epsilon = 0.3
-    k = 40
-    a = 0.01
-    
-    # loss = model.cross_entropy()
-    # grad = tf.gradients(loss, model.x)[0]
-    
-    # FGSM, PGD, JSMA, CW
-    # without random
-    # 0.97, 0.97, 0.82, 0.87
-    # using random, the performance improved a bit:
-    # 0.99, 0.98, 0.87, 0.93
-    #
-    # adv_x = np.copy(x)
-    adv_x = x + np.random.uniform(-epsilon, epsilon, x.shape)
-    
-    for i in range(k):
-        g = sess.run(model.ce_grad, feed_dict={model.x: adv_x, model.y: y})
-        adv_x += a * np.sign(g)
-        adv_x = np.clip(adv_x, x - epsilon, x + epsilon)
-        # adv_x = np.clip(adv_x, 0., 1.)
-        adv_x = np.clip(adv_x, CLIP_MIN, CLIP_MAX)
-    return adv_x
-
 def my_JSMA(sess, model):
     jsma = SaliencyMapMethod(model, sess=sess)
     jsma_params = {'theta': 1., 'gamma': 0.1,

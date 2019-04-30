@@ -15,8 +15,6 @@ from cleverhans.attacks import CarliniWagnerL2
 from utils import *
 
 from attacks import CLIP_MIN, CLIP_MAX
-from attacks import my_fast_PGD
-
 
 class CNNModel(cleverhans.model.Model):
     def __init__(self):
@@ -47,7 +45,6 @@ class CNNModel(cleverhans.model.Model):
             self.preds, tf.argmax(self.y, 1)), dtype=tf.float32))
         # FIXME num_classes
         # self.num_classes = np.product(self.y_shape[1:])
-        self.ce_grad = tf.gradients(self.cross_entropy(), self.x)[0]
     def cross_entropy_with(self, y):
         return tf.reduce_mean(
             tf.nn.softmax_cross_entropy_with_logits(
@@ -170,99 +167,165 @@ class DenoisedCNN(cleverhans.model.Model):
         
         self.x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
         self.y = keras.layers.Input(shape=(10,), dtype='float32')
+        # FIXME get rid of x_ref, integrate attack into model
         # when self.x is feeding adv input, this acts as the clean reference
         self.x_ref = keras.layers.Input(shape=(28,28,1,), dtype='float32')
 
-        rec = self.AE(self.x)
-        self.rec_loss = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=rec, labels=self.x_ref))
+        self.setup_loss()
+        self.setup_prediction()
+        self.setup_trainstep()
 
-        high = self.CNN(self.AE(self.x))
-        high_ref = self.CNN(self.x_ref)
-        self.high_loss = tf.reduce_mean(
-            tf.nn.softmax_cross_entropy_with_logits(
-                logits=high, labels=high_ref))
-        
-        self.logits = self.FC(self.CNN(self.AE(self.x)))
-        self.ce_loss = tf.reduce_mean(
-            tf.nn.softmax_cross_entropy_with_logits(
-                logits=self.logits, labels=self.y))
-        self.ce_grad = tf.gradients(self.ce_loss, self.x)[0]
+    def myFGSM(self, sess, x):
+        # FGSM attack
+        fgsm_params = {
+            'eps': 0.3,
+            'clip_min': CLIP_MIN,
+            'clip_max': CLIP_MAX
+        }
+        fgsm = FastGradientMethod(self, sess=sess)
+        adv_x = fgsm.generate(x, **fgsm_params)
+        return adv_x
+    def myPGD(self, x):
+        pgd = ProjectedGradientDescent(self)
+        pgd_params = {'eps': 0.3,
+                      'nb_iter': 40,
+                      'eps_iter': 0.01,
+                      'clip_min': CLIP_MIN,
+                      'clip_max': CLIP_MAX}
+        adv_x = pgd.generate(x, **pgd_params)
+        return adv_x
+    def myJSMA(self, x):
+        jsma = SaliencyMapMethod(self)
+        jsma_params = {'theta': 1., 'gamma': 0.1,
+                       'clip_min': CLIP_MIN, 'clip_max': CLIP_MAX,
+                       'y_target': None}
+        return jsma.generate(x, **jsma_params)
+    def myCW(self, x, y, targeted=False):
+        """When targeted=True, remember to put target as y."""
+        # CW attack
+        cw = CarliniWagnerL2(self)
+        yname = 'y_target' if targeted else 'y'
+        cw_params = {'binary_search_steps': 1,
+                     yname: y,
+                     'max_iterations': 10000,
+                     'learning_rate': 0.2,
+                     # setting to 100 instead of 128, because the test_x
+                     # has 10000, and the last 16 left over will cause
+                     # exception
+                     'batch_size': 100,
+                     'initial_const': 10,
+                     'clip_min': CLIP_MIN,
+                     'clip_max': CLIP_MAX}
+        adv_x = cw.generate(x, **cw_params)
+        return adv_x
 
-        clean_rec = self.AE(self.x_ref)
-        self.clean_rec_loss = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=clean_rec, labels=self.x_ref))
-        
-        clean_high = self.CNN(self.AE(self.x_ref))
-        self.clean_high_loss = tf.reduce_mean(
-            tf.nn.softmax_cross_entropy_with_logits(
-                logits=clean_high, labels=high_ref))
-        
-        clean_logits = self.FC(self.CNN(self.AE(self.x_ref)))
-        self.clean_ce_loss = tf.reduce_mean(
-            tf.nn.softmax_cross_entropy_with_logits(
-                logits=clean_logits, labels=self.y))
-
-        self.preds = tf.argmax(self.logits, axis=1)
-        # self.probs = tf.nn.softmax(self.logits)
-        self.accuracy = tf.reduce_mean(tf.cast(tf.equal(
-            self.preds, tf.argmax(self.y, 1)), dtype=tf.float32))
-
-        # I also want to add the Gaussian noise training objective
-        # into the unified loss, such that the resulting AE will still
-        # acts as a denoiser
+    @staticmethod
+    def add_noise(x):
         noise_factor = 0.5
-        noisy_x = self.x_ref + noise_factor * tf.random.normal(shape=tf.shape(self.x_ref), mean=0., stddev=1.)
+        noisy_x = x + noise_factor * tf.random.normal(shape=tf.shape(x), mean=0., stddev=1.)
         noisy_x = tf.clip_by_value(noisy_x, CLIP_MIN, CLIP_MAX)
+        return noisy_x
+
+    def setup_loss(self):
+        high = self.CNN(self.x)
+        # logits = self.FC(high)
+        
+        rec = self.AE(self.x)
+        rec_high = self.CNN(rec)
+        rec_logits = self.FC(rec_high)
+
+        self.rec_loss = self.ce_wrapper(rec, self.x)
+        self.rec_high_loss = self.ce_wrapper(rec_high, high)
+        self.rec_ce_loss = self.ce_wrapper(rec_logits, self.y)
+
+        noisy_x = self.add_noise(self.x)
         noisy_rec = self.AE(noisy_x)
-        self.noisy_rec_loss = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=noisy_rec, labels=self.x_ref))
-        noisy_logits = self.FC(self.CNN(self.AE(noisy_x)))
-        self.noisy_ce_loss = tf.reduce_mean(
-            tf.nn.softmax_cross_entropy_with_logits(
-                logits=noisy_logits, labels=self.y))
+        noisy_rec_high = self.CNN(noisy_rec)
+        noisy_rec_logits = self.FC(noisy_rec_high)
 
-        noisy_high = self.CNN(self.AE(noisy_x))
-        self.noisy_high_loss = tf.reduce_mean(
-            tf.nn.softmax_cross_entropy_with_logits(
-                logits=noisy_high, labels=high_ref))
+        self.noisy_rec_loss = self.ce_wrapper(noisy_rec, self.x)
+        self.noisy_rec_high_loss = self.ce_wrapper(noisy_rec_high, high)
+        self.noisy_rec_ce_loss = self.ce_wrapper(noisy_rec_logits, self.y)
 
+        adv_x = self.myPGD(self.x)
+        adv_high = self.CNN(adv_x)
+        adv_logits = self.FC(adv_high)
+
+        adv_rec = self.AE(adv_x)
+        adv_rec_high = self.CNN(adv_rec)
+        adv_rec_logits = self.FC(adv_rec_high)
+        
+        self.adv_rec_loss = self.ce_wrapper(adv_rec, self.x)
+        self.adv_rec_high_loss = self.ce_wrapper(adv_rec_high, high)
+        self.adv_rec_ce_loss = self.ce_wrapper(adv_rec_logits, self.y)
+
+        # pre-denoiser: Trian denoiser such that the denoised x is
+        # itself robust
+        postadv = self.myPGD(rec)
+        postadv_high = self.CNN(postadv)
+        postadv_logits = self.FC(postadv_high)
+
+        self.postadv_rec_loss = self.ce_wrapper(postadv, self.x)
+        self.postadv_rec_high_loss = self.ce_wrapper(postadv_high, high)
+        self.postadv_rec_ce_loss = self.ce_wrapper(postadv_logits, self.y)
+    def setup_trainstep(self):
         # TODO monitoring each of these losses and adjust weights
         self.metrics = [
-            # adv data
-            self.rec_loss, self.ce_loss, self.high_loss,
             # clean data
-            self.clean_rec_loss, self.clean_ce_loss, self.clean_high_loss,
+            self.rec_loss, self.rec_high_loss, self.rec_ce_loss,
             # noisy data
-            self.noisy_rec_loss, self.noisy_ce_loss, self.noisy_high_loss]
+            self.noisy_rec_loss, self.noisy_rec_high_loss, self.noisy_rec_ce_loss,
+            # adv data
+            self.adv_rec_loss, self.adv_rec_high_loss, self.adv_rec_ce_loss,
+            # postadv
+            self.postadv_rec_loss, self.postadv_rec_high_loss, self.postadv_rec_ce_loss,
+            # accuracy
+            self.accuracy, self.adv_accuracy, self.postadv_accuracy, self.noisy_accuracy]
+        
         self.metric_names = [
-            # adv data
-            'rec_loss', 'ce_loss', 'high_loss',
-            # clean data
-            'clean_rec_loss', 'clean_ce_loss', 'clean_high_loss',
-            # noisy data
-            'noisy_rec_loss', 'noisy_ce_loss', 'noisy_high_loss']
+            'rec_loss', 'rec_high_loss', 'rec_ce_loss',
+            'noisy_rec_loss', 'noisy_rec_high_loss', 'noisy_rec_ce_loss',
+            'adv_rec_loss', 'adv_rec_high_loss', 'adv_rec_ce_loss',
+            'postadv_rec_loss', 'postadv_rec_high_loss', 'postadv_rec_ce_loss',
+            'accuracy', 'adv_accuracy', 'postadv_accuracy', 'noisy_accuracy']
         # DEBUG adjust here for different loss terms and weights
-        self.unified_adv_loss = (self.ce_loss
-                                 + self.noisy_ce_loss
-                                 + self.high_loss)
+        self.unified_adv_loss = (self.adv_rec_ce_loss
+                                 # + self.noisy_rec_ce_loss
+        )
         self.unified_adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
             self.unified_adv_loss, var_list=self.AE_vars)
 
+        # DEBUG TODO
+        self.unified_postadv_loss = self.postadv_rec_ce_loss
+        self.unified_postadv_train_step = tf.train.AdamOptimizer(0.001).minimize(
+            self.unified_adv_loss, var_list=self.AE_vars)
+    @staticmethod
+    def ce_wrapper(logits, labels):
+        return tf.reduce_mean(
+            tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=logits, labels=labels))
+    @staticmethod
+    def accuracy_wrapper(logits, labels):
+        return tf.reduce_mean(tf.cast(tf.equal(
+            tf.argmax(logits, axis=1),
+            tf.argmax(labels, 1)), dtype=tf.float32))
         
+    def setup_prediction(self):
+        # Should work on rec_logits
+        logits = self.FC(self.CNN(self.AE(self.x)))
+        # self.probs = tf.nn.softmax(self.logits)
+        self.accuracy = self.accuracy_wrapper(logits, self.y)
+        
+        adv_logits = self.FC(self.CNN(self.AE(self.myPGD(self.x))))
+        self.adv_accuracy = self.accuracy_wrapper(adv_logits, self.y)
 
-        # self.clean_x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        # self.noise_x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        # # self.x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        # self.y = tf.placeholder(shape=[None, 10], dtype='float32')
+        postadv_logits = self.FC(self.CNN(self.myPGD(self.AE(self.x))))
+        self.postadv_accuracy = self.accuracy_wrapper(postadv_logits, self.y)
 
-        # loss function
-        # ce_grad, used for my_fast_PGD
-        # self.ce_grad = tf.gradients(ce_loss, self.noise_x)[0]
-        # denoising objective
+        noisy_x = self.add_noise(self.x)
+        noisy_logits = self.FC(self.CNN(self.AE(noisy_x)))
+        self.noisy_accuracy = self.accuracy_wrapper(noisy_logits, self.y)
+
     @staticmethod
     def compute_accuracy(sess, x, y, preds, x_test, y_test):
         acc = tf.reduce_mean(tf.cast(
@@ -455,27 +518,24 @@ class DenoisedCNN(cleverhans.model.Model):
 
     def test_Adv_Denoiser(self, sess, clean_x, clean_y):
         """Visualize the denoised image against adversarial examples."""
-        adv_x_concrete = my_fast_PGD(sess, self, clean_x, clean_y)
-        
         inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
         labels = keras.layers.Input(shape=(10,), dtype='float32')
 
-        rec = self.AE(inputs)
-        
-        logits = self.FC(self.CNN(self.AE(inputs)))
+        adv_x = self.myPGD(inputs)
+        rec = self.AE(adv_x)
+        logits = self.FC(self.CNN(rec))
         preds = tf.argmax(logits, axis=1)
-        
         accuracy = tf.reduce_mean(tf.cast(tf.equal(
             preds, tf.argmax(labels, 1)), dtype=tf.float32))
-        acc = sess.run(accuracy, feed_dict={inputs: adv_x_concrete, labels: clean_y})
+        
+        adv_x_concrete, denoised_x, acc = sess.run([adv_x, rec, accuracy],
+                                                   feed_dict={inputs: clean_x, labels: clean_y})
 
         print('accuracy: {}'.format(acc))
-        denoised_x = sess.run(rec, feed_dict={inputs: adv_x_concrete, labels: clean_y})
         print('generating png ..')
         to_view = np.concatenate((adv_x_concrete[:5], denoised_x[:5]), 0)
         grid_show_image(to_view, 5, 2, 'AdvAE_out.png')
         print('PNG generatetd to AdvAE_out.png')
-
 
     def train_AE_high(self, sess, clean_x):
         """Train AE using high level feature guidance."""
@@ -486,11 +546,6 @@ class DenoisedCNN(cleverhans.model.Model):
                 labels=self.CNN(self.decoded)))
         pass
         
-    def train_AE_adv(self, sess):
-        # FIXME can I pass myself as a class instance like this?
-        my_adv_training(sess, self, self.ce_loss,
-                        var_list=self.AE_vars, do_init=False)
-
 class DenoisedCNN_Var0(DenoisedCNN):
     "This is the same as DenoisedCNN. I'm not using it, just use as a reference."
     def setup_CNN(self):
@@ -585,9 +640,6 @@ def __test():
 def __test():
     train_double_backprop("saved_model/double-backprop.ckpt")
     train_group_lasso("saved_model/group-lasso.ckpt")
-    train_ce("saved_model/ce.ckpt")
-    train_adv("saved_model/adv.ckpt")
-    # train_adv("saved_model/adv2.ckpt")
     
     sess, model = restore_model("saved_model/double-backprop.ckpt")
     sess, model = restore_model("saved_model/group-lasso.ckpt")
@@ -615,12 +667,6 @@ def __test():
     # test_model_against_attack(sess, model, my_CW_targeted, inputs, labels, targets, prefix='CW_targeted')
     test_model_against_attack(sess, model, my_CW, inputs, labels, None, prefix='CW')
 
-    # adv_x_concrete = my_fast_PGD(sess, model, inputs, labels)
-    # my_PGD(sess, model)
-    # adv_x = my_CW(sess, model)
-    # adv_preds_concrete = sess.run(adv_preds, feed_dict={model.x: inputs, model.y: labels})
-    # adv_acc = model.compute_accuracy(sess, model.x, model.y, model.logits, adv_x_concrete, labels)
-    
 
 def __test():
 

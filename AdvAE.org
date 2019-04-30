@@ -17,6 +17,11 @@ training denoiser using high level feature guidance
 4.1 FIXME probably also consider training for from clean x to x and to
 logits, as that is the whole model
 
+* Implementations notes
+
+* Other Ideas
+** Add noise, and then add PGD, and then use in training
+
 * Experiment
 
 ** TODO test on CIFAR and ImageNet

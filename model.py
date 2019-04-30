@@ -146,9 +146,9 @@ class MNIST_CNN(CNNModel):
         logits = keras.layers.Dense(10)(x)
         return logits
     
-# model = DenoisedCNN()
+# model = AdvAEModel()
 
-class DenoisedCNN(cleverhans.model.Model):
+class AdvAEModel(cleverhans.model.Model):
     """Implement a denoising auto encoder.
     """
     def __init__(self):
@@ -173,16 +173,25 @@ class DenoisedCNN(cleverhans.model.Model):
 
         self.setup_loss()
         self.setup_prediction()
+        self.setup_metrics()
         self.setup_trainstep()
+    # cleverhans
+    def predict(self, x):
+        return self.FC(self.CNN(self.AE(x)))
+    # cleverhans
+    def fprop(self, x, **kwargs):
+        logits = self.predict(x)
+        return {self.O_LOGITS: logits,
+                self.O_PROBS: tf.nn.softmax(logits=logits)}
 
-    def myFGSM(self, sess, x):
+    def myFGSM(self, x):
         # FGSM attack
         fgsm_params = {
             'eps': 0.3,
             'clip_min': CLIP_MIN,
             'clip_max': CLIP_MAX
         }
-        fgsm = FastGradientMethod(self, sess=sess)
+        fgsm = FastGradientMethod(self)
         adv_x = fgsm.generate(x, **fgsm_params)
         return adv_x
     def myPGD(self, x):
@@ -200,10 +209,10 @@ class DenoisedCNN(cleverhans.model.Model):
                        'clip_min': CLIP_MIN, 'clip_max': CLIP_MAX,
                        'y_target': None}
         return jsma.generate(x, **jsma_params)
-    def myCW(self, x, y, targeted=False):
+    def myCW(self, sess, x, y, targeted=False):
         """When targeted=True, remember to put target as y."""
         # CW attack
-        cw = CarliniWagnerL2(self)
+        cw = CarliniWagnerL2(self, sess=sess)
         yname = 'y_target' if targeted else 'y'
         cw_params = {'binary_search_steps': 1,
                      yname: y,
@@ -225,6 +234,22 @@ class DenoisedCNN(cleverhans.model.Model):
         noisy_x = x + noise_factor * tf.random.normal(shape=tf.shape(x), mean=0., stddev=1.)
         noisy_x = tf.clip_by_value(noisy_x, CLIP_MIN, CLIP_MAX)
         return noisy_x
+    @staticmethod
+    def ce_wrapper(logits, labels):
+        return tf.reduce_mean(
+            tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=logits, labels=labels))
+    @staticmethod
+    def accuracy_wrapper(logits, labels):
+        return tf.reduce_mean(tf.cast(tf.equal(
+            tf.argmax(logits, axis=1),
+            tf.argmax(labels, 1)), dtype=tf.float32))
+    @staticmethod
+    def compute_accuracy(sess, x, y, preds, x_test, y_test):
+        acc = tf.reduce_mean(tf.cast(
+            tf.equal(tf.argmax(y, 1), tf.argmax(preds, 1)),
+            dtype=tf.float32))
+        return sess.run(acc, feed_dict={x: x_test, y: y_test})
 
     def setup_loss(self):
         high = self.CNN(self.x)
@@ -268,52 +293,13 @@ class DenoisedCNN(cleverhans.model.Model):
         self.postadv_rec_loss = self.ce_wrapper(postadv, self.x)
         self.postadv_rec_high_loss = self.ce_wrapper(postadv_high, high)
         self.postadv_rec_ce_loss = self.ce_wrapper(postadv_logits, self.y)
-    def setup_trainstep(self):
-        # TODO monitoring each of these losses and adjust weights
-        self.metrics = [
-            # clean data
-            self.rec_loss, self.rec_high_loss, self.rec_ce_loss,
-            # noisy data
-            self.noisy_rec_loss, self.noisy_rec_high_loss, self.noisy_rec_ce_loss,
-            # adv data
-            self.adv_rec_loss, self.adv_rec_high_loss, self.adv_rec_ce_loss,
-            # postadv
-            self.postadv_rec_loss, self.postadv_rec_high_loss, self.postadv_rec_ce_loss,
-            # accuracy
-            self.accuracy, self.adv_accuracy, self.postadv_accuracy, self.noisy_accuracy]
-        
-        self.metric_names = [
-            'rec_loss', 'rec_high_loss', 'rec_ce_loss',
-            'noisy_rec_loss', 'noisy_rec_high_loss', 'noisy_rec_ce_loss',
-            'adv_rec_loss', 'adv_rec_high_loss', 'adv_rec_ce_loss',
-            'postadv_rec_loss', 'postadv_rec_high_loss', 'postadv_rec_ce_loss',
-            'accuracy', 'adv_accuracy', 'postadv_accuracy', 'noisy_accuracy']
-        # DEBUG adjust here for different loss terms and weights
-        self.unified_adv_loss = (self.adv_rec_ce_loss
-                                 # + self.noisy_rec_ce_loss
-        )
-        self.unified_adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
-            self.unified_adv_loss, var_list=self.AE_vars)
-
-        # DEBUG TODO
-        self.unified_postadv_loss = self.postadv_rec_ce_loss
-        self.unified_postadv_train_step = tf.train.AdamOptimizer(0.001).minimize(
-            self.unified_adv_loss, var_list=self.AE_vars)
-    @staticmethod
-    def ce_wrapper(logits, labels):
-        return tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=logits, labels=labels))
-    @staticmethod
-    def accuracy_wrapper(logits, labels):
-        return tf.reduce_mean(tf.cast(tf.equal(
-            tf.argmax(logits, axis=1),
-            tf.argmax(labels, 1)), dtype=tf.float32))
         
     def setup_prediction(self):
+        # no AE, just CNN
+        CNN_logits = self.FC(self.CNN(self.x))
+        self.CNN_accuracy = self.accuracy_wrapper(CNN_logits, self.y)
         # Should work on rec_logits
         logits = self.FC(self.CNN(self.AE(self.x)))
-        # self.probs = tf.nn.softmax(self.logits)
         self.accuracy = self.accuracy_wrapper(logits, self.y)
         
         adv_logits = self.FC(self.CNN(self.AE(self.myPGD(self.x))))
@@ -325,21 +311,30 @@ class DenoisedCNN(cleverhans.model.Model):
         noisy_x = self.add_noise(self.x)
         noisy_logits = self.FC(self.CNN(self.AE(noisy_x)))
         self.noisy_accuracy = self.accuracy_wrapper(noisy_logits, self.y)
+    def setup_metrics(self):
+        # TODO monitoring each of these losses and adjust weights
+        self.metrics = [
+            # clean data
+            self.rec_loss, self.rec_high_loss, self.rec_ce_loss, self.accuracy,
+            # noisy data
+            self.noisy_rec_loss, self.noisy_rec_high_loss, self.noisy_rec_ce_loss, self.noisy_accuracy,
+            # adv data
+            self.adv_rec_loss, self.adv_rec_high_loss, self.adv_rec_ce_loss, self.adv_accuracy,
+            # postadv
+            self.postadv_rec_loss, self.postadv_rec_high_loss, self.postadv_rec_ce_loss, self.postadv_accuracy
+        ]
+        
+        self.metric_names = [
+            'rec_loss', 'rec_high_loss', 'rec_ce_loss', 'accuracy',
+            'noisy_rec_loss', 'noisy_rec_high_loss', 'noisy_rec_ce_loss', 'noisy_accuracy',
+            'adv_rec_loss', 'adv_rec_high_loss', 'adv_rec_ce_loss', 'adv_accuracy',
+            'postadv_rec_loss', 'postadv_rec_high_loss', 'postadv_rec_ce_loss', 'postadv_accuracy']
+    def setup_trainstep(self):
+        """Overwrite by subclasses to customize the loss."""
+        self.unified_adv_loss = (self.adv_rec_ce_loss)
+        self.unified_adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
+            self.unified_adv_loss, var_list=self.AE_vars)
 
-    @staticmethod
-    def compute_accuracy(sess, x, y, preds, x_test, y_test):
-        acc = tf.reduce_mean(tf.cast(
-            tf.equal(tf.argmax(y, 1), tf.argmax(preds, 1)),
-            dtype=tf.float32))
-        return sess.run(acc, feed_dict={x: x_test, y: y_test})
-    # cleverhans
-    def predict(self, x):
-        return self.FC(self.CNN(self.AE(x)))
-    # cleverhans
-    def fprop(self, x, **kwargs):
-        logits = self.predict(x)
-        return {self.O_LOGITS: logits,
-                self.O_PROBS: tf.nn.softmax(logits=logits)}
     def setup_AE(self):
         inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
         # x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
@@ -358,23 +353,6 @@ class DenoisedCNN(cleverhans.model.Model):
         decoded = keras.layers.Conv2D(1, (3, 3), activation='sigmoid', padding='same')(x)
         self.AE = keras.models.Model(inputs, decoded)
         
-    def save_CNN(self, sess, path):
-        """Save AE weights to checkpoint."""
-        saver = tf.train.Saver(var_list=self.CNN_vars + self.FC_vars)
-        saver.save(sess, path)
-
-    def save_AE(self, sess, path):
-        """Save AE weights to checkpoint."""
-        saver = tf.train.Saver(var_list=self.AE_vars)
-        saver.save(sess, path)
-
-    def load_CNN(self, sess, path):
-        saver = tf.train.Saver(var_list=self.CNN_vars + self.FC_vars)
-        saver.restore(sess, path)
-
-    def load_AE(self, sess, path):
-        saver = tf.train.Saver(var_list=self.AE_vars)
-        saver.restore(sess, path)
 
     def setup_CNN(self):
         inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
@@ -407,6 +385,23 @@ class DenoisedCNN(cleverhans.model.Model):
         logits = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, logits)
         
+    def save_CNN(self, sess, path):
+        """Save AE weights to checkpoint."""
+        saver = tf.train.Saver(var_list=self.CNN_vars + self.FC_vars)
+        saver.save(sess, path)
+
+    def save_AE(self, sess, path):
+        """Save AE weights to checkpoint."""
+        saver = tf.train.Saver(var_list=self.AE_vars)
+        saver.save(sess, path)
+
+    def load_CNN(self, sess, path):
+        saver = tf.train.Saver(var_list=self.CNN_vars + self.FC_vars)
+        saver.restore(sess, path)
+
+    def load_AE(self, sess, path):
+        saver = tf.train.Saver(var_list=self.AE_vars)
+        saver.restore(sess, path)
 
     def train_CNN(self, sess, clean_x, clean_y):
         """Train CNN part of the graph."""
@@ -437,21 +432,6 @@ class DenoisedCNN(cleverhans.model.Model):
             model.fit(clean_x, clean_y, epochs=100, validation_split=0.1, verbose=2, callbacks=[es, mc])
             model.load_weights('best_model.ckpt')
 
-    def test_CNN(self, sess, clean_x, clean_y):
-        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        labels = keras.layers.Input(shape=(10,), dtype='float32')
-        
-        logits = self.FC(self.CNN(inputs))
-        preds = tf.argmax(logits, axis=1)
-        probs = tf.nn.softmax(logits)
-        # self.acc = tf.reduce_mean(
-        #     tf.to_float(tf.equal(tf.argmax(self.logits, axis=1),
-        #                          tf.argmax(self.label, axis=1))))
-        accuracy = tf.reduce_mean(tf.cast(tf.equal(
-            preds, tf.argmax(labels, 1)), dtype=tf.float32))
-        acc = sess.run(accuracy, feed_dict={inputs: clean_x, labels: clean_y})
-        print('accuracy: {}'.format(acc))
-        
     def train_AE(self, sess, clean_x):
         noise_factor = 0.5
         noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
@@ -481,73 +461,134 @@ class DenoisedCNN(cleverhans.model.Model):
             model.fit(noisy_x, clean_x, epochs=100, validation_split=0.1, verbose=2, callbacks=[es, mc])
             model.load_weights('best_model.ckpt')
 
-    def test_AE(self, sess, clean_x):
-        # Testing denoiser
-        noise_factor = 0.5
-        noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
-        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
 
-        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+    def test_all(self, sess, test_x, test_y, run_CW=False):
+        """Test clean data x and y.
+
+        - Use only CNN, to test whether CNN is functioning
+        - Test AE, output png for before and after
+        - Test AE + CNN, to test whether the entire system works
+
+        CW is costly, so by default no running for it. If you want it,
+        set it to true.
+
+        """
+        # inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        # labels = keras.layers.Input(shape=(10,), dtype='float32')
+
+        indices = random.sample(range(test_x.shape[0]), 100)
+        test_x = test_x[indices]
+        test_y = test_y[indices]
+        feed_dict = {self.x: test_x, self.y: test_y}
         
-        rec = self.AE(inputs)
-        model = keras.models.Model(inputs, rec)
+        accs = sess.run([self.CNN_accuracy, self.accuracy, self.noisy_accuracy], feed_dict=feed_dict)
+        print('raw accuracies (raw CNN, AE clean, AE noisy): {}'.format(accs))
 
-        rec = sess.run(rec, feed_dict={inputs: noisy_x})
-        print('generating png ..')
-        to_view = np.concatenate((noisy_x[:5], rec[:5]), 0)
-        grid_show_image(to_view, 5, 2, 'AE_out.png')
-        print('PNG generatetd to AE_out.png')
+        to_run = {}
+        titles = []
+        # Test AE rec output before and after
+        rec = self.AE(self.x)
+        noisy_x = self.add_noise(self.x)
+        noisy_rec = self.AE(noisy_x)
 
-    def test_Entire(self, sess, clean_x, clean_y):
-        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        labels = keras.layers.Input(shape=(10,), dtype='float32')
+        to_run['x'] = self.x
+        to_run['y'] = tf.argmax(self.y, 1)
+        to_run['rec'] = rec
+        to_run['noisy_x'] = noisy_x
+        to_run['noisy_rec'] = noisy_rec
+
+        # to_run += [self.x, rec, noisy_x, noisy_rec]
+        # titles += ['x', 'rec', 'noisy_x', 'noisy_rec']
+        # titles += [tf.constant('x', dtype=tf.string, shape=self.x.shape[0])]
+
+        # JSMA is very slow ..
+        attack_funcs = [self.myFGSM, self.myPGD, self.myJSMA]
+        attack_names = ['FGSM', 'PGD', 'JSMA']
+        # attack_funcs = [self.myFGSM, self.myPGD]
+        # attack_names = ['FGSM', 'PGD']
+        if run_CW:
+            attack_funcs += [lambda x: self.myCW(sess, x, self.y)]
+            attack_names += ['CW']
+
+        # first class methods!
+        for attack, name in zip(attack_funcs, attack_names):
+            adv_x = attack(self.x)
+            adv_rec = self.AE(adv_x)
+            # remember to compare visually postadv with rec (i.e. AE(x))
+            postadv = attack(self.AE(self.x))
+            
+            adv_logits = self.FC(self.CNN(self.AE(attack(self.x))))
+            adv_accuracy = self.accuracy_wrapper(adv_logits, self.y)
+
+            postadv_logits = self.FC(self.CNN(attack(self.AE(self.x))))
+            postadv_accuracy = self.accuracy_wrapper(postadv_logits, self.y)
+
+            to_run[name] = {}
+            to_run[name]['adv_x'] = adv_x
+            to_run[name]['adv_rec'] = adv_rec
+            to_run[name]['postadv'] = postadv
+            
+            to_run[name]['adv_pred'] = tf.argmax(adv_logits, axis=1)
+            to_run[name]['postadv_pred'] = tf.argmax(postadv_logits, axis=1)
+            
+            to_run[name]['adv_acc'] = adv_accuracy
+            to_run[name]['postadv_acc'] = postadv_accuracy
+            
+            
+            # TODO mark the correct and incorrect predictions
+            # to_run += [adv_x, adv_rec, postadv]
+            # TODO add prediction result
+            # titles += ['{} adv_x'.format(name), 'adv_rec', 'postadv']
+            
+        # TODO select 5 correct and incorrect examples
+        # indices = random.sample(range(test_x.shape[0]), 10)
+        # test_x = test_x[indices]
+        # test_y = test_y[indices]
+        # feed_dict = {self.x: test_x, self.y: test_y}
         
-        logits = self.FC(self.CNN(self.AE(inputs)))
-        preds = tf.argmax(logits, axis=1)
-        accuracy = tf.reduce_mean(tf.cast(tf.equal(
-            preds, tf.argmax(labels, 1)), dtype=tf.float32))
-        acc = sess.run(accuracy, feed_dict={inputs: clean_x, labels: clean_y})
-        print('clean accuracy: {}'.format(acc))
+        print('Testing AE and Adv attacks ..')
+        res = sess.run(to_run, feed_dict=feed_dict)
+
+        # select 10
+        images = []
+        titles = []
         
-        # I'm adding testing for accuracy of noisy input
-        noise_factor = 0.5
-        noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
-        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
-        acc = sess.run(accuracy, feed_dict={inputs: noisy_x, labels: clean_y})
-        print('noisy x accuracy: {}'.format(acc))
-
-    def test_Adv_Denoiser(self, sess, clean_x, clean_y):
-        """Visualize the denoised image against adversarial examples."""
-        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        labels = keras.layers.Input(shape=(10,), dtype='float32')
-
-        adv_x = self.myPGD(inputs)
-        rec = self.AE(adv_x)
-        logits = self.FC(self.CNN(rec))
-        preds = tf.argmax(logits, axis=1)
-        accuracy = tf.reduce_mean(tf.cast(tf.equal(
-            preds, tf.argmax(labels, 1)), dtype=tf.float32))
+        images += list(res['x'][:10])
+        tmp = list(res['y'][:10])
+        tmp[0] = 'x: {}'.format(tmp[0])
+        titles += tmp
         
-        adv_x_concrete, denoised_x, acc = sess.run([adv_x, rec, accuracy],
-                                                   feed_dict={inputs: clean_x, labels: clean_y})
+        for name in ['rec', 'noisy_x', 'noisy_rec']:
+            images += list(res[name][:10])
+            titles += [name] + ['']*9
+        for name in attack_names:
+            images += list(res[name]['adv_x'][:10])
+            tmp = list(res[name]['adv_pred'][:10])
+            tmp[0] = '{} adv_x: {}'.format(name, tmp[0])
+            titles += tmp
+            
+            images += list(res[name]['adv_rec'][:10])
+            titles += ['adv_rec'] + ['']*9
+            
+            images += list(res[name]['postadv'][:10])
+            tmp = list(res[name]['postadv_pred'][:10])
+            tmp[0] = 'postadv: {}'.format(tmp[0])
+            titles += tmp
+            # titles += list(res[name]['postadv_pred'][:10])
 
-        print('accuracy: {}'.format(acc))
-        print('generating png ..')
-        to_view = np.concatenate((adv_x_concrete[:5], denoised_x[:5]), 0)
-        grid_show_image(to_view, 5, 2, 'AdvAE_out.png')
-        print('PNG generatetd to AdvAE_out.png')
-
-    def train_AE_high(self, sess, clean_x):
-        """Train AE using high level feature guidance."""
-        # high-level guided loss function
-        high_rec_loss = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=self.CNN(self.clean_x),
-                labels=self.CNN(self.decoded)))
-        pass
+            print('{} attack accuracy: adv: {}, postadv: {}'
+                  .format(name, res[name]['adv_acc'], res[name]['postadv_acc']))
         
-class DenoisedCNN_Var0(DenoisedCNN):
-    "This is the same as DenoisedCNN. I'm not using it, just use as a reference."
+        # res = np.array(res)[:,:10]
+        # images = np.concatenate(res)
+        # titles = np.transpose([titles] * 10).reshape(-1)
+        print('Plotting result ..')
+        grid_show_image(images, 10, int(len(images)/10), filename='test-all-result.png', titles=titles)
+        print('Done. Saved to {}'.format('test-all-result.png'))
+
+        
+class AdvAEModel_Var0(AdvAEModel):
+    "This is the same as AdvAEModel. I'm not using it, just use as a reference."
     def setup_CNN(self):
         inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
         # FIXME this also assigns self.conv_layers
@@ -564,7 +605,7 @@ class DenoisedCNN_Var0(DenoisedCNN):
         x = keras.layers.Activation('relu')(x)
         x = keras.layers.MaxPool2D((2,2))(x)
         self.CNN = keras.models.Model(inputs, x)
-class DenoisedCNN_Var1(DenoisedCNN):
+class AdvAEModel_Var1(AdvAEModel):
     def setup_CNN(self):
         inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
         x = keras.layers.Reshape([28, 28, 1])(inputs)
@@ -580,7 +621,7 @@ class DenoisedCNN_Var1(DenoisedCNN):
         x = keras.layers.Activation('relu')(x)
         x = keras.layers.MaxPool2D((2,2))(x)
         self.CNN = keras.models.Model(inputs, x)
-class DenoisedCNN_Var2(DenoisedCNN):
+class AdvAEModel_Var2(AdvAEModel):
     def setup_CNN(self):
         inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
         x = keras.layers.Reshape([28, 28, 1])(inputs)
@@ -597,6 +638,47 @@ class DenoisedCNN_Var2(DenoisedCNN):
         x = keras.layers.MaxPool2D((2,2))(x)
         self.CNN = keras.models.Model(inputs, x)
 
+class FCAdvAEModel(AdvAEModel):
+    """Instead of an auto encoder, uses just an FC."""
+    def setup_AE(self):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        """From noise_x to x."""
+        x = keras.layers.Flatten()(inputs)
+        x = keras.layers.Dense(200)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Dropout(rate=0.5)(x)
+        x = keras.layers.Dense(200)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Dense(28*28)(x)
+        decoded = keras.layers.Reshape(shape=(28,28,1))(x)
+        self.AE = keras.models.Model(inputs, decoded)
+
+class PostAdvAEModel(AdvAEModel):
+    def setup_trainstep(self):
+        """Available loss terms:
+
+        # clean data
+        self.rec_loss, self.rec_high_loss, self.rec_ce_loss,
+        
+        # noisy data
+        self.noisy_rec_loss, self.noisy_rec_high_loss, self.noisy_rec_ce_loss,
+        
+        # adv data
+        self.adv_rec_loss, self.adv_rec_high_loss, self.adv_rec_ce_loss,
+        
+        # postadv
+        self.postadv_rec_loss, self.postadv_rec_high_loss, self.postadv_rec_ce_loss,
+        
+        """
+        self.unified_adv_loss = (self.postadv_rec_ce_loss)
+        self.unified_adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
+            self.unified_adv_loss, var_list=self.AE_vars)
+class AdvAEModel(AdvAEModel):
+    def setup_trainstep(self):
+        self.unified_adv_loss = (self.adv_rec_ce_loss + self.noisy_rec_loss)
+        self.unified_adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
+            self.unified_adv_loss, var_list=self.AE_vars)
+    
 def __test():
     sess = tf.Session()
     model = MNIST_CNN()

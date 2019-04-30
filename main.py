@@ -14,7 +14,7 @@ from cleverhans.attacks import CarliniWagnerL2
 
 
 from utils import *
-from model import DenoisedCNN, DenoisedCNN_Var1, DenoisedCNN_Var2
+from model import *
 from train import my_adv_training
 from attacks import *
 
@@ -26,9 +26,9 @@ def train_denoising(model_cls, saved_folder, prefix, advprefix, run_adv=True, ov
     """
     tf.reset_default_graph()
     with tf.Session() as sess:
-        # model = DenoisedCNN()
-        # model1 = DenoisedCNN_Var1()
-        # model2 = DenoisedCNN_Var2()
+        # model = AdvAEModel()
+        # model1 = AdvAEModel_Var1()
+        # model2 = AdvAEModel_Var2()
         model = model_cls()
         
         init = tf.global_variables_initializer()
@@ -46,8 +46,8 @@ def train_denoising(model_cls, saved_folder, prefix, advprefix, run_adv=True, ov
         else:
             print('Trained, directly loadding ..')
             model.load_CNN(sess, pCNN)
-        print('Testing CNN ..')
-        model.test_CNN(sess, test_x, test_y)
+        # print('Testing CNN ..')
+        # model.test_CNN(sess, test_x, test_y)
 
         # 2. train denoiser
         pAE = os.path.join(saved_folder, '{}-AE.ckpt'.format(prefix))
@@ -59,13 +59,14 @@ def train_denoising(model_cls, saved_folder, prefix, advprefix, run_adv=True, ov
         else:
             print('Trained, directly loadding ..')
             model.load_AE(sess, pAE)
-        print('Testing AE ..')
-        model.test_AE(sess, test_x)
-        model.test_Entire(sess, test_x, test_y)
+        # print('Testing AE ..')
+        # model.test_AE(sess, test_x)
+        # model.test_Entire(sess, test_x, test_y)
         
         # 3. train denoiser using adv training, with high level feature guidance
-        acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
-        print('Model accuracy on clean data: {}'.format(acc))
+        # acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
+        # print('Model accuracy on clean data: {}'.format(acc))
+        # model.test_all(sess, val_x, val_y, run_CW=False)
 
         if run_adv:
             pAdvAE = os.path.join(saved_folder, '{}-AdvAE.ckpt'.format(advprefix))
@@ -76,19 +77,20 @@ def train_denoising(model_cls, saved_folder, prefix, advprefix, run_adv=True, ov
                 print('Adv training AdvAE ..')
                 my_adv_training(sess, model,
                                 model.unified_adv_loss,
-                                # DEBUG
-                                # model.unified_postadv_loss,
                                 model.metrics,
                                 model.unified_adv_train_step,
-                                # model.unified_postadv_train_step,
-                                num_epochs=50)
+                                plot_prefix=advprefix,
+                                # DEBUG small num epochs to speed up
+                                # debugging, large one to report final
+                                # results
+                                num_epochs=10)
                 print('Saving model ..')
                 model.save_AE(sess, pAdvAE)
             else:
                 print('Trained, directly loadding ..')
                 model.load_AE(sess, pAdvAE)
-            print('Testing AdvAE ..')
-            model.test_Adv_Denoiser(sess, test_x[:10], test_y[:10])
+            # print('Testing AdvAE ..')
+            # model.test_Adv_Denoiser(sess, test_x[:10], test_y[:10])
 
     
 def test_model_against_attack(sess, model, attack_func, inputs, labels, targets, prefix=''):
@@ -177,19 +179,22 @@ def test_against_attacks(sess, model):
     print('{} acc: {}, l2: {}'.format('CW', acc, l2))
 
 if __name__ == '__main__':
-    train_denoising(DenoisedCNN, 'saved_model/AdvDenoiser', '0', '6', overwrite=True)
-    
-def main():
-    # training
-    train_denoising(DenoisedCNN, 'saved_model/AdvDenoiser', '0', '0')
-    train_denoising(DenoisedCNN, 'saved_model/AdvDenoiser', '0', '5')
-    # only train CNN and AE for these CNN architecture. The AdvAE weights will be loaded.
-    train_denoising(DenoisedCNN_Var1, 'saved_model/AdvDenoiser', '1', '1', run_adv=False)
-    train_denoising(DenoisedCNN_Var2, 'saved_model/AdvDenoiser', '2', '2', run_adv=False)
-    # testing
-    # experiments
+    train_denoising(AdvAEModel, 'saved_model', 'aecnn', 'AdvAE')
 
 def __test_denoising(path):
+    # training
+    train_denoising(AdvAEModel, 'saved_model', 'aecnn', 'AdvAE')
+    train_denoising(PostAdvAEModel, 'saved_model', 'aecnn', 'PostAdvAEModel')
+    
+    train_denoising(AdvAEModel_Var1, 'saved_model', 'cnn1', None, run_adv=False)
+    train_denoising(AdvAEModel_Var2, 'saved_model', 'cnn2', None, run_adv=False)
+    train_denoising(FCAdvAEModel, 'saved_model', 'fccnn', '5')
+    
+    train_denoising(FC_CNN, 'saved_model', 'fccnn', 'fccnn')
+    
+    # only train CNN and AE for these CNN architecture. The AdvAE weights will be loaded.
+    
+    # testing
     (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
 
     tf.reset_default_graph()
@@ -197,22 +202,23 @@ def __test_denoising(path):
     sess = tf.Session()
 
     # different CNN models
-    model = DenoisedCNN()
-    model = DenoisedCNN_Var1()
-    model = DenoisedCNN_Var2()
+    model = AdvAEModel()
+    model = AdvAEModel_Var1()
+    model = AdvAEModel_Var2()
 
     # init session
     init = tf.global_variables_initializer()
     sess.run(init)
 
     # load different CNNs
-    model.load_CNN(sess, 'saved_model/AdvDenoiser/0-CNN.ckpt')
+    model.load_CNN(sess, 'saved_model/aecnn-CNN.ckpt')
     model.load_CNN(sess, 'saved_model/AdvDenoiser/1-CNN.ckpt')
     model.load_CNN(sess, 'saved_model/AdvDenoiser/2-CNN.ckpt')
 
     # load the same AE
-    model.load_AE(sess, 'saved_model/AdvDenoiser/0-AE.ckpt')
-    # model.train_AE(sess, train_x)
+    model.load_AE(sess, 'saved_model/aecnn-AE.ckpt')
+    
+    model.load_AE(sess, 'saved_model/AdvAE-AdvAE.ckpt')
     
     model.load_AE(sess, 'saved_model/AdvDenoiser/0-AdvAE.ckpt')
     model.load_AE(sess, 'saved_model/AdvDenoiser/3-AdvAE.ckpt')
@@ -220,19 +226,7 @@ def __test_denoising(path):
     model.load_AE(sess, 'saved_model/AdvDenoiser/6-AdvAE.ckpt')
 
     # testing
-    # test whether CNN part is functioning
-    model.test_CNN(sess, test_x, test_y)
-    # TODO test whether AE part is functioning, by auto encoding noisy and
-    # clean image and plot image
-    model.test_AE(sess, test_x)
-    # test clean image and noisy image, the final accuracy
-    model.test_Entire(sess, test_x, test_y)
-    # FIXME remove
-    model.test_Adv_Denoiser(sess, test_x[:10], test_y[:10])
-    
-    acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
-    print('Model accuracy on clean data: {}'.format(acc))
-
-    # testing against adv
+    model.test_all(sess, test_x, test_y, run_CW=False)
+    model.test_all(sess, test_x, test_y, run_CW=True)
     # TODO test PGD attacks, and plot the denoised images
     test_against_attacks(sess, model)

@@ -18,6 +18,12 @@ training denoiser using high level feature guidance
 logits, as that is the whole model
 
 * Implementations notes
+** DONE debug training time
+   CLOSED: [2019-04-30 Tue 17:42]
+** TODO inconsistency problems
+
+- standalone attacks vs. integrated (in class as method) attacks: running time, accuracy
+- accuracy computation inconsistency
 
 * Other Ideas
 ** Add noise, and then add PGD, and then use in training

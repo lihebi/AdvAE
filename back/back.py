@@ -230,3 +230,101 @@ def plot_two_scale():
                 legend = axnew.legend()
                 plt.savefig('training-process-acc.png')
                 plt.close(fig)
+        # different types of adv
+        # PGD_adv_x = self.myPGD(self.x)
+        # PGD_adv_rec = self.AE(self.myPGD(self.x))
+        # PGD_postadv = self.myPGD(rec)
+
+        # FGSM_adv_x = self.myFGSM(self.x)
+        # FGSM_adv_rec = self.AE(self.myFGSM(self.x))
+        # FGSM_postadv = self.myFGSM(rec)
+
+        # JSMA_adv_x = self.myJSMA(self.x)
+        # JSMA_adv_rec = self.AE(self.myJSMA(self.x))
+        # JSMA_postadv = self.myJSMA(rec)
+
+        # if run_CW:
+        #     CW_adv_x = self.myCW(self.x)
+        #     CW_adv_rec = self.AE(self.myCW(self.x))
+        #     CW_postadv = self.myCW(rec)
+    def test_AE(self, sess, clean_x):
+        # Testing denoiser
+        noise_factor = 0.5
+        noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
+        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
+
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        
+        rec = self.AE(inputs)
+        model = keras.models.Model(inputs, rec)
+
+        rec = sess.run(rec, feed_dict={inputs: noisy_x})
+        print('generating png ..')
+        to_view = np.concatenate((noisy_x[:5], rec[:5]), 0)
+        grid_show_image(to_view, 5, 2, 'AE_out.png')
+        print('PNG generatetd to AE_out.png')
+
+    def test_Entire(self, sess, clean_x, clean_y):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        labels = keras.layers.Input(shape=(10,), dtype='float32')
+        
+        logits = self.FC(self.CNN(self.AE(inputs)))
+        preds = tf.argmax(logits, axis=1)
+        accuracy = tf.reduce_mean(tf.cast(tf.equal(
+            preds, tf.argmax(labels, 1)), dtype=tf.float32))
+        acc = sess.run(accuracy, feed_dict={inputs: clean_x, labels: clean_y})
+        print('clean accuracy: {}'.format(acc))
+        
+        # I'm adding testing for accuracy of noisy input
+        noise_factor = 0.5
+        noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
+        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
+        acc = sess.run(accuracy, feed_dict={inputs: noisy_x, labels: clean_y})
+        print('noisy x accuracy: {}'.format(acc))
+
+    def test_Adv_Denoiser(self, sess, clean_x, clean_y):
+        """Visualize the denoised image against adversarial examples."""
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        labels = keras.layers.Input(shape=(10,), dtype='float32')
+
+        adv_x = self.myPGD(inputs)
+        rec = self.AE(adv_x)
+        logits = self.FC(self.CNN(rec))
+        preds = tf.argmax(logits, axis=1)
+        accuracy = tf.reduce_mean(tf.cast(tf.equal(
+            preds, tf.argmax(labels, 1)), dtype=tf.float32))
+        
+        adv_x_concrete, denoised_x, acc = sess.run([adv_x, rec, accuracy],
+                                                   feed_dict={inputs: clean_x, labels: clean_y})
+
+        print('accuracy: {}'.format(acc))
+        print('generating png ..')
+        to_view = np.concatenate((adv_x_concrete[:5], denoised_x[:5]), 0)
+        grid_show_image(to_view, 5, 2, 'AdvAE_out.png')
+        print('PNG generatetd to AdvAE_out.png')
+    def test_CNN(self, sess, clean_x, clean_y):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        labels = keras.layers.Input(shape=(10,), dtype='float32')
+        
+        logits = self.FC(self.CNN(inputs))
+        preds = tf.argmax(logits, axis=1)
+        probs = tf.nn.softmax(logits)
+        # self.acc = tf.reduce_mean(
+        #     tf.to_float(tf.equal(tf.argmax(self.logits, axis=1),
+        #                          tf.argmax(self.label, axis=1))))
+        accuracy = tf.reduce_mean(tf.cast(tf.equal(
+            preds, tf.argmax(labels, 1)), dtype=tf.float32))
+        acc = sess.run(accuracy, feed_dict={inputs: clean_x, labels: clean_y})
+        print('accuracy: {}'.format(acc))
+        
+    # test whether CNN part is functioning
+    model.test_CNN(sess, test_x, test_y)
+    # clean image and plot image
+    model.test_AE(sess, test_x)
+    # test clean image and noisy image, the final accuracy
+    model.test_Entire(sess, test_x, test_y)
+    # FIXME remove
+    model.test_Adv_Denoiser(sess, test_x[:10], test_y[:10])
+    
+    acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
+    print('Model accuracy on clean data: {}'.format(acc))

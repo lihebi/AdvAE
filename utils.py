@@ -41,22 +41,34 @@ def grid_show_image(images, width, height, filename='out.png', titles=None):
     assert len(images) == width * height
     assert titles is None or len(images) == len(titles)
     plt.ioff()
-    fig, axes = plt.subplots(nrows=height, ncols=width)
+
+    # the size of image should increase as the number of images
+    fig_width = 6.4 * width / 4
+    fig_height = 4.8 * height / 3
+    
+    fig, axes = plt.subplots(nrows=height, ncols=width,
+                             # figsize=(12.8, 9.6),
+                             figsize=(fig_width, fig_height),
+                             dpi=300)
+    
     fig.canvas.set_window_title('My Grid Visualization')
     if titles is None:
         titles = [''] * len(images)
     for image, ax, title in zip(images, axes.reshape(-1), titles):
-        ax.set_axis_off()
+        # ax.set_axis_off()
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
-        ax.set_title(title)
+        # TITLE has to appear on top. I want it to be on bottom, so using xlabel
+        ax.set_title(title, loc='left')
+        # ax.set_xlabel(title)
         ax.imshow(convert_image_255(image), cmap='gray')
+    plt.subplots_adjust(hspace=0.5)
     plt.savefig(filename, bbox_inches='tight', pad_inches=0)
     plt.close(fig)
 
 def __test():
     (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
-    grid_show_image(train_x[:10], 5, 2, ['hell'] * 10)
+    grid_show_image(train_x[:10], 5, 2, titles=['hell'] * 10)
 
 def mynorm(a, b, p):
     size = a.shape[0]

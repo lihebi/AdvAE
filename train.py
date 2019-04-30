@@ -2,12 +2,15 @@ import keras
 import tensorflow as tf
 import numpy as np
 import sys
+import time
 import math
 import matplotlib.pyplot as plt
 import seaborn as sns
 import random
-import cleverhans.model
+import json
+import os
 
+import cleverhans.model
 from attacks import *
 from utils import *
 
@@ -18,24 +21,32 @@ NUM_EPOCHS = 100
 def adv_training_plot(data, names, filename, split):
     # print('Plotting internal training process ..')
     if split:
-        fig, axes = plt.subplots(nrows=6, ncols=3)
+        fig, axes = plt.subplots(nrows=5, ncols=4, figsize=(12.8, 9.6), dpi=300)
         for ax, metric, name in zip(axes.reshape(-1), np.transpose(data), names):
             # print(type(ax))
             ax.plot(metric, label=name)
             ax.set_title(name)
-            # legend = ax.legend()
+            legend = ax.legend()
         plt.subplots_adjust(hspace=0.5)
     else:
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(12.8, 9.6), dpi=300)
         for metric, name in zip(np.transpose(data), names):
             ax.plot(metric, label=name)
         legend = ax.legend()
-    plt.savefig(filename)
+    # DEBUG output to images folder
+    plt.savefig(os.path.join('images', filename))
     plt.close(fig)
     # print('saved to {}'.format(filename))
 
+def __test():
+    fig, axes = plt.subplots(nrows=16, ncols=3, figsize=(6.4, 10.8), dpi=500)
+    for ax in axes.reshape(-1):
+        ax.plot([1,2,3,4])
+    plt.subplots_adjust(hspace=0.5, bottom = 0, top=1)
+    plt.savefig('out.png')
+    plt.close(fig)
 
-def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS):
+def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS):
     """Adversarially training the model. Each batch, use PGD to generate
     adv examples, and use that to train the model.
 
@@ -57,42 +68,51 @@ def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZ
     patience = PATIENCE
     print_interval = 20
 
-    plot_data = []
-    plot_data_simple = []
-    plot_data_loss = []
+    plot_data = {'metrics': [],
+                 'simple': [],
+                 'loss': []}
 
     saver = tf.train.Saver(max_to_keep=10)
     
     for i in range(num_epochs):
+        epoch_t = time.time()
         shuffle_idx = np.arange(train_x.shape[0])
         np.random.shuffle(shuffle_idx)
         nbatch = train_x.shape[0] // batch_size
-        ct = 0
         for j in range(nbatch):
+            t = time.time()
             start = j * batch_size
             end = (j+1) * batch_size
             batch_x = train_x[shuffle_idx[start:end]]
             batch_y = train_y[shuffle_idx[start:end]]
             feed_dict = {model.x: batch_x, model.y: batch_y}
             # actual training
-            _, l, m = sess.run([train_step, loss, metrics],
-                               feed_dict=feed_dict)
-            plot_data.append(m)
-            plot_data_loss.append(l)
-            ct += 1
-            if ct % print_interval == 0:
-                # FIXME this should introduce only small overhead
-                adv_training_plot(plot_data, model.metric_names, 'training-process.png', False)
-                adv_training_plot(plot_data, model.metric_names, 'training-process-split.png', True)
+            # 0.12
+            sess.run([train_step], feed_dict=feed_dict)
+            # print('training time: {}'.format(time.time() - t))
+
+            if j % print_interval == 0:
+                
+                # t = time.time()
+                # 0.46
+                l, m = sess.run([loss, metrics], feed_dict=feed_dict)
+                # print('metrics time: {}'.format(time.time() - t))
+                
+                plot_data['metrics'].append(m)
+                plot_data['loss'].append(l)
+                # this introduces only small overhead
+                adv_training_plot(plot_data['metrics'], model.metric_names, '{}-training-process.png'.format(plot_prefix), False)
+                adv_training_plot(plot_data['metrics'], model.metric_names, '{}-training-process-split.png'.format(plot_prefix), True)
 
                 # plot loss
                 fig, ax = plt.subplots()
-                ax.plot(plot_data_loss)
-                plt.savefig('training-process-loss.png')
+                ax.plot(plot_data['loss'])
+                plt.savefig('images/{}-training-process-loss.png'.format(plot_prefix))
                 plt.close(fig)
                 
-                print('{} / {}: loss: {:.5f}, \tmetrics: {}'
-                      .format(ct, nbatch, l, ', '.join(['{:.5f}'.format(mi) for mi in m])))
+                print('Batch {} / {},   \t time {:.2f}, loss: {:.5f},\t metrics: {}'
+                      .format(j, nbatch, time.time()-t, l, ', '.join(['{:.5f}'.format(mi) for mi in m])))
+            # print('plot time: {}'.format(time.time() - t))
         print('EPOCH ends, calculating total loss')
 
         # evaluate the loss on validation data, also batched
@@ -116,9 +136,12 @@ def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZ
         print('')
         l = np.mean(all_l)
         m = np.mean(all_m, 0)
-        plot_data_simple.append(m)
+        plot_data['simple'].append(m)
 
-        adv_training_plot(plot_data_simple, model.metric_names, 'training-process-simple.png', True)
+        adv_training_plot(plot_data['simple'], model.metric_names, '{}-training-process-simple.png'.format(plot_prefix), True)
+        # save plot data
+        with open('images/{}-data.json'.format(plot_prefix), 'w') as fp:
+            json.dump(plot_data, fp)
 
         # save the weights
         save_path = saver.save(sess, 'tmp/epoch-{}'.format(i))
@@ -129,8 +152,8 @@ def my_adv_training(sess, model, loss, metrics, train_step, batch_size=BATCH_SIZ
             best_loss = l
             best_epoch = i
             patience = PATIENCE
-        print('EPOCH {}: loss: {:.5f}, patience: {}, metrics: {}'
-              .format(i, l, patience, ', '.join(['{:.5f}'.format(mi) for mi in m])))
+        print('EPOCH {}: loss: {:.5f}, time: {:.2f}, patience: {},\t metrics: {}'
+              .format(i, l, time.time()-epoch_t, patience, ', '.join(['{:.5f}'.format(mi) for mi in m])))
         if patience <= 0:
             # restore the best model
             saver.restore(sess, 'tmp/epoch-{}'.format(best_epoch))

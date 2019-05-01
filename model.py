@@ -6,6 +6,7 @@ import math
 import matplotlib.pyplot as plt
 import seaborn as sns
 import random
+import time
 import cleverhans.model
 from cleverhans.attacks import FastGradientMethod
 from cleverhans.attacks import ProjectedGradientDescent, SaliencyMapMethod
@@ -458,12 +459,49 @@ class AdvAEModel(cleverhans.model.Model):
             model.fit(noisy_x, clean_x, epochs=100, validation_split=0.1, verbose=2, callbacks=[es, mc])
             model.load_weights('best_model.ckpt')
 
+    def test_CW(self, sess, test_x, test_y):
+        """test_x and test_y should be 100 dim."""
+        # Test AE rec output before and after
+        attack = lambda x: self.myCW(sess, x, self.y)
 
-    def test_all(self, sess, test_x, test_y, run_CW=False):
+        adv_x = attack(self.x)
+        adv_rec = self.AE(adv_x)
+        
+        logits = self.FC(self.CNN(adv_x))
+        accuracy = self.accuracy_wrapper(logits, self.y)
+
+        adv_logits = self.FC(self.CNN(self.AE(adv_x)))
+        adv_accuracy = self.accuracy_wrapper(adv_logits, self.y)
+
+        postadv = attack(self.AE(self.x))
+        postadv_logits = self.FC(self.CNN(postadv))
+        postadv_accuracy = self.accuracy_wrapper(postadv_logits, self.y)
+
+        res = {}
+
+        res['adv_x'] = adv_x
+        res['pred'] = tf.argmax(logits, axis=1)
+        res['accuracy'] = accuracy
+
+        res['adv_rec'] = adv_rec
+        res['adv_pred'] = tf.argmax(adv_logits, axis=1)
+        res['adv_acc'] = adv_accuracy
+        
+        res['postadv'] = postadv
+        res['postadv_pred'] = tf.argmax(postadv_logits, axis=1)
+        res['postadv_acc'] = postadv_accuracy
+        t = time.time()
+        print('Testing CW attack ..')
+        res = sess.run(res, feed_dict={self.x: test_x, self.y: test_y})
+        print('CW done. Time: {:.3f}'.format(time.time()-t))
+        return res
+        
+
+    def test_all(self, sess, test_x, test_y, run_CW=False, filename='out.pdf'):
         """Test clean data x and y.
 
         - Use only CNN, to test whether CNN is functioning
-        - Test AE, output png for before and after
+        - Test AE, output image for before and after
         - Test AE + CNN, to test whether the entire system works
 
         CW is costly, so by default no running for it. If you want it,
@@ -477,12 +515,13 @@ class AdvAEModel(cleverhans.model.Model):
         test_x = test_x[indices]
         test_y = test_y[indices]
         feed_dict = {self.x: test_x, self.y: test_y}
-        
-        accs = sess.run([self.CNN_accuracy, self.accuracy, self.noisy_accuracy], feed_dict=feed_dict)
-        print('raw accuracies (raw CNN, AE clean, AE noisy): {}'.format(accs))
 
         to_run = {}
         titles = []
+
+        if run_CW:
+            cwres = self.test_CW(sess, test_x, test_y)
+            
         # Test AE rec output before and after
         rec = self.AE(self.x)
         noisy_x = self.add_noise(self.x)
@@ -498,37 +537,44 @@ class AdvAEModel(cleverhans.model.Model):
         # titles += ['x', 'rec', 'noisy_x', 'noisy_rec']
         # titles += [tf.constant('x', dtype=tf.string, shape=self.x.shape[0])]
 
-        # JSMA is very slow ..
+        # JSMA is pretty slow ..
         attack_funcs = [self.myFGSM, self.myPGD, self.myJSMA]
         attack_names = ['FGSM', 'PGD', 'JSMA']
         # attack_funcs = [self.myFGSM, self.myPGD]
         # attack_names = ['FGSM', 'PGD']
         if run_CW:
-            attack_funcs += [lambda x: self.myCW(sess, x, self.y)]
+            # attack_funcs += [lambda x: self.myCW(sess, x, self.y)]
+            # this name will be consumed later to add CW result.
+            # FIXME this is very ugly
             attack_names += ['CW']
 
         # first class methods!
         for attack, name in zip(attack_funcs, attack_names):
             adv_x = attack(self.x)
             adv_rec = self.AE(adv_x)
-            # remember to compare visually postadv with rec (i.e. AE(x))
-            postadv = attack(self.AE(self.x))
+
+            logits = self.FC(self.CNN(adv_x))
+            accuracy = self.accuracy_wrapper(logits, self.y)
             
-            adv_logits = self.FC(self.CNN(self.AE(attack(self.x))))
+            adv_logits = self.FC(self.CNN(self.AE(adv_x)))
             adv_accuracy = self.accuracy_wrapper(adv_logits, self.y)
 
-            postadv_logits = self.FC(self.CNN(attack(self.AE(self.x))))
+            # remember to compare visually postadv with rec (i.e. AE(x))
+            postadv = attack(self.AE(self.x))
+            postadv_logits = self.FC(self.CNN(postadv))
             postadv_accuracy = self.accuracy_wrapper(postadv_logits, self.y)
 
             to_run[name] = {}
             to_run[name]['adv_x'] = adv_x
+            to_run[name]['pred'] = tf.argmax(logits, axis=1)
+            to_run[name]['accuracy'] = accuracy
+            
             to_run[name]['adv_rec'] = adv_rec
-            to_run[name]['postadv'] = postadv
-            
             to_run[name]['adv_pred'] = tf.argmax(adv_logits, axis=1)
-            to_run[name]['postadv_pred'] = tf.argmax(postadv_logits, axis=1)
-            
             to_run[name]['adv_acc'] = adv_accuracy
+            
+            to_run[name]['postadv'] = postadv
+            to_run[name]['postadv_pred'] = tf.argmax(postadv_logits, axis=1)
             to_run[name]['postadv_acc'] = postadv_accuracy
             
             
@@ -545,31 +591,39 @@ class AdvAEModel(cleverhans.model.Model):
         
         print('Testing AE and Adv attacks ..')
         res = sess.run(to_run, feed_dict=feed_dict)
+        if run_CW:
+            res['CW'] = cwres
 
         # select 10
         images = []
         titles = []
         
+        accs = sess.run([self.CNN_accuracy, self.accuracy, self.noisy_accuracy], feed_dict=feed_dict)
+        print('raw accuracies (raw CNN, AE clean, AE noisy): {}'.format(accs))
+
+        # FIXME so ugly
         images += list(res['x'][:10])
         tmp = list(res['y'][:10])
-        tmp[0] = 'x: {}'.format(tmp[0])
+        tmp[0] = 'x ({:.3f}): {}'.format(accs[0], tmp[0])
         titles += tmp
         
-        for name in ['rec', 'noisy_x', 'noisy_rec']:
+        for name, acc in zip(['rec', 'noisy_x', 'noisy_rec'], [accs[1], accs[2], accs[2]]):
             images += list(res[name][:10])
-            titles += [name] + ['']*9
+            titles += ['{} ({:.3f})'.format(name, acc)] + ['']*9
         for name in attack_names:
             images += list(res[name]['adv_x'][:10])
-            tmp = list(res[name]['adv_pred'][:10])
-            tmp[0] = '{} adv_x: {}'.format(name, tmp[0])
+            tmp = list(res[name]['pred'][:10])
+            tmp[0] = '{} adv_x\n({:.3f}): {}'.format(name, res[name]['accuracy'], tmp[0])
             titles += tmp
             
             images += list(res[name]['adv_rec'][:10])
-            titles += ['adv_rec'] + ['']*9
+            tmp = list(res[name]['adv_pred'][:10])
+            tmp[0] = '{} adv_rec\n({:.3f}): {}'.format(name, res[name]['adv_acc'], tmp[0])
+            titles += tmp
             
             images += list(res[name]['postadv'][:10])
             tmp = list(res[name]['postadv_pred'][:10])
-            tmp[0] = 'postadv: {}'.format(tmp[0])
+            tmp[0] = 'postadv\n({:.3f}): {}'.format(res[name]['postadv_acc'], tmp[0])
             titles += tmp
             # titles += list(res[name]['postadv_pred'][:10])
 
@@ -580,8 +634,8 @@ class AdvAEModel(cleverhans.model.Model):
         # images = np.concatenate(res)
         # titles = np.transpose([titles] * 10).reshape(-1)
         print('Plotting result ..')
-        grid_show_image(images, 10, int(len(images)/10), filename='test-all-result.png', titles=titles)
-        print('Done. Saved to {}'.format('test-all-result.png'))
+        grid_show_image(images, 10, int(len(images)/10), filename=filename, titles=titles)
+        print('Done. Saved to {}'.format(filename))
     def setup_trainstep(self):
         """Overwrite by subclasses to customize the loss.
 
@@ -619,6 +673,12 @@ class PostNoisy_Adv_Model(AdvAEModel):
     def setup_trainstep(self):
         self.unified_adv_loss = (self.adv_rec_ce_loss
                                  + self.postadv_rec_ce_loss + self.noisy_rec_loss)
+class PostNoisy_Adv_Rec_Model(AdvAEModel):
+    def setup_trainstep(self):
+        self.unified_adv_loss = (self.adv_rec_ce_loss
+                                 + self.postadv_rec_ce_loss + self.noisy_rec_loss
+                                 # add rec loss to tune the rec image better recognizable to human
+                                 + self.rec_loss)
 # add clean data loss (probably add this to all)
 class CleanAdv_Model(AdvAEModel):
     def setup_trainstep(self):
@@ -790,7 +850,7 @@ def __test():
 
 def __test():
 
-    grid_show_image(inputs, 5, 2, 'orig.png')
+    grid_show_image(inputs, 5, 2, 'orig.pdf')
     np.argmax(labels, 1)
     np.argmax(targets, 1)
     

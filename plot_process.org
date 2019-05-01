@@ -1,0 +1,47 @@
+#+TITLE: Training Process Plots
+#+OPTIONS: toc:nil
+#+LATEX_HEADER: \usepackage[export]{adjustbox}
+
+#+CAPTION: AdvAE
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/AdvAE-training-process-split.pdf]]
+#+CAPTION: Post
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/Post-training-process-split.pdf]]
+
+#+CAPTION: =Post_Adv=
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/Post_Adv-training-process-split.pdf]]
+#+CAPTION: =Noisy_Adv=
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/Noisy_Adv-training-process-split.pdf]]
+#+CAPTION: =PostNoisy_Adv=
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/PostNoisy_Adv-training-process-split.pdf]]
+#+CAPTION: =PostNoisy_Adv_Rec=
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/PostNoisy_Adv_Rec-training-process-split.pdf]]
+
+#+CAPTION: CleanAdv
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/CleanAdv-training-process-split.pdf]]
+#+CAPTION: =Post_CleanAdv=
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/Post_CleanAdv-training-process-split.pdf]]
+#+CAPTION: =Noisy_CleanAdv=
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/Noisy_CleanAdv-training-process-split.pdf]]
+#+CAPTION: =PostNoisy_CleanAdv=
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/PostNoisy_CleanAdv-training-process-split.pdf]]
+
+#+CAPTION: High
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/High-training-process-split.pdf]]
+#+CAPTION: =High_Adv=
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/High_Adv-training-process-split.pdf]]
+#+CAPTION: =PostHigh_Adv=
+#+ATTR_LATEX: :width 1.5\linewidth,center
+[[./images/PostHigh_Adv-training-process-split.pdf]]
+

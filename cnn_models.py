@@ -166,12 +166,12 @@ def generate_victim(test_x, test_y):
     return inputs, targets
 
 def __test():
-    visual_defense_exp(None, 'logit', visual_lambda=0, fname='cwl2-orig.png')
+    visual_defense_exp(None, 'logit', visual_lambda=0, fname='cwl2-orig.pdf')
     for loss_type in ['group_lasso', 'l2', 'l1']:
         for grad_type in ['xent', 'logit']:
             for visual_lambda in [1, 10, 50, 200, 500, 1000]:
                 print('======', loss_type, visual_lambda)
-                fname = 'cwl2-{}-{}-{:=04}.png'.format(loss_type, grad_type, visual_lambda)
+                fname = 'cwl2-{}-{}-{:=04}.pdf'.format(loss_type, grad_type, visual_lambda)
                 visual_defense_exp(loss_type, grad_type,
                                    visual_lambda=visual_lambda,
                                    fname=fname)
@@ -211,7 +211,7 @@ def visual_defense_exp(loss_type, grad_type, visual_lambda, fname):
         #                              initial_const=10, largest_const=15)
         # inputs, targets = generate_data_2(data)
         adv_l2 = attack.attack(inputs, targets)
-        grid_show_image(inputs, 10, 1, 'images/orig-mnist.png')
+        grid_show_image(inputs, 10, 1, 'images/orig-mnist.pdf')
         grid_show_image(adv_l2, 10, 1, 'images/'+fname)
         print('outputed adv example to', 'images/'+fname)
 
@@ -240,7 +240,7 @@ def visual_defense_exp(loss_type, grad_type, visual_lambda, fname):
         
         # plt.figure()
         # plt.hist((adv_l2.reshape(10,-1) - inputs.reshape(10,-1))[0])
-        # plt.savefig('images/'+fname + '.dist.hist.png')
+        # plt.savefig('images/'+fname + '.dist.hist.pdf')
 
         plt.figure()
         # plt.imshow((adv_l2-inputs)[0].reshape((28,28)), cmap='hot')
@@ -260,5 +260,5 @@ def visual_defense_exp(loss_type, grad_type, visual_lambda, fname):
             f.write('\t' + distort_report + '\n')
         
         plt.title(full_report)
-        plt.savefig('images/'+fname + '.dist.heat.png')
+        plt.savefig('images/'+fname + '.dist.heat.pdf')
 

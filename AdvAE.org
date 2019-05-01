@@ -1,9 +1,13 @@
 #+TITLE: Adversarially trained denoising Auto-Encoder (AdvAE)
 #+LATEX_CLASS: nips
+#+LATEX_HEADER: \usepackage[export]{adjustbox}
+
+# These two combo can make larger width image while centered
+# #+ATTR_LATEX: :width 1.2\linewidth,center
 
 * Introduction
-
 * Thread Model
+
 * Approach
 
 ** Loss
@@ -17,7 +21,7 @@ training denoiser using high level feature guidance
 4.1 FIXME probably also consider training for from clean x to x and to
 logits, as that is the whole model
 
-* Implementations notes
+* Implementations notes                                            :noexport:
 ** DONE debug training time
    CLOSED: [2019-04-30 Tue 17:42]
 ** TODO inconsistency problems
@@ -25,7 +29,10 @@ logits, as that is the whole model
 - standalone attacks vs. integrated (in class as method) attacks: running time, accuracy
 - accuracy computation inconsistency
 
-* Other Ideas
+** TODO CW visual result
+** TODO add postadv baseline
+
+* Other Ideas                                                      :noexport:
 ** Add noise, and then add PGD, and then use in training
 
 * Experiment
@@ -47,13 +54,43 @@ analyze the difference, pros and cons, compared to generative methods.
 ** AdvAE against different attacks
 - test whether this works for CW
 
+PostNoisy_Adv (10 epochs)
+
 | attacks | accuracy | l2-distortion |
 |---------+----------+---------------|
-| FGSM    |          |               |
-| PGD     |          |               |
-| JSMA    |          |               |
-| CW      |          |               |
+| FGSM    |     0.96 |          6.13 |
+| PGD     |     0.94 |          5.20 |
+| JSMA    |     0.89 |          4.54 |
+| CW      |     0.22 |          2.48 |
 
+AdvAE (default) (10 epochs)
+
+| attacks | accuracy | l2-distortion |
+|---------+----------+---------------|
+| FGSM    |     0.96 |          6.10 |
+| PGD     |     0.91 |          5.29 |
+| JSMA    |     0.72 |          4.82 |
+| CW      |     0.73 |           0.9 |
+
+Post_Adv (10 epochs)
+
+| attacks | accuracy | l2-distortion |
+|---------+----------+---------------|
+| FGSM    |     0.97 |          6.10 |
+| PGD     |     0.96 |          5.10 |
+| JSMA    |     0.93 |          4.20 |
+| CW      |     0.57 |           0.9 |
+
+*** TODO we need a total accuracy table
+
+|      | AdvAE | PostNoisy_Adv | AdvAE (10 epoch) |
+|------+-------+---------------+------------------|
+| FGSM |       |               |                  |
+| PGD  |       |               |                  |
+| JSMA |       |               |                  |
+| CW   |       |               |                  |
+
+*** TODO run full training instead of 10 epochs
 
 ** TODO AdvAE transferability to other CNN architectures
 
@@ -94,6 +131,29 @@ terms of different CNNs together.
 |   | Y     | Y     |       |       |              |
 |   | Y     |       | Y     |       |              |
 
+
+default model
+- =AdvAE=
+
+stand alone model (not likely to work)
+- =Post=
+
+combine witth adv loss
+- =Post_Adv=
+- =Noisy_Adv=
+- =PostNoisy_Adv=
+
+add clean models
+- =CleanAdv=
+- =Post_CleanAdv=
+- =Noisy_CleanAdv=
+- =PostNoisy_CleanAdv=
+
+high-level guided models
+- High
+- =High_Adv=
+- =PostHigh_Adv=
+
 ** Denoiser capacity
 - investigate whether increasing denoiser capacity helps with defense
   against CW
@@ -110,4 +170,32 @@ terms of different CNNs together.
 
 * Appendix
 
+# #+CAPTION: AdvAE
+# [[./images/AdvAE-training-process-split.pdf]]
+# #+CAPTION: Post
+# [[./images/Post-training-process-split.pdf]]
 
+# #+CAPTION: =Post_Adv=
+# [[./images/Post_Adv-training-process-split.pdf]]
+# #+CAPTION: =Noisy_Adv=
+# [[./images/Noisy_Adv-training-process-split.pdf]]
+# #+CAPTION: =PostNoisy_Adv=
+# [[./images/PostNoisy_Adv-training-process-split.pdf]]
+
+# #+CAPTION: CleanAdv
+# [[./images/CleanAdv-training-process-split.pdf]]
+# #+CAPTION: =Post_CleanAdv=
+# [[./images/Post_CleanAdv-training-process-split.pdf]]
+# #+CAPTION: =Noisy_CleanAdv=
+# [[./images/Noisy_CleanAdv-training-process-split.pdf]]
+# #+CAPTION: =PostNoisy_CleanAdv=
+# [[./images/PostNoisy_CleanAdv-training-process-split.pdf]]
+
+# #+CAPTION: High
+# [[./images/High-training-process-split.pdf]]
+# #+CAPTION: =High_Adv=
+# [[./images/High_Adv-training-process-split.pdf]]
+# #+CAPTION: =PostHigh_Adv=
+# [[./images/PostHigh_Adv-training-process-split.pdf]]
+
+# [[./images/PostNoisy_Adv_Rec-training-process-split.pdf]]

@@ -34,7 +34,7 @@ def convert_image_255(img):
     # return np.round(img).reshape((28, 28))
     # return np.round((img + 0.5) * 255).reshape((32, 32, 3))
 
-def grid_show_image(images, width, height, filename='out.png', titles=None):
+def grid_show_image(images, width, height, filename='out.pdf', titles=None):
     """
     Sample 10 images, and save it.
     """

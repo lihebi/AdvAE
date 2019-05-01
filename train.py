@@ -44,7 +44,7 @@ def __test():
     for ax in axes.reshape(-1):
         ax.plot([1,2,3,4])
     plt.subplots_adjust(hspace=0.5, bottom = 0, top=1)
-    plt.savefig('out.png')
+    plt.savefig('out.pdf')
     plt.close(fig)
 
 def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS):
@@ -101,12 +101,12 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
                 plot_data['metrics'].append(m)
                 plot_data['loss'].append(l)
                 # this introduces only small overhead
-                adv_training_plot(plot_data['metrics'], model.metric_names, '{}-training-process.png'.format(plot_prefix), False)
-                adv_training_plot(plot_data['metrics'], model.metric_names, '{}-training-process-split.png'.format(plot_prefix), True)
+                adv_training_plot(plot_data['metrics'], model.metric_names, '{}-training-process.pdf'.format(plot_prefix), False)
+                adv_training_plot(plot_data['metrics'], model.metric_names, '{}-training-process-split.pdf'.format(plot_prefix), True)
                 # plot loss
-                fig, ax = plt.subplots()
+                fig, ax = plt.subplots(dpi=300)
                 ax.plot(plot_data['loss'])
-                plt.savefig('images/{}-training-process-loss.png'.format(plot_prefix))
+                plt.savefig('images/{}-training-process-loss.pdf'.format(plot_prefix))
                 plt.close(fig)
                 
                 print('Batch {} / {},   \t time {:.2f}, loss: {:.5f},\t metrics: {}'
@@ -138,7 +138,7 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
         m = np.mean(all_m, 0)
         plot_data['simple'].append(m)
 
-        adv_training_plot(plot_data['simple'], model.metric_names, '{}-training-process-simple.png'.format(plot_prefix), True)
+        adv_training_plot(plot_data['simple'], model.metric_names, '{}-training-process-simple.pdf'.format(plot_prefix), True)
         # save plot data
         with open('images/{}-data.pkl'.format(plot_prefix), 'wb') as fp:
             pickle.dump(plot_data, fp)

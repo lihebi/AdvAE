@@ -35,42 +35,38 @@ def generate_victim(test_x, test_y):
     labels = np.array(labels)
     return inputs, labels, targets
 
-def my_FGSM(sess, model):
+def my_FGSM(model, x):
     # FGSM attack
     fgsm_params = {
         'eps': 0.3,
         'clip_min': CLIP_MIN,
         'clip_max': CLIP_MAX
     }
-    fgsm = FastGradientMethod(model, sess=sess)
-    adv_x = fgsm.generate(model.x, **fgsm_params)
+    fgsm = FastGradientMethod(model)
+    adv_x = fgsm.generate(x, **fgsm_params)
     return adv_x
-
-def my_PGD(sess, model):
-    pgd = ProjectedGradientDescent(model, sess=sess)
+def my_PGD(model, x):
+    pgd = ProjectedGradientDescent(model)
     pgd_params = {'eps': 0.3,
                   'nb_iter': 40,
                   'eps_iter': 0.01,
                   'clip_min': CLIP_MIN,
                   'clip_max': CLIP_MAX}
-    adv_x = pgd.generate(model.x, **pgd_params)
+    adv_x = pgd.generate(x, **pgd_params)
     return adv_x
-
-def my_JSMA(sess, model):
-    jsma = SaliencyMapMethod(model, sess=sess)
+def my_JSMA(model, x):
+    jsma = SaliencyMapMethod(model)
     jsma_params = {'theta': 1., 'gamma': 0.1,
                    'clip_min': CLIP_MIN, 'clip_max': CLIP_MAX,
                    'y_target': None}
-    return jsma.generate(model.x, **jsma_params)
-    
-
-def my_CW(sess, model):
-    """When feeding, remember to put target as y."""
+    return jsma.generate(x, **jsma_params)
+def my_CW(model, sess, x, y, targeted=False):
+    """When targeted=True, remember to put target as y."""
     # CW attack
-    cw = CarliniWagnerL2(model, sess)
+    cw = CarliniWagnerL2(model, sess=sess)
+    yname = 'y_target' if targeted else 'y'
     cw_params = {'binary_search_steps': 1,
-                 # 'y_target': model.y,
-                 'y': model.y,
+                 yname: y,
                  'max_iterations': 10000,
                  'learning_rate': 0.2,
                  # setting to 100 instead of 128, because the test_x
@@ -80,25 +76,6 @@ def my_CW(sess, model):
                  'initial_const': 10,
                  'clip_min': CLIP_MIN,
                  'clip_max': CLIP_MAX}
-    adv_x = cw.generate(model.x, **cw_params)
-    return adv_x
-
-def my_CW_targeted(sess, model):
-    """When feeding, remember to put target as y."""
-    # CW attack
-    cw = CarliniWagnerL2(model, sess)
-    cw_params = {'binary_search_steps': 1,
-                 'y_target': model.y,
-                 # 'y': model.y,
-                 'max_iterations': 10000,
-                 'learning_rate': 0.2,
-                 # setting to 100 instead of 128, because the test_x
-                 # has 10000, and the last 16 left over will cause
-                 # exception
-                 'batch_size': 10,
-                 'initial_const': 10,
-                 'clip_min': CLIP_MIN,
-                 'clip_max': CLIP_MAX}
-    adv_x = cw.generate(model.x, **cw_params)
+    adv_x = cw.generate(x, **cw_params)
     return adv_x
 

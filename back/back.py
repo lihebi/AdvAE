@@ -328,3 +328,201 @@ def plot_two_scale():
     
     acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
     print('Model accuracy on clean data: {}'.format(acc))
+def my_FGSM(sess, model):
+    # FGSM attack
+    fgsm_params = {
+        'eps': 0.3,
+        'clip_min': CLIP_MIN,
+        'clip_max': CLIP_MAX
+    }
+    fgsm = FastGradientMethod(model, sess=sess)
+    adv_x = fgsm.generate(model.x, **fgsm_params)
+    return adv_x
+
+def my_PGD(sess, model):
+    pgd = ProjectedGradientDescent(model, sess=sess)
+    pgd_params = {'eps': 0.3,
+                  'nb_iter': 40,
+                  'eps_iter': 0.01,
+                  'clip_min': CLIP_MIN,
+                  'clip_max': CLIP_MAX}
+    adv_x = pgd.generate(model.x, **pgd_params)
+    return adv_x
+
+def my_JSMA(sess, model):
+    jsma = SaliencyMapMethod(model, sess=sess)
+    jsma_params = {'theta': 1., 'gamma': 0.1,
+                   'clip_min': CLIP_MIN, 'clip_max': CLIP_MAX,
+                   'y_target': None}
+    return jsma.generate(model.x, **jsma_params)
+    
+
+def my_CW(sess, model):
+    """When feeding, remember to put target as y."""
+    # CW attack
+    cw = CarliniWagnerL2(model, sess)
+    cw_params = {'binary_search_steps': 1,
+                 # 'y_target': model.y,
+                 'y': model.y,
+                 'max_iterations': 10000,
+                 'learning_rate': 0.2,
+                 # setting to 100 instead of 128, because the test_x
+                 # has 10000, and the last 16 left over will cause
+                 # exception
+                 'batch_size': 100,
+                 'initial_const': 10,
+                 'clip_min': CLIP_MIN,
+                 'clip_max': CLIP_MAX}
+    adv_x = cw.generate(model.x, **cw_params)
+    return adv_x
+
+def my_CW_targeted(sess, model):
+    """When feeding, remember to put target as y."""
+    # CW attack
+    cw = CarliniWagnerL2(model, sess)
+    cw_params = {'binary_search_steps': 1,
+                 'y_target': model.y,
+                 # 'y': model.y,
+                 'max_iterations': 10000,
+                 'learning_rate': 0.2,
+                 # setting to 100 instead of 128, because the test_x
+                 # has 10000, and the last 16 left over will cause
+                 # exception
+                 'batch_size': 10,
+                 'initial_const': 10,
+                 'clip_min': CLIP_MIN,
+                 'clip_max': CLIP_MAX}
+    adv_x = cw.generate(model.x, **cw_params)
+    return adv_x
+
+class CNNModel(cleverhans.model.Model):
+    def __init__(self):
+        self.setup_model()
+    # abstract interfaces
+    def x_shape(self):
+        assert(False)
+        return None
+    def y_shape(self):
+        assert(False)
+        return None
+    def rebuild_model(self):
+        assert(False)
+        return None
+    # general methods
+    def setup_model(self):
+        shape = self.x_shape()
+        # DEBUG I'm trying the input layer vs. placeholders
+        self.x = keras.layers.Input(shape=self.x_shape(), dtype='float32')
+        self.y = tf.placeholder(shape=self.y_shape(), dtype='float32')
+        self.logits = self.rebuild_model(self.x)
+        self.preds = tf.argmax(self.logits, axis=1)
+        self.probs = tf.nn.softmax(self.logits)
+        # self.acc = tf.reduce_mean(
+        #     tf.to_float(tf.equal(tf.argmax(self.logits, axis=1),
+        #                          tf.argmax(self.label, axis=1))))
+        self.accuracy = tf.reduce_mean(tf.cast(tf.equal(
+            self.preds, tf.argmax(self.y, 1)), dtype=tf.float32))
+        # FIXME num_classes
+        # self.num_classes = np.product(self.y_shape[1:])
+    def cross_entropy_with(self, y):
+        return tf.reduce_mean(
+            tf.nn.softmax_cross_entropy_with_logits(
+                logits=self.logits, labels=y))
+    def logps(self):
+        """Symbolic TF variable returning an Nx1 vector of log-probabilities"""
+        return self.logits - tf.reduce_logsumexp(self.logits, 1, keep_dims=True)
+    def predict(self, x):
+        return keras.models.Model(self.x, self.logits)(x)
+    # cleverhans
+    def fprop(self, x, **kwargs):
+        logits = self.predict(x)
+        return {self.O_LOGITS: logits,
+                self.O_PROBS: tf.nn.softmax(logits=logits)}
+
+
+    @staticmethod
+    def compute_accuracy(sess, x, y, preds, x_test, y_test):
+        acc = tf.reduce_mean(tf.cast(
+            tf.equal(tf.argmax(y, 1), tf.argmax(preds, 1)),
+            dtype=tf.float32))
+        return sess.run(acc, feed_dict={x: x_test, y: y_test})
+
+    # loss functions. Using different loss function would result in
+    # different model to compare
+    def certainty_sensitivity(self):
+        """Symbolic TF variable returning the gradients (wrt each input
+        component) of the sum of log probabilities, also interpretable
+        as the sensitivity of the model's certainty to changes in `X`
+        or the model's score function
+
+        """
+        crossent_w_1 = self.cross_entropy_with(tf.ones_like(self.y) / self.num_classes)
+        return tf.gradients(crossent_w_1, self.x)[0]
+    def l1_certainty_sensitivity(self):
+        """Cache the L1 loss of that product"""
+        return tf.reduce_mean(tf.abs(self.certainty_sensitivity()))
+    def l2_certainty_sensitivity(self):
+        """Cache the L2 loss of that product"""
+        return tf.nn.l2_loss(self.certainty_sensitivity())
+    def cross_entropy(self):
+        """Symbolic TF variable returning information distance between the
+        model's predictions and the true labels y
+
+        """
+        return self.cross_entropy_with(self.y)
+    def cross_entropy_grads(self):
+        """Symbolic TF variable returning the input gradients of the cross
+        entropy.  Note that if you pass in y=(1^{NxK})/K, this returns
+        the same value as certainty_sensitivity.
+
+        """
+        # return tf.gradients(self.cross_entropy(), self.x)[0]
+        # FIXME why [0]
+        return tf.gradients(self.cross_entropy(), self.x)
+
+    def l1_double_backprop(self):
+        """L1 loss of the sensitivity of the cross entropy"""
+        return tf.reduce_sum(tf.abs(self.cross_entropy_grads()))
+
+    def l2_double_backprop(self):
+        """L2 loss of the sensitivity of the cross entropy"""
+        # tf.sqrt(tf.reduce_mean(tf.square(grads)))
+        return tf.nn.l2_loss(self.cross_entropy_grads())
+    def gradients_group_lasso(self):
+        grads = tf.abs(self.cross_entropy_grads())
+        return tf.reduce_mean(tf.sqrt(
+            keras.layers.AvgPool3D(4, 4, 'valid')(tf.square(grads))
+            + 1e-10))
+    
+class MNIST_CNN(CNNModel):
+    def x_shape(self):
+        # return [None, 28*28]
+        return (28,28,1,)
+    def y_shape(self):
+        return [None, 10]
+        # return (10,)
+    def rebuild_model(self, xin):
+        # FIXME may not need reshape layer
+        x = keras.layers.Reshape([28, 28, 1])(xin)
+        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+
+        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+
+        x = keras.layers.Flatten()(x)
+        x = keras.layers.Dense(200)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Dropout(rate=0.5)(x)
+        x = keras.layers.Dense(200)(x)
+        x = keras.layers.Activation('relu')(x)
+        logits = keras.layers.Dense(10)(x)
+        return logits
+    
+# model = AdvAEModel()

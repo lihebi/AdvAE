@@ -16,138 +16,22 @@ from cleverhans.attacks import CarliniWagnerL2
 from utils import *
 
 from attacks import CLIP_MIN, CLIP_MAX
+from attacks import *
 
 class CNNModel(cleverhans.model.Model):
-    def __init__(self):
-        self.setup_model()
-    # abstract interfaces
-    def x_shape(self):
-        assert(False)
-        return None
-    def y_shape(self):
-        assert(False)
-        return None
-    def rebuild_model(self):
-        assert(False)
-        return None
-    # general methods
-    def setup_model(self):
-        shape = self.x_shape()
-        # DEBUG I'm trying the input layer vs. placeholders
-        self.x = keras.layers.Input(shape=self.x_shape(), dtype='float32')
-        self.y = tf.placeholder(shape=self.y_shape(), dtype='float32')
-        self.logits = self.rebuild_model(self.x)
-        self.preds = tf.argmax(self.logits, axis=1)
-        self.probs = tf.nn.softmax(self.logits)
-        # self.acc = tf.reduce_mean(
-        #     tf.to_float(tf.equal(tf.argmax(self.logits, axis=1),
-        #                          tf.argmax(self.label, axis=1))))
-        self.accuracy = tf.reduce_mean(tf.cast(tf.equal(
-            self.preds, tf.argmax(self.y, 1)), dtype=tf.float32))
-        # FIXME num_classes
-        # self.num_classes = np.product(self.y_shape[1:])
-    def cross_entropy_with(self, y):
-        return tf.reduce_mean(
-            tf.nn.softmax_cross_entropy_with_logits(
-                logits=self.logits, labels=y))
-    def logps(self):
-        """Symbolic TF variable returning an Nx1 vector of log-probabilities"""
-        return self.logits - tf.reduce_logsumexp(self.logits, 1, keep_dims=True)
+    """This model is used inside AdvAEModel."""
+    def __init__(self, CNN, FC):
+        self.CNN = CNN
+        self.FC = FC
+    # cleverhans
     def predict(self, x):
-        return keras.models.Model(self.x, self.logits)(x)
+        return self.FC(self.CNN(x))
     # cleverhans
     def fprop(self, x, **kwargs):
         logits = self.predict(x)
         return {self.O_LOGITS: logits,
                 self.O_PROBS: tf.nn.softmax(logits=logits)}
 
-
-    @staticmethod
-    def compute_accuracy(sess, x, y, preds, x_test, y_test):
-        acc = tf.reduce_mean(tf.cast(
-            tf.equal(tf.argmax(y, 1), tf.argmax(preds, 1)),
-            dtype=tf.float32))
-        return sess.run(acc, feed_dict={x: x_test, y: y_test})
-
-    # loss functions. Using different loss function would result in
-    # different model to compare
-    def certainty_sensitivity(self):
-        """Symbolic TF variable returning the gradients (wrt each input
-        component) of the sum of log probabilities, also interpretable
-        as the sensitivity of the model's certainty to changes in `X`
-        or the model's score function
-
-        """
-        crossent_w_1 = self.cross_entropy_with(tf.ones_like(self.y) / self.num_classes)
-        return tf.gradients(crossent_w_1, self.x)[0]
-    def l1_certainty_sensitivity(self):
-        """Cache the L1 loss of that product"""
-        return tf.reduce_mean(tf.abs(self.certainty_sensitivity()))
-    def l2_certainty_sensitivity(self):
-        """Cache the L2 loss of that product"""
-        return tf.nn.l2_loss(self.certainty_sensitivity())
-    def cross_entropy(self):
-        """Symbolic TF variable returning information distance between the
-        model's predictions and the true labels y
-
-        """
-        return self.cross_entropy_with(self.y)
-    def cross_entropy_grads(self):
-        """Symbolic TF variable returning the input gradients of the cross
-        entropy.  Note that if you pass in y=(1^{NxK})/K, this returns
-        the same value as certainty_sensitivity.
-
-        """
-        # return tf.gradients(self.cross_entropy(), self.x)[0]
-        # FIXME why [0]
-        return tf.gradients(self.cross_entropy(), self.x)
-
-    def l1_double_backprop(self):
-        """L1 loss of the sensitivity of the cross entropy"""
-        return tf.reduce_sum(tf.abs(self.cross_entropy_grads()))
-
-    def l2_double_backprop(self):
-        """L2 loss of the sensitivity of the cross entropy"""
-        # tf.sqrt(tf.reduce_mean(tf.square(grads)))
-        return tf.nn.l2_loss(self.cross_entropy_grads())
-    def gradients_group_lasso(self):
-        grads = tf.abs(self.cross_entropy_grads())
-        return tf.reduce_mean(tf.sqrt(
-            keras.layers.AvgPool3D(4, 4, 'valid')(tf.square(grads))
-            + 1e-10))
-    
-class MNIST_CNN(CNNModel):
-    def x_shape(self):
-        # return [None, 28*28]
-        return (28,28,1,)
-    def y_shape(self):
-        return [None, 10]
-        # return (10,)
-    def rebuild_model(self, xin):
-        # FIXME may not need reshape layer
-        x = keras.layers.Reshape([28, 28, 1])(xin)
-        x = keras.layers.Conv2D(32, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Conv2D(32, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.MaxPool2D((2,2))(x)
-
-        x = keras.layers.Conv2D(64, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Conv2D(64, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.MaxPool2D((2,2))(x)
-
-        x = keras.layers.Flatten()(x)
-        x = keras.layers.Dense(200)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Dropout(rate=0.5)(x)
-        x = keras.layers.Dense(200)(x)
-        x = keras.layers.Activation('relu')(x)
-        logits = keras.layers.Dense(10)(x)
-        return logits
-    
-# model = AdvAEModel()
 
 class AdvAEModel(cleverhans.model.Model):
     """Implement a denoising auto encoder.
@@ -165,6 +49,9 @@ class AdvAEModel(cleverhans.model.Model):
         self.AE_vars = tf.trainable_variables('my_AE')
         self.CNN_vars = tf.trainable_variables('my_CNN')
         self.FC_vars = tf.trainable_variables('my_FC')
+
+        # this CNN model is used as victim for attacks
+        self.cnn_model = CNNModel(self.CNN, self.FC)
         
         self.x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
         self.y = keras.layers.Input(shape=(10,), dtype='float32')
@@ -186,50 +73,6 @@ class AdvAEModel(cleverhans.model.Model):
         logits = self.predict(x)
         return {self.O_LOGITS: logits,
                 self.O_PROBS: tf.nn.softmax(logits=logits)}
-
-    def myFGSM(self, x):
-        # FGSM attack
-        fgsm_params = {
-            'eps': 0.3,
-            'clip_min': CLIP_MIN,
-            'clip_max': CLIP_MAX
-        }
-        fgsm = FastGradientMethod(self)
-        adv_x = fgsm.generate(x, **fgsm_params)
-        return adv_x
-    def myPGD(self, x):
-        pgd = ProjectedGradientDescent(self)
-        pgd_params = {'eps': 0.3,
-                      'nb_iter': 40,
-                      'eps_iter': 0.01,
-                      'clip_min': CLIP_MIN,
-                      'clip_max': CLIP_MAX}
-        adv_x = pgd.generate(x, **pgd_params)
-        return adv_x
-    def myJSMA(self, x):
-        jsma = SaliencyMapMethod(self)
-        jsma_params = {'theta': 1., 'gamma': 0.1,
-                       'clip_min': CLIP_MIN, 'clip_max': CLIP_MAX,
-                       'y_target': None}
-        return jsma.generate(x, **jsma_params)
-    def myCW(self, sess, x, y, targeted=False):
-        """When targeted=True, remember to put target as y."""
-        # CW attack
-        cw = CarliniWagnerL2(self, sess=sess)
-        yname = 'y_target' if targeted else 'y'
-        cw_params = {'binary_search_steps': 1,
-                     yname: y,
-                     'max_iterations': 10000,
-                     'learning_rate': 0.2,
-                     # setting to 100 instead of 128, because the test_x
-                     # has 10000, and the last 16 left over will cause
-                     # exception
-                     'batch_size': 100,
-                     'initial_const': 10,
-                     'clip_min': CLIP_MIN,
-                     'clip_max': CLIP_MAX}
-        adv_x = cw.generate(x, **cw_params)
-        return adv_x
 
     @staticmethod
     def add_noise(x):
@@ -275,7 +118,7 @@ class AdvAEModel(cleverhans.model.Model):
         self.noisy_rec_high_loss = self.ce_wrapper(noisy_rec_high, high)
         self.noisy_rec_ce_loss = self.ce_wrapper(noisy_rec_logits, self.y)
 
-        adv_x = self.myPGD(self.x)
+        adv_x = my_PGD(self, self.x)
         adv_high = self.CNN(adv_x)
         adv_logits = self.FC(adv_high)
 
@@ -287,9 +130,10 @@ class AdvAEModel(cleverhans.model.Model):
         self.adv_rec_high_loss = self.ce_wrapper(adv_rec_high, high)
         self.adv_rec_ce_loss = self.ce_wrapper(adv_rec_logits, self.y)
 
-        # pre-denoiser: Trian denoiser such that the denoised x is
+        # pre-denoiser: train denoiser such that the denoised x is
         # itself robust
-        postadv = self.myPGD(rec)
+        
+        postadv = my_PGD(self.cnn_model, rec)
         postadv_high = self.CNN(postadv)
         postadv_logits = self.FC(postadv_high)
 
@@ -305,10 +149,10 @@ class AdvAEModel(cleverhans.model.Model):
         logits = self.FC(self.CNN(self.AE(self.x)))
         self.accuracy = self.accuracy_wrapper(logits, self.y)
         
-        adv_logits = self.FC(self.CNN(self.AE(self.myPGD(self.x))))
+        adv_logits = self.FC(self.CNN(self.AE(my_PGD(self, self.x))))
         self.adv_accuracy = self.accuracy_wrapper(adv_logits, self.y)
 
-        postadv_logits = self.FC(self.CNN(self.myPGD(self.AE(self.x))))
+        postadv_logits = self.FC(self.CNN(my_PGD(self.cnn_model, self.AE(self.x))))
         self.postadv_accuracy = self.accuracy_wrapper(postadv_logits, self.y)
 
         noisy_x = self.add_noise(self.x)
@@ -462,24 +306,25 @@ class AdvAEModel(cleverhans.model.Model):
     def test_CW(self, sess, test_x, test_y):
         """test_x and test_y should be 100 dim."""
         # Test AE rec output before and after
-        attack = lambda x: self.myCW(sess, x, self.y)
-
-        adv_x = attack(self.x)
+        adv_x = my_CW(self, sess, self.x, self.y)
         adv_rec = self.AE(adv_x)
         
-        logits = self.FC(self.CNN(adv_x))
+        adv_x_CNN = my_CW(self.cnn_model, sess, self.x, self.y)
+        logits = self.FC(self.CNN(adv_x_CNN))
         accuracy = self.accuracy_wrapper(logits, self.y)
 
         adv_logits = self.FC(self.CNN(self.AE(adv_x)))
         adv_accuracy = self.accuracy_wrapper(adv_logits, self.y)
 
-        postadv = attack(self.AE(self.x))
+        postadv = my_CW(self.cnn_model, sess, self.AE(self.x), self.y)
         postadv_logits = self.FC(self.CNN(postadv))
         postadv_accuracy = self.accuracy_wrapper(postadv_logits, self.y)
 
         res = {}
 
         res['adv_x'] = adv_x
+
+        res['adv_x_CNN'] = adv_x_CNN
         res['pred'] = tf.argmax(logits, axis=1)
         res['accuracy'] = accuracy
 
@@ -538,7 +383,7 @@ class AdvAEModel(cleverhans.model.Model):
         # titles += [tf.constant('x', dtype=tf.string, shape=self.x.shape[0])]
 
         # JSMA is pretty slow ..
-        attack_funcs = [self.myFGSM, self.myPGD, self.myJSMA]
+        attack_funcs = [my_FGSM, my_PGD, my_JSMA]
         attack_names = ['FGSM', 'PGD', 'JSMA']
         # attack_funcs = [self.myFGSM, self.myPGD]
         # attack_names = ['FGSM', 'PGD']
@@ -550,22 +395,28 @@ class AdvAEModel(cleverhans.model.Model):
 
         # first class methods!
         for attack, name in zip(attack_funcs, attack_names):
-            adv_x = attack(self.x)
+            adv_x = attack(self, self.x)
             adv_rec = self.AE(adv_x)
 
-            logits = self.FC(self.CNN(adv_x))
+            # This is tricky. I want to get the baseline of attacking
+            # clean image AND VANILLA CNN. Thus, I'm using the proxy
+            # cnn model.
+            adv_x_CNN = attack(self.cnn_model, self.x)
+            logits = self.FC(self.CNN(adv_x_CNN))
             accuracy = self.accuracy_wrapper(logits, self.y)
             
             adv_logits = self.FC(self.CNN(self.AE(adv_x)))
             adv_accuracy = self.accuracy_wrapper(adv_logits, self.y)
 
             # remember to compare visually postadv with rec (i.e. AE(x))
-            postadv = attack(self.AE(self.x))
+            postadv = attack(self.cnn_model, self.AE(self.x))
             postadv_logits = self.FC(self.CNN(postadv))
             postadv_accuracy = self.accuracy_wrapper(postadv_logits, self.y)
 
             to_run[name] = {}
             to_run[name]['adv_x'] = adv_x
+            
+            to_run[name]['adv_x_CNN'] = adv_x_CNN
             to_run[name]['pred'] = tf.argmax(logits, axis=1)
             to_run[name]['accuracy'] = accuracy
             
@@ -611,11 +462,14 @@ class AdvAEModel(cleverhans.model.Model):
             images += list(res[name][:10])
             titles += ['{} ({:.3f})'.format(name, acc)] + ['']*9
         for name in attack_names:
-            images += list(res[name]['adv_x'][:10])
+            images += list(res[name]['adv_x_CNN'][:10])
             tmp = list(res[name]['pred'][:10])
-            tmp[0] = '{} adv_x\n({:.3f}): {}'.format(name, res[name]['accuracy'], tmp[0])
+            tmp[0] = '{} adv_x_CNN\n({:.3f}): {}'.format(name, res[name]['accuracy'], tmp[0])
             titles += tmp
-            
+
+            images += list(res[name]['adv_x'][:10])
+            titles += ['adv_x'] + ['']*9
+
             images += list(res[name]['adv_rec'][:10])
             tmp = list(res[name]['adv_pred'][:10])
             tmp[0] = '{} adv_rec\n({:.3f}): {}'.format(name, res[name]['adv_acc'], tmp[0])

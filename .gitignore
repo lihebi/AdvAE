@@ -1,7 +1,7 @@
 models
 *.png
 __pycache__
-saved_model
+saved_model*
 tmp
 *.ckpt
 *.pdf

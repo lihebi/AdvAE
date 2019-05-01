@@ -1,0 +1,181 @@
+loss_type:
+ None, visual_lambda: 0, fname: cwl2-orig.pngDistortion: L2: 1.4202, L1: 14.7505, L0: 765.6000, Li: 0.4860loss_type:
+ l1, visual_lambda: 10, fname: test.pngDistortion: L2: 1.6106, L1: 15.6161, L0: 772.8000, Li: 0.5461loss_type:
+ l1, visual_lambda: 1, fname: cwl2-l1-0001.pngDistortion: L2: 1.6466, L1: 16.5176, L0: 774.2000, Li: 0.5291loss_type:
+ l1, visual_lambda: 10, fname: cwl2-l1-0010.pngDistortion: L2: 1.3972, L1: 14.6878, L0: 767.7000, Li: 0.4552loss_type:
+ l1, visual_lambda: 50, fname: cwl2-l1-0050.pngDistortion: L2: 1.8571, L1: 17.5475, L0: 778.5000, Li: 0.6340loss_type:
+ l1, visual_lambda: 200, fname: cwl2-l1-0200.pngDistortion: L2: 1.8950, L1: 18.3174, L0: 770.8000, Li: 0.5932loss_type:
+ l1, visual_lambda: 500, fname: cwl2-l1-0500.pngDistortion: L2: 1.7857, L1: 16.9381, L0: 766.9000, Li: 0.5816loss_type:
+ l1, visual_lambda: 1000, fname: cwl2-l1-1000.pngDistortion: L2: 1.8392, L1: 17.0543, L0: 771.9000, Li: 0.5764loss_type:
+ group_lasso, visual_lambda: 1, fname: cwl2-group_lasso-0001.pngDistortion: L2: 1.6027, L1: 15.8000, L0: 770.9000, Li: 0.5053loss_type:
+ group_lasso, visual_lambda: 10, fname: cwl2-group_lasso-0010.pngDistortion: L2: 1.7857, L1: 16.8906, L0: 776.2000, Li: 0.6041loss_type:
+ group_lasso, visual_lambda: 50, fname: cwl2-group_lasso-0050.pngDistortion: L2: 1.9086, L1: 18.9626, L0: 772.1000, Li: 0.5905loss_type:
+ group_lasso, visual_lambda: 200, fname: cwl2-group_lasso-0200.pngDistortion: L2: 1.8257, L1: 17.5516, L0: 764.6000, Li: 0.5983loss_type:
+ group_lasso, visual_lambda: 1000, fname: cwl2-group_lasso-1000.pngDistortion: L2: 2.7505, L1: 30.4518, L0: 761.7000, Li: 0.6768
+
+
+loss_type: l2, visual_lambda: 1, fname: cwl2-l2-0001.png
+Distortion: L2: 1.6483, L1: 15.6649, L0: 773.5000, Li: 0.5405
+loss_type: l2, visual_lambda: 10, fname: cwl2-l2-0010.png
+Distortion: L2: 1.5543, L1: 14.9667, L0: 775.6000, Li: 0.4882
+loss_type: l2, visual_lambda: 50, fname: cwl2-l2-0050.png
+Distortion: L2: 2.5739, L1: 29.4119, L0: 749.4000, Li: 0.6781
+loss_type: l2, visual_lambda: 200, fname: cwl2-l2-0200.png
+Distortion: L2: 3.0427, L1: 36.5063, L0: 753.1000, Li: 0.6840
+loss_type: l2, visual_lambda: 500, fname: cwl2-l2-0500.png
+Distortion: L2: 2.9717, L1: 35.4487, L0: 740.6000, Li: 0.6506
+loss_type: l2, visual_lambda: 1000, fname: cwl2-l2-1000.png
+Distortion: L2: 2.7498, L1: 34.2553, L0: 749.6000, Li: 0.5729
+loss_type: l1, visual_lambda: 1, fname: cwl2-l1-0001.png
+Distortion: L2: 1.8317, L1: 18.3398, L0: 771.1000, Li: 0.5540
+loss_type: l1, visual_lambda: 10, fname: cwl2-l1-0010.png
+Distortion: L2: 1.6444, L1: 16.5156, L0: 772.0000, Li: 0.5198
+loss_type: l1, visual_lambda: 50, fname: cwl2-l1-0050.png
+Distortion: L2: 1.8207, L1: 18.9683, L0: 766.8000, Li: 0.5414
+loss_type: l1, visual_lambda: 200, fname: cwl2-l1-0200.png
+Distortion: L2: 1.8778, L1: 18.4985, L0: 768.7000, Li: 0.5906
+loss_type: l1, visual_lambda: 500, fname: cwl2-l1-0500.png
+Distortion: L2: 1.8999, L1: 18.1162, L0: 771.4000, Li: 0.6325
+loss_type: l1, visual_lambda: 1000, fname: cwl2-l1-1000.png
+Distortion: L2: 2.4692, L1: 26.7066, L0: 750.6000, Li: 0.6765
+loss_type: group_lasso, visual_lambda: 1, fname: cwl2-group_lasso-0001.png
+Distortion: L2: 1.7723, L1: 18.6877, L0: 768.4000, Li: 0.5144
+loss_type: group_lasso, visual_lambda: 10, fname: cwl2-group_lasso-0010.png
+Distortion: L2: 1.7191, L1: 16.7140, L0: 774.8000, Li: 0.5195
+loss_type: group_lasso, visual_lambda: 50, fname: cwl2-group_lasso-0050.png
+Distortion: L2: 1.8139, L1: 17.6131, L0: 778.3000, Li: 0.5584
+loss_type: group_lasso, visual_lambda: 200, fname: cwl2-group_lasso-0200.png
+Distortion: L2: 1.5509, L1: 14.9843, L0: 762.4000, Li: 0.5603
+loss_type: group_lasso, visual_lambda: 500, fname: cwl2-group_lasso-0500.png
+Distortion: L2: 2.6926, L1: 31.9903, L0: 750.0000, Li: 0.6118
+loss_type: group_lasso, visual_lambda: 1000, fname: cwl2-group_lasso-1000.png
+Distortion: L2: 2.8144, L1: 30.8693, L0: 761.9000, Li: 0.6865
+
+
+Lambda: 1, loss: l2, grad: xent
+	Model Acc: 0.9915 ASR: 1.0
+	distortion: L2: 1.90, L1: 19.20, L0: 774.50, Li: 0.59
+
+
+Lambda: 0, loss: None, grad: logit
+	Model Acc: 0.9898 ASR: 1.0
+	distortion: L2: 1.47, L1: 14.95, L0: 773.80, Li: 0.45
+Lambda: 1, loss: l2, grad: xent
+	Model Acc: 0.9920 ASR: 1.0
+	distortion: L2: 1.56, L1: 14.84, L0: 779.80, Li: 0.55
+Lambda: 10, loss: l2, grad: xent
+	Model Acc: 0.9944 ASR: 1.0
+	distortion: L2: 1.70, L1: 17.66, L0: 768.80, Li: 0.48
+Lambda: 50, loss: l2, grad: xent
+	Model Acc: 0.9929 ASR: 1.0
+	distortion: L2: 1.74, L1: 18.58, L0: 760.10, Li: 0.51
+Lambda: 200, loss: l2, grad: xent
+	Model Acc: 0.9925 ASR: 1.0
+	distortion: L2: 2.02, L1: 19.82, L0: 771.70, Li: 0.62
+Lambda: 500, loss: l2, grad: xent
+	Model Acc: 0.9931 ASR: 1.0
+	distortion: L2: 2.06, L1: 20.72, L0: 773.30, Li: 0.58
+Lambda: 1000, loss: l2, grad: xent
+	Model Acc: 0.9941 ASR: 1.0
+	distortion: L2: 1.85, L1: 19.51, L0: 754.10, Li: 0.61
+Lambda: 1, loss: l2, grad: logit
+	Model Acc: 0.9927 ASR: 1.0
+	distortion: L2: 1.68, L1: 16.19, L0: 776.00, Li: 0.52
+Lambda: 10, loss: l2, grad: logit
+	Model Acc: 0.9931 ASR: 1.0
+	distortion: L2: 2.12, L1: 22.81, L0: 754.80, Li: 0.61
+Lambda: 50, loss: l2, grad: logit
+	Model Acc: 0.9927 ASR: 1.0
+	distortion: L2: 2.52, L1: 27.32, L0: 755.50, Li: 0.64
+Lambda: 200, loss: l2, grad: logit
+	Model Acc: 0.9748 ASR: 1.0
+	distortion: L2: 3.05, L1: 34.73, L0: 754.50, Li: 0.70
+Lambda: 500, loss: l2, grad: logit
+	Model Acc: 0.9417 ASR: 1.0
+	distortion: L2: 2.95, L1: 34.56, L0: 747.80, Li: 0.64
+Lambda: 1000, loss: l2, grad: logit
+	Model Acc: 0.9438 ASR: 1.0
+	distortion: L2: 2.76, L1: 32.93, L0: 747.50, Li: 0.60
+Lambda: 1, loss: l1, grad: xent
+	Model Acc: 0.9927 ASR: 1.0
+	distortion: L2: 1.66, L1: 16.66, L0: 769.10, Li: 0.53
+Lambda: 10, loss: l1, grad: xent
+	Model Acc: 0.9940 ASR: 1.0
+	distortion: L2: 1.73, L1: 17.66, L0: 774.00, Li: 0.54
+Lambda: 50, loss: l1, grad: xent
+	Model Acc: 0.9927 ASR: 1.0
+	distortion: L2: 1.48, L1: 15.43, L0: 775.10, Li: 0.47
+Lambda: 200, loss: l1, grad: xent
+	Model Acc: 0.9931 ASR: 1.0
+	distortion: L2: 1.69, L1: 17.28, L0: 774.00, Li: 0.50
+Lambda: 500, loss: l1, grad: xent
+	Model Acc: 0.9899 ASR: 1.0
+	distortion: L2: 1.89, L1: 18.20, L0: 775.90, Li: 0.64
+Lambda: 1000, loss: l1, grad: xent
+	Model Acc: 0.9936 ASR: 1.0
+	distortion: L2: 1.86, L1: 17.39, L0: 775.70, Li: 0.61
+Lambda: 1, loss: l1, grad: logit
+	Model Acc: 0.9898 ASR: 1.0
+	distortion: L2: 1.87, L1: 19.02, L0: 773.50, Li: 0.55
+
+
+Lambda: 1, loss: group_lasso, grad: xent
+	Model Acc: 0.9930 ASR: 1.0
+	distortion: L2: 1.75, L1: 18.26, L0: 773.30, Li: 0.56
+Lambda: 10, loss: group_lasso, grad: xent
+	Model Acc: 0.9935 ASR: 1.0
+	distortion: L2: 1.48, L1: 15.72, L0: 771.00, Li: 0.49
+Lambda: 50, loss: group_lasso, grad: xent
+	Model Acc: 0.9946 ASR: 1.0
+	distortion: L2: 1.72, L1: 17.41, L0: 770.30, Li: 0.52
+Lambda: 200, loss: group_lasso, grad: xent
+	Model Acc: 0.9925 ASR: 1.0
+	distortion: L2: 1.75, L1: 17.69, L0: 773.00, Li: 0.49
+Lambda: 500, loss: group_lasso, grad: xent
+	Model Acc: 0.9908 ASR: 1.0
+	distortion: L2: 1.77, L1: 18.05, L0: 770.20, Li: 0.55
+Lambda: 1000, loss: group_lasso, grad: xent
+	Model Acc: 0.9926 ASR: 1.0
+	distortion: L2: 2.04, L1: 19.69, L0: 771.70, Li: 0.68
+Lambda: 1, loss: group_lasso, grad: logit
+	Model Acc: 0.9938 ASR: 1.0
+	distortion: L2: 1.84, L1: 17.22, L0: 774.40, Li: 0.59
+Lambda: 10, loss: group_lasso, grad: logit
+	Model Acc: 0.9935 ASR: 1.0
+	distortion: L2: 1.76, L1: 17.52, L0: 767.30, Li: 0.54
+Lambda: 50, loss: group_lasso, grad: logit
+	Model Acc: 0.9928 ASR: 1.0
+	distortion: L2: 1.80, L1: 16.34, L0: 775.00, Li: 0.63
+Lambda: 200, loss: group_lasso, grad: logit
+	Model Acc: 0.9940 ASR: 1.0
+	distortion: L2: 1.79, L1: 16.74, L0: 764.30, Li: 0.63
+Lambda: 500, loss: group_lasso, grad: logit
+	Model Acc: 0.9931 ASR: 1.0
+	distortion: L2: 2.44, L1: 27.40, L0: 754.50, Li: 0.60
+Lambda: 1000, loss: group_lasso, grad: logit
+	Model Acc: 0.9830 ASR: 1.0
+	distortion: L2: 2.80, L1: 31.48, L0: 771.30, Li: 0.65
+Lambda: 1, loss: l2, grad: xent
+	Model Acc: 0.9935 ASR: 1.0
+	distortion: L2: 1.61, L1: 16.90, L0: 769.60, Li: 0.50
+Lambda: 10, loss: l2, grad: xent
+	Model Acc: 0.9919 ASR: 1.0
+	distortion: L2: 1.58, L1: 15.89, L0: 771.80, Li: 0.52
+Lambda: 50, loss: l2, grad: xent
+	Model Acc: 0.9938 ASR: 1.0
+	distortion: L2: 1.53, L1: 15.76, L0: 763.90, Li: 0.44
+Lambda: 200, loss: l2, grad: xent
+	Model Acc: 0.9923 ASR: 1.0
+	distortion: L2: 1.92, L1: 18.96, L0: 769.20, Li: 0.64
+Lambda: 500, loss: l2, grad: xent
+	Model Acc: 0.9931 ASR: 1.0
+	distortion: L2: 2.14, L1: 22.22, L0: 763.70, Li: 0.63
+Lambda: 1000, loss: l2, grad: xent
+	Model Acc: 0.9912 ASR: 1.0
+	distortion: L2: 2.26, L1: 24.37, L0: 755.60, Li: 0.69
+Lambda: 1, loss: l2, grad: logit
+	Model Acc: 0.9924 ASR: 1.0
+	distortion: L2: 1.81, L1: 19.18, L0: 764.80, Li: 0.53
+
+
+

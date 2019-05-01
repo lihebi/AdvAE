@@ -1,0 +1,248 @@
+#+TITLE: Results
+
+** Distortion comparison
+#+BEGIN_EXAMPLE
+None
+Distortion: L2: 1.5010, L1: 16.0486, L0: 769.3000
+Distortion (thresholded): L2: 1.0218, L1: 8.9574, L0: 138.5000
+In [4]: ====== l1 1
+Distortion: L2: 1.6524, L1: 16.0619, L0: 774.0000
+Distortion (thresholded): L2: 1.0460, L1: 7.9639, L0: 112.3000
+====== l1 10
+saving distortion plot ..
+Distortion: L2: 1.5012, L1: 15.3274, L0: 764.6000
+Distortion (thresholded): L2: 1.0687, L1: 8.5557, L0: 129.2000
+====== l1 50
+Distortion: L2: 1.9038, L1: 17.8705, L0: 772.2000
+Distortion (thresholded): L2: 1.2272, L1: 8.7947, L0: 115.8000
+====== l1 200
+Distortion: L2: 1.7476, L1: 14.8752, L0: 777.8000
+Distortion (thresholded): L2: 0.9581, L1: 6.5729, L0: 94.1000
+====== l1 500
+Distortion: L2: 1.9413, L1: 18.5192, L0: 772.0000
+Distortion (thresholded): L2: 1.2269, L1: 8.6635, L0: 114.8000
+====== l1 1000
+Distortion: L2: 2.3530, L1: 25.4005, L0: 760.1000
+Distortion (thresholded): L2: 1.6423, L1: 13.6679, L0: 162.4000
+====== group_lasso 1
+Distortion: L2: 1.5441, L1: 15.8657, L0: 771.4000
+Distortion (thresholded): L2: 1.0039, L1: 8.2852, L0: 127.0000
+====== group_lasso 10
+Distortion: L2: 1.8430, L1: 18.3249, L0: 771.5000
+Distortion (thresholded): L2: 1.2387, L1: 9.3442, L0: 125.1000
+====== group_lasso 50
+Distortion: L2: 1.8681, L1: 17.7053, L0: 773.5000
+Distortion (thresholded): L2: 1.1368, L1: 8.6188, L0: 129.9000
+====== group_lasso 200
+Distortion: L2: 1.9286, L1: 19.1437, L0: 766.8000
+Distortion (thresholded): L2: 1.2398, L1: 9.4765, L0: 123.3000
+====== group_lasso 500
+Distortion: L2: 2.4960, L1: 26.1557, L0: 760.1000
+Distortion (thresholded): L2: 1.6131, L1: 13.1264, L0: 151.3000
+====== group_lasso 1000
+Distortion: L2: 2.9244, L1: 34.2945, L0: 750.1000
+Distortion (thresholded): L2: 1.9986, L1: 18.1262, L0: 187.6000
+#+END_EXAMPLE
+
+The average of 10: Distortion: L2: 3.6233, L1: 19.5815, L0: 29.0000
+|                 |     L2 |      L1 |       L0 | L2 (0.01) | L1(0.01) | L0(0.01) |
+|-----------------+--------+---------+----------+-----------+----------+----------|
+| None            | 1.5010 | 16.0486 | 769.3000 |    1.0218 |   8.9574 | 138.5000 |
+| CW-L0           | 3.6233 | 19.5815 |  29.0000 |           |          |          |
+|-----------------+--------+---------+----------+-----------+----------+----------|
+| L1-1            | 1.6524 | 16.0619 | 774.0000 |    1.0460 |   7.9639 | 112.3000 |
+| L1-10           | 1.5012 | 15.3274 | 764.6000 |    1.0687 |   8.5557 | 129.2000 |
+| L1-50           | 1.9038 | 17.8705 | 772.2000 |    1.2272 |   8.7947 | 115.8000 |
+| L1-200          | 1.7476 | 14.8752 | 777.8000 |    0.9581 |   6.5729 |  94.1000 |
+| L1-500          | 1.9413 | 18.5192 | 772.0000 |    1.2269 |   8.6635 | 114.8000 |
+| L1-1000         | 2.3530 | 25.4005 | 760.1000 |    1.6423 |  13.6679 | 162.4000 |
+|-----------------+--------+---------+----------+-----------+----------+----------|
+| GroupLasso-1    | 1.5441 | 15.8657 | 771.4000 |    1.0039 |   8.2852 | 127.0000 |
+| GroupLasso-10   | 1.8430 | 18.3249 | 771.5000 |    1.2387 |   9.3442 | 125.1000 |
+| GroupLasso-50   | 1.8681 | 17.7053 | 773.5000 |    1.1368 |   8.6188 | 129.9000 |
+| GroupLasso-200  | 1.9286 | 19.1437 | 766.8000 |    1.2398 |   9.4765 | 123.3000 |
+| GroupLasso-500  | 2.4960 | 26.1557 | 760.1000 |    1.6131 |  13.1264 | 151.3000 |
+| GroupLasso-1000 | 2.9244 | 34.2945 | 750.1000 |    1.9986 |  18.1262 | 187.6000 |
+
+
+#+BEGIN_EXAMPLE
+Distortion: L2: 1.4787, L1: 14.8021, L0: 774.5000
+Distortion (thresholded): L2: 0.9174, L1: 7.6834, L0: 161.3000
+Distortion (thresholded): L2: 0.8796, L1: 5.6409, L0: 48.8000
+Distortion (thresholded): L2: 0.7675, L1: 3.5718, L0: 20.1000
+Distortion (thresholded): L2: 0.5767, L1: 1.4915, L0: 5.1000
+Distortion (thresholded): L2: 0.1069, L1: 0.1069, L0: 0.2000
+In [7]: ====== l1 1
+Distortion: L2: 1.6731, L1: 17.1744, L0: 774.6000
+Distortion (thresholded): L2: 1.0846, L1: 8.8318, L0: 158.2000
+Distortion (thresholded): L2: 1.0518, L1: 6.9549, L0: 55.1000
+Distortion (thresholded): L2: 0.9784, L1: 5.0234, L0: 27.5000
+Distortion (thresholded): L2: 0.7813, L1: 2.3632, L0: 8.4000
+Distortion (thresholded): L2: 0.0626, L1: 0.0626, L0: 0.1000
+====== l1 10
+Distortion: L2: 1.6682, L1: 17.1088, L0: 769.8000
+Distortion (thresholded): L2: 1.1007, L1: 9.2730, L0: 163.4000
+Distortion (thresholded): L2: 1.0736, L1: 7.2994, L0: 58.7000
+Distortion (thresholded): L2: 0.9859, L1: 5.1475, L0: 28.8000
+Distortion (thresholded): L2: 0.7285, L1: 2.4147, L0: 8.7000
+Distortion (thresholded): L2: 0.0506, L1: 0.0506, L0: 0.1000
+====== l1 50
+Distortion: L2: 1.8337, L1: 17.2325, L0: 774.2000
+Distortion (thresholded): L2: 1.2743, L1: 9.0358, L0: 156.1000
+Distortion (thresholded): L2: 1.2483, L1: 7.0693, L0: 45.5000
+Distortion (thresholded): L2: 1.1871, L1: 5.5767, L0: 24.3000
+Distortion (thresholded): L2: 1.0728, L1: 3.7204, L0: 10.9000
+Distortion (thresholded): L2: 0.5032, L1: 0.8353, L0: 1.5000
+====== l1 200
+Distortion: L2: 2.0108, L1: 17.7177, L0: 774.0000
+Distortion (thresholded): L2: 1.2192, L1: 8.4641, L0: 141.9000
+Distortion (thresholded): L2: 1.2010, L1: 6.8352, L0: 48.8000
+Distortion (thresholded): L2: 1.1433, L1: 5.0755, L0: 24.0000
+Distortion (thresholded): L2: 0.9726, L1: 2.8422, L0: 8.6000
+Distortion (thresholded): L2: 0.3266, L1: 0.4977, L0: 0.8000
+====== l1 500
+Distortion: L2: 2.1568, L1: 20.2642, L0: 769.6000
+Distortion (thresholded): L2: 1.2771, L1: 9.3764, L0: 151.3000
+Distortion (thresholded): L2: 1.2582, L1: 7.6417, L0: 52.4000
+Distortion (thresholded): L2: 1.2057, L1: 5.9283, L0: 28.3000
+Distortion (thresholded): L2: 1.0606, L1: 3.6717, L0: 12.1000
+Distortion (thresholded): L2: 0.3251, L1: 0.3574, L0: 0.6000
+====== l1 1000
+Distortion: L2: 2.5220, L1: 26.7694, L0: 760.5000
+Distortion (thresholded): L2: 1.5450, L1: 13.5624, L0: 197.2000
+Distortion (thresholded): L2: 1.5187, L1: 11.2916, L0: 75.1000
+Distortion (thresholded): L2: 1.4557, L1: 8.8600, L0: 41.2000
+Distortion (thresholded): L2: 1.2819, L1: 5.6975, L0: 18.7000
+Distortion (thresholded): L2: 0.3940, L1: 0.4631, L0: 0.8000
+====== group_lasso 1
+Distortion: L2: 1.6523, L1: 17.1503, L0: 773.6000
+Distortion (thresholded): L2: 1.0759, L1: 9.0375, L0: 173.6000
+Distortion (thresholded): L2: 1.0419, L1: 6.9156, L0: 55.9000
+Distortion (thresholded): L2: 0.9553, L1: 4.8695, L0: 27.2000
+Distortion (thresholded): L2: 0.7028, L1: 1.9586, L0: 6.6000
+Distortion (thresholded): L2: 0.0931, L1: 0.1316, L0: 0.2000
+====== group_lasso 10
+Distortion: L2: 1.8870, L1: 18.5313, L0: 772.1000
+Distortion (thresholded): L2: 1.2262, L1: 9.4184, L0: 161.8000
+Distortion (thresholded): L2: 1.1983, L1: 7.4614, L0: 52.5000
+Distortion (thresholded): L2: 1.1359, L1: 5.7494, L0: 28.5000
+Distortion (thresholded): L2: 0.9818, L1: 3.2342, L0: 10.2000
+Distortion (thresholded): L2: 0.3996, L1: 0.6192, L0: 1.1000
+====== group_lasso 50
+Distortion: L2: 2.0279, L1: 20.4679, L0: 770.3000
+Distortion (thresholded): L2: 1.3386, L1: 10.6705, L0: 142.3000
+Distortion (thresholded): L2: 1.3222, L1: 9.0600, L0: 58.7000
+Distortion (thresholded): L2: 1.2788, L1: 7.4146, L0: 35.6000
+Distortion (thresholded): L2: 1.1119, L1: 4.4389, L0: 14.7000
+Distortion (thresholded): L2: 0.3680, L1: 0.4368, L0: 0.7000
+====== group_lasso 200
+Distortion: L2: 2.0055, L1: 19.6981, L0: 764.9000
+Distortion (thresholded): L2: 1.2959, L1: 10.0119, L0: 170.0000
+Distortion (thresholded): L2: 1.2741, L1: 8.0680, L0: 54.8000
+Distortion (thresholded): L2: 1.2128, L1: 6.1685, L0: 28.9000
+Distortion (thresholded): L2: 1.0439, L1: 3.7186, L0: 11.7000
+Distortion (thresholded): L2: 0.3804, L1: 0.4165, L0: 0.7000
+====== group_lasso 500
+Distortion: L2: 2.5722, L1: 28.5356, L0: 753.1000
+Distortion (thresholded): L2: 1.7443, L1: 15.7722, L0: 203.0000
+Distortion (thresholded): L2: 1.7284, L1: 13.5450, L0: 84.8000
+Distortion (thresholded): L2: 1.6797, L1: 11.0780, L0: 50.4000
+Distortion (thresholded): L2: 1.5103, L1: 7.0061, L0: 21.5000
+Distortion (thresholded): L2: 0.6933, L1: 1.1651, L0: 1.9000
+====== group_lasso 1000
+Distortion: L2: 2.8386, L1: 32.0488, L0: 755.6000
+Distortion (thresholded): L2: 1.9315, L1: 17.3607, L0: 234.1000
+Distortion (thresholded): L2: 1.9090, L1: 14.5832, L0: 89.7000
+Distortion (thresholded): L2: 1.8396, L1: 11.7133, L0: 50.2000
+Distortion (thresholded): L2: 1.6449, L1: 7.6477, L0: 21.1000
+Distortion (thresholded): L2: 1.0416, L1: 2.6004, L0: 4.3000
+#+END_EXAMPLE
+
+** DONE compare the visual_loss for both use or not use
+   CLOSED: [2019-03-12 Tue 13:27]
+
+With visual loss:
+#+BEGIN_EXAMPLE
+In [9]: model = VisualCNNModel(visual_lambda=500)
+
+In [10]: model.train(sess)
+EPOCH 1: loss: 0.30019, acc: 0.92913, vl: 0.0001461652, xl: 0.2271123720
+EPOCH 2: loss: 0.11130, acc: 0.97857, vl: 0.0000783565, xl: 0.0721250674
+EPOCH 3: loss: 0.08092, acc: 0.98510, vl: 0.0000616241, xl: 0.0501099963
+EPOCH 4: loss: 0.06769, acc: 0.98772, vl: 0.0000532760, xl: 0.0410523781
+EPOCH 5: loss: 0.05862, acc: 0.98901, vl: 0.0000446757, xl: 0.0362808293
+EPOCH 6: loss: 0.05240, acc: 0.99072, vl: 0.0000413220, xl: 0.0317359119
+EPOCH 7: loss: 0.05102, acc: 0.99156, vl: 0.0000443907, xl: 0.0288251993
+EPOCH 8: loss: 0.04350, acc: 0.99250, vl: 0.0000361761, xl: 0.0254150127
+EPOCH 9: loss: 0.04151, acc: 0.99289, vl: 0.0000343042, xl: 0.0243620463
+EPOCH 10: loss: 0.03708, acc: 0.99326, vl: 0.0000302805, xl: 0.0219416898
+EPOCH 11: loss: 0.03331, acc: 0.99408, vl: 0.0000269058, xl: 0.0198558910
+EPOCH 12: loss: 0.03289, acc: 0.99441, vl: 0.0000310334, xl: 0.0173762447
+EPOCH 13: loss: 0.02663, acc: 0.99449, vl: 0.0000192244, xl: 0.0170200571
+EPOCH 14: loss: 0.02334, acc: 0.99469, vl: 0.0000148359, xl: 0.0159205362
+EPOCH 15: loss: 0.02307, acc: 0.99555, vl: 0.0000200347, xl: 0.0130534531
+EPOCH 16: loss: 0.01901, acc: 0.99636, vl: 0.0000139636, xl: 0.0120302076
+EPOCH 17: loss: 0.01768, acc: 0.99621, vl: 0.0000128061, xl: 0.0112781265
+EPOCH 18: loss: 0.01330, acc: 0.99673, vl: 0.0000068651, xl: 0.0098673806
+EPOCH 19: loss: 0.01598, acc: 0.99629, vl: 0.0000096018, xl: 0.0111792922
+EPOCH 20: loss: 0.01180, acc: 0.99722, vl: 0.0000068664, xl: 0.0083647637
+EPOCH 21: loss: 0.01051, acc: 0.99744, vl: 0.0000053353, xl: 0.0078433895
+EPOCH 22: loss: 0.00926, acc: 0.99818, vl: 0.0000063305, xl: 0.0060906575
+EPOCH 23: loss: 0.01191, acc: 0.99775, vl: 0.0000092360, xl: 0.0072904636
+EPOCH 24: loss: 0.00973, acc: 0.99748, vl: 0.0000046475, xl: 0.0074016444
+EPOCH 25: loss: 0.00949, acc: 0.99764, vl: 0.0000040452, xl: 0.0074667328
+EPOCH 26: loss: 0.00821, acc: 0.99772, vl: 0.0000030179, xl: 0.0067011216
+EPOCH 27: loss: 0.00781, acc: 0.99790, vl: 0.0000034724, xl: 0.0060724128
+EPOCH 28: loss: 0.00547, acc: 0.99872, vl: 0.0000026546, xl: 0.0041414939
+EPOCH 29: loss: 0.00706, acc: 0.99839, vl: 0.0000036179, xl: 0.0052520146
+EPOCH 30: loss: 0.00759, acc: 0.99842, vl: 0.0000056288, xl: 0.0047779624
+EPOCH 31: loss: 0.00567, acc: 0.99855, vl: 0.0000022565, xl: 0.0045455588
+EPOCH 32: loss: 0.00468, acc: 0.99902, vl: 0.0000031618, xl: 0.0030991676
+EPOCH 33: loss: 0.00685, acc: 0.99859, vl: 0.0000043651, xl: 0.0046648244
+EPOCH 34: loss: 0.00751, acc: 0.99811, vl: 0.0000041002, xl: 0.0054591107
+EPOCH 35: loss: 0.00418, acc: 0.99909, vl: 0.0000024234, xl: 0.0029670903
+EPOCH 36: loss: 0.00316, acc: 0.99941, vl: 0.0000029062, xl: 0.0017043526
+EPOCH 37: loss: 0.00715, acc: 0.99818, vl: 0.0000036726, xl: 0.0053095356
+EPOCH 38: loss: 0.00630, acc: 0.99866, vl: 0.0000042732, xl: 0.0041637442
+EPOCH 39: loss: 0.00620, acc: 0.99857, vl: 0.0000040642, xl: 0.0041703673
+EPOCH 40: loss: 0.00525, acc: 0.99915, vl: 0.0000052728, xl: 0.0026163722
+EPOCH 41: loss: 0.00251, acc: 0.99965, vl: 0.0000024152, xl: 0.0013068602
+EPOCH 42: loss: 0.00611, acc: 0.99892, vl: 0.0000051523, xl: 0.0035373954
+EPOCH 43: loss: 0.00802, acc: 0.99822, vl: 0.0000059576, xl: 0.0050447259
+EPOCH 44: loss: 0.00258, acc: 0.99963, vl: 0.0000022661, xl: 0.0014457737
+EPOCH 45: loss: 0.00606, acc: 0.99850, vl: 0.0000033651, xl: 0.0043798832
+EPOCH 46: loss: 0.00258, acc: 0.99939, vl: 0.0000014238, xl: 0.0018687651
+EPOCH 47: loss: 0.00455, acc: 0.99915, vl: 0.0000035795, xl: 0.0027609159
+EPOCH 48: loss: 0.00478, acc: 0.99892, vl: 0.0000027828, xl: 0.0033884602
+EPOCH 49: loss: 0.00607, acc: 0.99872, vl: 0.0000040453, xl: 0.0040498883
+EPOCH 50: loss: 0.00366, acc: 0.99918, vl: 0.0000022591, xl: 0.0025351268
+testing loss: 0.023889275267720222, acc: 0.993399977684021, vi_loss: 1.4585782359688437e-08
+#+END_EXAMPLE
+
+without visual loss:
+#+BEGIN_EXAMPLE
+In [6]: model.train(sess)
+2019-03-12 12:58:54.351199: I tensorflow/stream_executor/dso_loader.cc:152] successfully opened CUDA library libcublas.so.10.0 locally
+loss: 0.21157, acc: 0.93520, vl: 0.0004628061
+loss: 0.05233, acc: 0.98404, vl: 0.0005005799
+loss: 0.03474, acc: 0.98888, vl: 0.0005461122
+loss: 0.02413, acc: 0.99196, vl: 0.0007074456
+loss: 0.01987, acc: 0.99343, vl: 0.0007259636
+loss: 0.01515, acc: 0.99514, vl: 0.0008234999
+loss: 0.01527, acc: 0.99521, vl: 0.0008356589
+loss: 0.01070, acc: 0.99621, vl: 0.0010445592
+loss: 0.01115, acc: 0.99640, vl: 0.0011344857
+loss: 0.00887, acc: 0.99736, vl: 0.0012930864
+loss: 0.00990, acc: 0.99662, vl: 0.0010919458
+loss: 0.00809, acc: 0.99740, vl: 0.0010931193
+loss: 0.00770, acc: 0.99748, vl: 0.0012941029
+loss: 0.00758, acc: 0.99746, vl: 0.0012033747
+loss: 0.00601, acc: 0.99805, vl: 0.0011082012
+loss: 0.00670, acc: 0.99770, vl: 0.0011426464
+loss: 0.00541, acc: 0.99822, vl: 0.0015698343
+loss: 0.00370, acc: 0.99887, vl: 0.0017793952
+loss: 0.00523, acc: 0.99829, vl: 0.0015514861
+loss: 0.00484, acc: 0.99853, vl: 0.0019133354
+testing loss: 0.041597433388233185, acc: 0.9909999966621399, vi_loss: 2.574900099716615e-05
+#+END_EXAMPLE
+

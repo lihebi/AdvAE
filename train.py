@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import random
 import json
+import pickle
 import os
 
 import cleverhans.model
@@ -79,8 +80,8 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
         shuffle_idx = np.arange(train_x.shape[0])
         np.random.shuffle(shuffle_idx)
         nbatch = train_x.shape[0] // batch_size
+        t = time.time()
         for j in range(nbatch):
-            t = time.time()
             start = j * batch_size
             end = (j+1) * batch_size
             batch_x = train_x[shuffle_idx[start:end]]
@@ -92,7 +93,6 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
             # print('training time: {}'.format(time.time() - t))
 
             if j % print_interval == 0:
-                
                 # t = time.time()
                 # 0.46
                 l, m = sess.run([loss, metrics], feed_dict=feed_dict)
@@ -103,7 +103,6 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
                 # this introduces only small overhead
                 adv_training_plot(plot_data['metrics'], model.metric_names, '{}-training-process.png'.format(plot_prefix), False)
                 adv_training_plot(plot_data['metrics'], model.metric_names, '{}-training-process-split.png'.format(plot_prefix), True)
-
                 # plot loss
                 fig, ax = plt.subplots()
                 ax.plot(plot_data['loss'])
@@ -112,6 +111,7 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
                 
                 print('Batch {} / {},   \t time {:.2f}, loss: {:.5f},\t metrics: {}'
                       .format(j, nbatch, time.time()-t, l, ', '.join(['{:.5f}'.format(mi) for mi in m])))
+                t = time.time()
             # print('plot time: {}'.format(time.time() - t))
         print('EPOCH ends, calculating total loss')
 
@@ -140,8 +140,8 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
 
         adv_training_plot(plot_data['simple'], model.metric_names, '{}-training-process-simple.png'.format(plot_prefix), True)
         # save plot data
-        with open('images/{}-data.json'.format(plot_prefix), 'w') as fp:
-            json.dump(plot_data, fp)
+        with open('images/{}-data.pkl'.format(plot_prefix), 'wb') as fp:
+            pickle.dump(plot_data, fp)
 
         # save the weights
         save_path = saver.save(sess, 'tmp/epoch-{}'.format(i))

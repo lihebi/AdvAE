@@ -29,6 +29,9 @@ logits, as that is the whole model
 ** Add noise, and then add PGD, and then use in training
 
 * Experiment
+** TODO train on several digits, leave out 2
+Do it on both AdvAE and adv training. This may even show better
+performance than adv training.
 
 ** TODO test on CIFAR and ImageNet
 ** TODO compare with other defenses
@@ -98,8 +101,9 @@ terms of different CNNs together.
 ** visualize what the denoiser is doing on adv images
 ** TODO visualize and analyze the successful attacks
 
-** TODO Another idea
-- add adv noise at CNN input
+** TODO PostAdv
+- add adv noise at CNN input, after AE
+- AE acts as a anti-adv example generator
 
 * Related Work
 * Conclusion

@@ -24,6 +24,7 @@ def train_denoising(model_cls, saved_folder, prefix, advprefix, run_adv=True, ov
     - prefix: CNN and AE ckpt prefix
     - advprefix: AdvAE ckpt prefix
     """
+    print('====== Denoising training for {} ..'.format(advprefix))
     tf.reset_default_graph()
     with tf.Session() as sess:
         # model = AdvAEModel()
@@ -179,16 +180,31 @@ def test_against_attacks(sess, model):
     print('{} acc: {}, l2: {}'.format('CW', acc, l2))
 
 if __name__ == '__main__':
+    # default model
     train_denoising(AdvAEModel, 'saved_model', 'aecnn', 'AdvAE')
+    # stand alone model (not likely to work)
+    train_denoising(Post_Model, 'saved_model', 'aecnn', 'Post')
+    # combine witth adv loss
+    train_denoising(Post_Adv_Model, 'saved_model', 'aecnn', 'Post_Adv')
+    train_denoising(Noisy_Adv_Model, 'saved_model', 'aecnn', 'Noisy_Adv')
+    train_denoising(PostNoisy_Adv_Model, 'saved_model', 'aecnn', 'PostNoisy_Adv')
+    # add clean models
+    train_denoising(CleanAdv_Model, 'saved_model', 'aecnn', 'CleanAdv')
+    train_denoising(Post_CleanAdv_Model, 'saved_model', 'aecnn', 'Post_CleanAdv')
+    train_denoising(Noisy_CleanAdv_Model, 'saved_model', 'aecnn', 'Noisy_CleanAdv')
+    train_denoising(PostNoisy_CleanAdv_Model, 'saved_model', 'aecnn', 'PostNoisy_CleanAdv')
+    # high-level guided models
+    train_denoising(High_Model, 'saved_model', 'aecnn', 'High')
+    train_denoising(High_Adv_Model, 'saved_model', 'aecnn', 'High_Adv')
+    train_denoising(PostHigh_Adv_Model, 'saved_model', 'aecnn', 'PostHigh_Adv')
+    # train_denoising(FCAdvAEModel, 'saved_model', 'fccnn', 'FCAdvAE')
 
 def __test_denoising(path):
     # training
     train_denoising(AdvAEModel, 'saved_model', 'aecnn', 'AdvAE')
-    train_denoising(PostAdvAEModel, 'saved_model', 'aecnn', 'PostAdvAEModel')
     
     train_denoising(AdvAEModel_Var1, 'saved_model', 'cnn1', None, run_adv=False)
     train_denoising(AdvAEModel_Var2, 'saved_model', 'cnn2', None, run_adv=False)
-    train_denoising(FCAdvAEModel, 'saved_model', 'fccnn', '5')
     
     train_denoising(FC_CNN, 'saved_model', 'fccnn', 'fccnn')
     

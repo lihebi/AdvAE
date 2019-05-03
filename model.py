@@ -65,6 +65,10 @@ class AdvAEModel(cleverhans.model.Model):
         self.setup_trainstep()
         self.unified_adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
             self.unified_adv_loss, var_list=self.AE_vars)
+    @staticmethod
+    def name():
+        "Override by children models."
+        return "AdvAE"
     # cleverhans
     def predict(self, x):
         return self.FC(self.CNN(self.AE(x)))
@@ -105,18 +109,18 @@ class AdvAEModel(cleverhans.model.Model):
         rec_high = self.CNN(rec)
         rec_logits = self.FC(rec_high)
 
-        self.rec_loss = self.ce_wrapper(rec, self.x)
-        self.rec_high_loss = self.ce_wrapper(rec_high, high)
-        self.rec_ce_loss = self.ce_wrapper(rec_logits, self.y)
+        self.C0_loss = self.ce_wrapper(rec, self.x)
+        self.C1_loss = self.ce_wrapper(rec_high, high)
+        self.C2_loss = self.ce_wrapper(rec_logits, self.y)
 
         noisy_x = self.add_noise(self.x)
         noisy_rec = self.AE(noisy_x)
         noisy_rec_high = self.CNN(noisy_rec)
         noisy_rec_logits = self.FC(noisy_rec_high)
 
-        self.noisy_rec_loss = self.ce_wrapper(noisy_rec, self.x)
-        self.noisy_rec_high_loss = self.ce_wrapper(noisy_rec_high, high)
-        self.noisy_rec_ce_loss = self.ce_wrapper(noisy_rec_logits, self.y)
+        self.N0_loss = self.ce_wrapper(noisy_rec, self.x)
+        self.N1_loss = self.ce_wrapper(noisy_rec_high, high)
+        self.N2_loss = self.ce_wrapper(noisy_rec_logits, self.y)
 
         adv_x = my_PGD(self, self.x)
         adv_high = self.CNN(adv_x)
@@ -126,9 +130,9 @@ class AdvAEModel(cleverhans.model.Model):
         adv_rec_high = self.CNN(adv_rec)
         adv_rec_logits = self.FC(adv_rec_high)
         
-        self.adv_rec_loss = self.ce_wrapper(adv_rec, self.x)
-        self.adv_rec_high_loss = self.ce_wrapper(adv_rec_high, high)
-        self.adv_rec_ce_loss = self.ce_wrapper(adv_rec_logits, self.y)
+        self.A0_loss = self.ce_wrapper(adv_rec, self.x)
+        self.A1_loss = self.ce_wrapper(adv_rec_high, high)
+        self.A2_loss = self.ce_wrapper(adv_rec_logits, self.y)
 
         # pre-denoiser: train denoiser such that the denoised x is
         # itself robust
@@ -137,9 +141,9 @@ class AdvAEModel(cleverhans.model.Model):
         postadv_high = self.CNN(postadv)
         postadv_logits = self.FC(postadv_high)
 
-        self.postadv_rec_loss = self.ce_wrapper(postadv, self.x)
-        self.postadv_rec_high_loss = self.ce_wrapper(postadv_high, high)
-        self.postadv_rec_ce_loss = self.ce_wrapper(postadv_logits, self.y)
+        self.P0_loss = self.ce_wrapper(postadv, self.x)
+        self.P1_loss = self.ce_wrapper(postadv_high, high)
+        self.P2_loss = self.ce_wrapper(postadv_logits, self.y)
         
     def setup_prediction(self):
         # no AE, just CNN
@@ -162,20 +166,20 @@ class AdvAEModel(cleverhans.model.Model):
         # TODO monitoring each of these losses and adjust weights
         self.metrics = [
             # clean data
-            self.rec_loss, self.rec_high_loss, self.rec_ce_loss, self.accuracy,
+            self.C0_loss, self.C1_loss, self.C2_loss, self.accuracy,
             # noisy data
-            self.noisy_rec_loss, self.noisy_rec_high_loss, self.noisy_rec_ce_loss, self.noisy_accuracy,
+            self.N0_loss, self.N1_loss, self.N2_loss, self.noisy_accuracy,
             # adv data
-            self.adv_rec_loss, self.adv_rec_high_loss, self.adv_rec_ce_loss, self.adv_accuracy,
+            self.A0_loss, self.A1_loss, self.A2_loss, self.adv_accuracy,
             # postadv
-            self.postadv_rec_loss, self.postadv_rec_high_loss, self.postadv_rec_ce_loss, self.postadv_accuracy
+            self.P0_loss, self.P1_loss, self.P2_loss, self.postadv_accuracy
         ]
         
         self.metric_names = [
-            'rec_loss', 'rec_high_loss', 'rec_ce_loss', 'accuracy',
-            'noisy_rec_loss', 'noisy_rec_high_loss', 'noisy_rec_ce_loss', 'noisy_accuracy',
-            'adv_rec_loss', 'adv_rec_high_loss', 'adv_rec_ce_loss', 'adv_accuracy',
-            'postadv_rec_loss', 'postadv_rec_high_loss', 'postadv_rec_ce_loss', 'postadv_accuracy']
+            'C0_loss', 'C1_loss', 'C2_loss', 'accuracy',
+            'N0_loss', 'N1_loss', 'N2_loss', 'noisy_accuracy',
+            'A0_loss', 'A1_loss', 'A2_loss', 'adv_accuracy',
+            'P0_loss', 'P1_loss', 'P2_loss', 'postadv_accuracy']
 
     def setup_AE(self):
         inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
@@ -493,73 +497,118 @@ class AdvAEModel(cleverhans.model.Model):
     def setup_trainstep(self):
         """Overwrite by subclasses to customize the loss.
 
+        - 0: pixel
+        - 1: high level conv
+        - 2: logits
+
+        The data:
+        - C: Clean
+        - N: Noisy
+        - A: Adv
+        - P: Post
+        
         Available loss terms:
 
         # clean data
-        self.rec_loss, self.rec_high_loss, self.rec_ce_loss,
+        self.C0_loss, self.C1_loss, self.C2_loss,
         
         # noisy data
-        self.noisy_rec_loss, self.noisy_rec_high_loss, self.noisy_rec_ce_loss,
+        self.N0_loss, self.N1_loss, self.N2_loss,
         
         # adv data
-        self.adv_rec_loss, self.adv_rec_high_loss, self.adv_rec_ce_loss,
+        self.A0_loss, self.A1_loss, self.A2_loss,
         
         # postadv
-        self.postadv_rec_loss, self.postadv_rec_high_loss, self.postadv_rec_ce_loss,
+        self.P0_loss, self.P1_loss, self.P2_loss,
         
         """
-        self.unified_adv_loss = (self.adv_rec_ce_loss)
+        self.unified_adv_loss = (self.A2_loss)
+# one
+class A2_Model(AdvAEModel):
+    """This is a dummy class, exactly same as AdvAEModel except name()."""
+    def name():
+        return 'A2'
+    def setup_trainstep(self):
+        self.unified_adv_loss = self.A2_loss
+class A1_Model(AdvAEModel):
+    def name():
+        return 'A1'
+    def setup_trainstep(self):
+        self.unified_adv_loss = (self.A1_loss)
+class A12_Model(AdvAEModel):
+    def name():
+        return 'A12'
+    def setup_trainstep(self):
+        self.unified_adv_loss = (self.A2_loss + self.A1_loss)
+# two
+class N0_A2_Model(AdvAEModel):
+    def name():
+        return 'N0_A2'
+    def setup_trainstep(self):
+        self.unified_adv_loss = (self.A2_loss + self.N0_loss)
+class C0_A2_Model(AdvAEModel):
+    def name():
+        return 'C0_A2'
+    def setup_trainstep(self):
+        self.unified_adv_loss = (self.A2_loss + self.C0_loss)
+class C2_A2_Model(AdvAEModel):
+    def name():
+        return 'C2_A2'
+    def setup_trainstep(self):
+        self.unified_adv_loss = (self.A2_loss + self.C2_loss)
 
-# stand alones (not likely to work)
-class Post_Model(AdvAEModel):
+# three
+class C0_N0_A2_Model(AdvAEModel):
+    def name():
+        return 'C0_N0_A2'
     def setup_trainstep(self):
-        self.unified_adv_loss = (self.postadv_rec_ce_loss)
-# combine with adv loss
-class Post_Adv_Model(AdvAEModel):
+        self.unified_adv_loss = (self.A2_loss + self.N0_loss + self.C0_loss)
+class C2_N0_A2_Model(AdvAEModel):
+    def name():
+        return 'C2_N0_A2'
     def setup_trainstep(self):
-        self.unified_adv_loss = (self.adv_rec_ce_loss
-                                 + self.postadv_rec_ce_loss)
-class Noisy_Adv_Model(AdvAEModel):
+        self.unified_adv_loss = (self.A2_loss + self.N0_loss + self.C2_loss)
+
+# P models
+class P2_Model(AdvAEModel):
+    def name():
+        return 'P2'
     def setup_trainstep(self):
-        self.unified_adv_loss = (self.adv_rec_ce_loss
-                                 + self.noisy_rec_loss)
-class PostNoisy_Adv_Model(AdvAEModel):
+        self.unified_adv_loss = (self.P2_loss)
+class A2_P2_Model(AdvAEModel):
+    def name():
+        return 'A2_P2'
     def setup_trainstep(self):
-        self.unified_adv_loss = (self.adv_rec_ce_loss
-                                 + self.postadv_rec_ce_loss + self.noisy_rec_loss)
-class PostNoisy_Adv_Rec_Model(AdvAEModel):
+        self.unified_adv_loss = (self.A2_loss + self.P2_loss)
+class N0_A2_P2_Model(AdvAEModel):
+    def name():
+        return 'N0_A2_P2'
     def setup_trainstep(self):
-        self.unified_adv_loss = (self.adv_rec_ce_loss
-                                 + self.postadv_rec_ce_loss + self.noisy_rec_loss
-                                 # add rec loss to tune the rec image better recognizable to human
-                                 + self.rec_loss)
-# add clean data loss (probably add this to all)
-class CleanAdv_Model(AdvAEModel):
+        self.unified_adv_loss = (self.A2_loss + self.P2_loss + self.N0_loss)
+        
+class C0_N0_A2_P2_Model(AdvAEModel):
+    def name():
+        return 'C0_N0_A2_P2'
     def setup_trainstep(self):
-        self.unified_adv_loss = (self.adv_rec_ce_loss
-                                 + self.rec_ce_loss)
-class Post_CleanAdv_Model(AdvAEModel):
+        self.unified_adv_loss = (self.A2_loss + self.P2_loss +
+                                 self.N0_loss + self.C0_loss)
+class C2_A2_P2_Model(AdvAEModel):
+    def name():
+        return 'C2_A2_P2'
     def setup_trainstep(self):
-        self.unified_adv_loss = (self.adv_rec_ce_loss + self.postadv_rec_ce_loss
-                                 + self.rec_ce_loss)
-class Noisy_CleanAdv_Model(AdvAEModel):
+        self.unified_adv_loss = (self.A2_loss + self.P2_loss +
+                                 self.C2_loss)
+class C2_N0_A2_P2_Model(AdvAEModel):
+    def name():
+        return 'C2_N0_A2_P2'
     def setup_trainstep(self):
-        self.unified_adv_loss = (self.adv_rec_ce_loss + self.noisy_rec_loss
-                                 + self.rec_ce_loss)
-class PostNoisy_CleanAdv_Model(AdvAEModel):
+        self.unified_adv_loss = (self.A2_loss + self.P2_loss +
+                                 self.N0_loss + self.C2_loss)
+class A2_P1_Model(AdvAEModel):
+    def name():
+        return 'A2_P1'
     def setup_trainstep(self):
-        self.unified_adv_loss = (self.adv_rec_ce_loss + self.postadv_rec_ce_loss + self.noisy_rec_loss
-                                 + self.rec_ce_loss)
-# high-level guided models
-class High_Model(AdvAEModel):
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.adv_rec_high_loss)
-class High_Adv_Model(AdvAEModel):
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.adv_rec_ce_loss + self.adv_rec_high_loss)
-class PostHigh_Adv_Model(AdvAEModel):
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.adv_rec_ce_loss + self.postadv_rec_high_loss)
+        self.unified_adv_loss = (self.A2_loss + self.P1_loss)
         
 class AdvAEModel_Var0(AdvAEModel):
     "This is the same as AdvAEModel. I'm not using it, just use as a reference."

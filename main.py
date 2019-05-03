@@ -24,6 +24,8 @@ def train_denoising(model_cls, saved_folder, prefix, advprefix, run_adv=True, ov
     - prefix: CNN and AE ckpt prefix
     - advprefix: AdvAE ckpt prefix
     """
+    if not os.path.exists('images'):
+        os.makedirs('images')
     print('====== Denoising training for {} ..'.format(advprefix))
     tf.reset_default_graph()
     with tf.Session() as sess:
@@ -182,26 +184,25 @@ def test_against_attacks(sess, model):
 if __name__ == '__main__':
     clses = [
         # default model
-        AdvAEModel,
-        # stand alone model (not likely to work)
-        Post_Model,
-        # combine witth adv loss
-        Post_Adv_Model, Noisy_Adv_Model, PostNoisy_Adv_Model, PostNoisy_Adv_Rec_Model,
-        # add clean models
-        CleanAdv_Model, Post_CleanAdv_Model, Noisy_CleanAdv_Model, PostNoisy_CleanAdv_Model,
-        # high-level guided models
-        High_Model, High_Adv_Model, PostHigh_Adv_Model]
-    names = [
-        'AdvAE',
-        'Post',
-        'Post_Adv', 'Noisy_Adv', 'PostNoisy_Adv', 'PostNoisy_Adv_Rec',
-        'CleanAdv', 'Post_CleanAdv', 'Noisy_CleanAdv', 'PostNoisy_CleanAdv',
-        'High', 'High_Adv', 'PostHigh_Adv']
+        # ONE
+        A2_Model,
+        # A1_Model,
+        # A12_Model,
+        # TWO
+        N0_A2_Model,
+        C0_A2_Model,
+        # C2_A2_Model,
+        # THREE
+        C0_N0_A2_Model,
+        # C2_N0_A2_Model
+    ]
     
-    for cls, name in zip(clses, names):
-        train_denoising(cls, 'saved_model', 'aecnn', name)
+    for cls in clses:
+        train_denoising(cls, 'saved_model', 'aecnn', cls.name())
     
     # train_denoising(FCAdvAEModel, 'saved_model', 'fccnn', 'FCAdvAE')
+    
+    # train_denoising(PostNoisy_Adv_Model, 'saved_model', 'aecnn', 'PostNoisy_Adv')
 
 def load_default_model():
     tf.reset_default_graph()
@@ -210,9 +211,23 @@ def load_default_model():
     init = tf.global_variables_initializer()
     sess.run(init)
     model.load_CNN(sess, 'saved_model/aecnn-CNN.ckpt')
-    model.load_AE(sess, 'saved_model/AdvAE-AdvAE.ckpt')
+    model.load_AE(sess, 'saved_model/A2-AdvAE.ckpt')
     return model, sess
 
+def __test():
+    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
+    clses = [ AdvAEModel, Noisy_Adv_Model, Rec_Adv_Model,
+              Rec_Noisy_Adv_Model, CleanAdv_Model, Noisy_CleanAdv_Model,
+              High_Model, High_Adv_Model ]
+    for cls in clses:
+        tf.reset_default_graph()
+        sess = tf.Session()
+        model = cls()
+        init = tf.global_variables_initializer()
+        sess.run(init)
+        model.load_CNN(sess, 'saved_model/aecnn-CNN.ckpt')
+        model.load_AE(sess, 'saved_model/{}-AdvAE.ckpt'.format(cls.name()))
+        model.test_all(sess, test_x, test_y, run_CW=True, filename='images/{}-test-result.pdf'.format(cls.name()))
 def __test_denoising(path):
     # training
     train_denoising(AdvAEModel, 'saved_model', 'aecnn', 'AdvAE')
@@ -249,21 +264,7 @@ def __test_denoising(path):
     model.load_AE(sess, 'saved_model/aecnn-AE.ckpt')
     
     model.load_AE(sess, 'saved_model/AdvAE-AdvAE.ckpt')
-    model.load_AE(sess, 'saved_model/Post_CleanAdv-AdvAE.ckpt')
-    model.load_AE(sess, 'saved_model/Post_Adv-AdvAE.ckpt')
     model.load_AE(sess, 'saved_model/PostNoisy_Adv-AdvAE.ckpt')
-    model.load_AE(sess, 'saved_model/PostNoisy_Adv_Rec-AdvAE.ckpt')
-
-
-    for cls, name in zip(clses, names):
-        tf.reset_default_graph()
-        sess = tf.Session()
-        model = cls()
-        init = tf.global_variables_initializer()
-        sess.run(init)
-        model.load_CNN(sess, 'saved_model/aecnn-CNN.ckpt')
-        model.load_AE(sess, 'saved_model/{}-AdvAE.ckpt'.format(name))
-        model.test_all(sess, test_x, test_y, run_CW=False, filename='images/{}-test-result.pdf'.format(name))
 
     # testing
     model.test_all(sess, test_x, test_y, run_CW=False)
@@ -274,23 +275,3 @@ def __test_denoising(path):
     (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
     model, sess = load_default_model()
     model.test_CW(sess, test_x, test_y)
-
-    adv_x = model.myCW(sess, model.x, model.y)
-    adv_x_concrete = sess.run(adv_x, feed_dict={model.x: test_x[:100], model.y: test_y[:100]})
-    sess.run(model.accuracy, feed_dict={model.x: adv_x_concrete, model.y: test_y[:100]})
-    adv_logits = model.FC(model.CNN(model.AE(adv_x)))
-    adv_accuracy = model.accuracy_wrapper(adv_logits, model.y)
-    sess.run(adv_accuracy, feed_dict={model.x: test_x[:100], model.y: test_y[:100]})
-    postadv = model.myCW(sess, model.AE(model.x), model.y)
-    postadv_logits = model.FC(model.CNN(postadv))
-    postadv_accuracy = model.accuracy_wrapper(postadv_logits, model.y)
-    sess.run(postadv_accuracy, feed_dict={model.x: test_x[:100], model.y: test_y[:100]})
-
-    attack = lambda x: model.myCW(sess, x, model.y)    
-    postadv = attack(model.AE(model.x))
-
-    adv_logits = model.FC(model.CNN(model.AE(attack(model.x))))
-    adv_accuracy = model.accuracy_wrapper(adv_logits, model.y)
-
-    postadv_logits = self.FC(self.CNN(attack(self.AE(self.x))))
-    postadv_accuracy = self.accuracy_wrapper(postadv_logits, self.y)

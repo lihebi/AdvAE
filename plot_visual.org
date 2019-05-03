@@ -1,47 +1,49 @@
 #+TITLE: Visualization Plots
+#+LATEX_CLASS: nips
 #+OPTIONS: toc:nil
 #+LATEX_HEADER: \usepackage[export]{adjustbox}
+#+LATEX_HEADER: \pagenumbering{gobble}
 
 #+CAPTION: AdvAE
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/AdvAE-test-result.pdf]]
 #+CAPTION: Post
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/Post-test-result.pdf]]
 
 #+CAPTION: =Post_Adv=
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/Post_Adv-test-result.pdf]]
 #+CAPTION: =Noisy_Adv=
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/Noisy_Adv-test-result.pdf]]
 #+CAPTION: =PostNoisy_Adv=
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/PostNoisy_Adv-test-result.pdf]]
 #+CAPTION: =PostNoisy_Adv_Rec=
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/PostNoisy_Adv_Rec-test-result.pdf]]
 
 #+CAPTION: CleanAdv
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/CleanAdv-test-result.pdf]]
 #+CAPTION: =Post_CleanAdv=
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/Post_CleanAdv-test-result.pdf]]
 #+CAPTION: =Noisy_CleanAdv=
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/Noisy_CleanAdv-test-result.pdf]]
 #+CAPTION: =PostNoisy_CleanAdv=
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/PostNoisy_CleanAdv-test-result.pdf]]
 
 #+CAPTION: High
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/High-test-result.pdf]]
 #+CAPTION: =High_Adv=
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/High_Adv-test-result.pdf]]
 #+CAPTION: =PostHigh_Adv=
-#+ATTR_LATEX: :width 1.2\linewidth,center
+#+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/PostHigh_Adv-test-result.pdf]]
 

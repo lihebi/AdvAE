@@ -34,6 +34,7 @@ logits, as that is the whole model
 
 * Other Ideas                                                      :noexport:
 ** Add noise, and then add PGD, and then use in training
+** TODO add a little CW into PGD training
 
 * Experiment
 ** TODO train on several digits, leave out 2

@@ -35,32 +35,34 @@ def generate_victim(test_x, test_y):
     labels = np.array(labels)
     return inputs, labels, targets
 
-def my_FGSM(model, x):
+def my_FGSM(model, x, params=dict()):
     # FGSM attack
     fgsm_params = {
         'eps': 0.3,
         'clip_min': CLIP_MIN,
         'clip_max': CLIP_MAX
     }
+    fgsm_params.update(params)
     fgsm = FastGradientMethod(model)
     adv_x = fgsm.generate(x, **fgsm_params)
     return adv_x
-def my_PGD(model, x):
+def my_PGD(model, x, params=dict()):
     pgd = ProjectedGradientDescent(model)
     pgd_params = {'eps': 0.3,
                   'nb_iter': 40,
                   'eps_iter': 0.01,
                   'clip_min': CLIP_MIN,
                   'clip_max': CLIP_MAX}
+    pgd_params.update(params)
     adv_x = pgd.generate(x, **pgd_params)
     return adv_x
-def my_JSMA(model, x):
+def my_JSMA(model, x, params=dict()):
     jsma = SaliencyMapMethod(model)
     jsma_params = {'theta': 1., 'gamma': 0.1,
                    'clip_min': CLIP_MIN, 'clip_max': CLIP_MAX,
                    'y_target': None}
     return jsma.generate(x, **jsma_params)
-def my_CW(model, sess, x, y, targeted=False):
+def my_CW(model, sess, x, y, targeted=False, params=dict()):
     """When targeted=True, remember to put target as y."""
     # CW attack
     cw = CarliniWagnerL2(model, sess=sess)

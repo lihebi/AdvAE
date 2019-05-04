@@ -15,10 +15,9 @@ from cleverhans.attacks import CarliniWagnerL2
 
 from utils import *
 from model import *
-from train import my_adv_training
 from attacks import *
 
-def train_denoising(model_cls, saved_folder, prefix, advprefix, run_adv=True, overwrite=False):
+def train_denoising(model_cls, saved_folder, prefix, advprefix, train_x, train_y, run_adv=True, overwrite=False):
     """Train AdvAE.
 
     - prefix: CNN and AE ckpt prefix
@@ -29,16 +28,11 @@ def train_denoising(model_cls, saved_folder, prefix, advprefix, run_adv=True, ov
     print('====== Denoising training for {} ..'.format(advprefix))
     tf.reset_default_graph()
     with tf.Session() as sess:
-        # model = AdvAEModel()
-        # model1 = AdvAEModel_Var1()
-        # model2 = AdvAEModel_Var2()
         model = model_cls()
         
         init = tf.global_variables_initializer()
         sess.run(init)
 
-        (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
-        
         # 1. train CNN
         pCNN = os.path.join(saved_folder, '{}-CNN.ckpt'.format(prefix))
         if not os.path.exists(pCNN+'.meta'):
@@ -79,9 +73,7 @@ def train_denoising(model_cls, saved_folder, prefix, advprefix, run_adv=True, ov
             if not os.path.exists(pAdvAE+'.meta') or overwrite:
                 print('Adv training AdvAE ..')
                 my_adv_training(sess, model,
-                                model.unified_adv_loss,
-                                model.metrics,
-                                model.unified_adv_train_step,
+                                train_x, train_y,
                                 plot_prefix=advprefix,
                                 # DEBUG small num epochs to speed up
                                 # debugging, large one to report final
@@ -181,7 +173,30 @@ def test_against_attacks(sess, model):
     acc, l2 = test_model_against_attack(sess, model, my_CW, inputs, labels, None, prefix='CW')
     print('{} acc: {}, l2: {}'.format('CW', acc, l2))
 
+def __test():
+    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_cifar10_data()
+    model = MyResNet()
+    sess = tf.Session()
+    init = tf.global_variables_initializer()
+    sess.run(init)
+    print('Trianing CNN ..')
+    model.train_CNN(sess, train_x, train_y)
+    
+    print('Saving model ..')
+    model.save_CNN(sess, pCNN)
+def main2():
+    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
+    train_denoising(MyResNet, 'saved_models', 'resnet', 'Default', train_x, train_y)
+    
+
 if __name__ == '__main__':
+    main2()
+
+def main1():
+    # tf.random.set_random_seed(0)
+    # np.random.seed(0)
+    # random.seed(0)
+    
     clses = [
         # default model
         # ONE
@@ -198,11 +213,11 @@ if __name__ == '__main__':
     ]
     
     for cls in clses:
-        train_denoising(cls, 'saved_model', 'aecnn', cls.name())
+        train_denoising(cls, 'saved_models', 'aecnn', cls.name())
     
-    # train_denoising(FCAdvAEModel, 'saved_model', 'fccnn', 'FCAdvAE')
+    # train_denoising(FCAdvAEModel, 'saved_models', 'fccnn', 'FCAdvAE')
     
-    # train_denoising(PostNoisy_Adv_Model, 'saved_model', 'aecnn', 'PostNoisy_Adv')
+    # train_denoising(PostNoisy_Adv_Model, 'saved_models', 'aecnn', 'PostNoisy_Adv')
 
 def load_default_model():
     tf.reset_default_graph()
@@ -210,8 +225,8 @@ def load_default_model():
     model = AdvAEModel()
     init = tf.global_variables_initializer()
     sess.run(init)
-    model.load_CNN(sess, 'saved_model/aecnn-CNN.ckpt')
-    model.load_AE(sess, 'saved_model/A2-AdvAE.ckpt')
+    model.load_CNN(sess, 'saved_models/aecnn-CNN.ckpt')
+    model.load_AE(sess, 'saved_models/A2-AdvAE.ckpt')
     return model, sess
 
 def __test():
@@ -225,22 +240,23 @@ def __test():
         model = cls()
         init = tf.global_variables_initializer()
         sess.run(init)
-        model.load_CNN(sess, 'saved_model/aecnn-CNN.ckpt')
-        model.load_AE(sess, 'saved_model/{}-AdvAE.ckpt'.format(cls.name()))
+        model.load_CNN(sess, 'saved_models/aecnn-CNN.ckpt')
+        model.load_AE(sess, 'saved_models/{}-AdvAE.ckpt'.format(cls.name()))
         model.test_all(sess, test_x, test_y, run_CW=True, filename='images/{}-test-result.pdf'.format(cls.name()))
 def __test_denoising(path):
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
     # training
-    train_denoising(AdvAEModel, 'saved_model', 'aecnn', 'AdvAE')
+    train_denoising(AdvAEModel, 'saved_models', 'aecnn', 'AdvAE', train_x, train_y)
     
-    train_denoising(AdvAEModel_Var1, 'saved_model', 'cnn1', None, run_adv=False)
-    train_denoising(AdvAEModel_Var2, 'saved_model', 'cnn2', None, run_adv=False)
+    train_denoising(AdvAEModel_Var1, 'saved_models', 'cnn1', None, run_adv=False)
+    train_denoising(AdvAEModel_Var2, 'saved_models', 'cnn2', None, run_adv=False)
     
-    train_denoising(FC_CNN, 'saved_model', 'fccnn', 'fccnn')
+    train_denoising(FC_CNN, 'saved_models', 'fccnn', 'fccnn')
     
     # only train CNN and AE for these CNN architecture. The AdvAE weights will be loaded.
     
     # testing
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
 
     tf.reset_default_graph()
     
@@ -250,28 +266,57 @@ def __test_denoising(path):
     model = AdvAEModel()
     model = AdvAEModel_Var1()
     model = AdvAEModel_Var2()
+    model = MyResNet()
 
     # init session
     init = tf.global_variables_initializer()
     sess.run(init)
+    # init = tf.local_variables_initializer()
+    # sess.run(init)
 
     # load different CNNs
-    model.load_CNN(sess, 'saved_model/aecnn-CNN.ckpt')
-    model.load_CNN(sess, 'saved_model/AdvDenoiser/1-CNN.ckpt')
-    model.load_CNN(sess, 'saved_model/AdvDenoiser/2-CNN.ckpt')
+    model.load_CNN(sess, 'saved_models/aecnn-CNN.ckpt')
+    model.load_CNN(sess, 'saved_models/1-CNN.ckpt')
+    model.load_CNN(sess, 'saved_models/2-CNN.ckpt')
+    model.load_CNN(sess, 'saved_models/resnet-CNN.ckpt')
 
     # load the same AE
-    model.load_AE(sess, 'saved_model/aecnn-AE.ckpt')
+    model.load_AE(sess, 'saved_models/aecnn-AE.ckpt')
     
-    model.load_AE(sess, 'saved_model/AdvAE-AdvAE.ckpt')
-    model.load_AE(sess, 'saved_model/PostNoisy_Adv-AdvAE.ckpt')
+    model.load_AE(sess, 'saved_models/AdvAE-AdvAE.ckpt')
+    model.load_AE(sess, 'saved_models/PostNoisy_Adv-AdvAE.ckpt')
+    model.load_AE(sess, 'saved_models/resnet-AE.ckpt')
+
+    model.train_CNN(sess, train_x, train_y)
+
+
+    model.train_AE(sess, train_x, train_y)
+    # model.train_AE_old(sess, train_x)
+    # model.train_AE_simple(sess, train_x)
+    
+    # model.AE.compile('adam', 'binary_crossentropy')
 
     # testing
-    model.test_all(sess, test_x, test_y, run_CW=False)
-    model.test_all(sess, test_x, test_y, run_CW=True)
-    # TODO test PGD attacks, and plot the denoised images
-    test_against_attacks(sess, model)
+    model.test_all(sess, test_x, test_y, attacks=[])
+    model.test_all(sess, test_x, test_y, attacks=['FGSM', 'PGD'])
+    model.test_all(sess, test_x, test_y, attacks=['CW', 'FGSM', 'PGD'])
+    model.test_all(sess, test_x, test_y, attacks=['CW', 'JSMA', 'FGSM', 'PGD'])
 
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
+    model.save_CNN(sess, 'saved_models/resnet-CNN.ckpt')
+    # test_against_attacks(sess, model)
+
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    
     model, sess = load_default_model()
     model.test_CW(sess, test_x, test_y)
+
+    
+def __test():
+    x=tf.constant([[0.1,0.1,0.2,0.2],
+                   [0.1,0.1,0.2,0.2]])
+    y=tf.constant([[0.2,0.2,0.1,0.1],
+                   [0.2,0.2,0.1,0.1]])
+    # sess.run(tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(labels=x, logits=y)))
+    sess.run(tf.nn.softmax_cross_entropy_with_logits(labels=x, logits=y))
+    sess.run(tf.nn.softmax_cross_entropy_with_logits_v2(labels=x, logits=y))
+

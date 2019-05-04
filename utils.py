@@ -19,15 +19,32 @@ def load_mnist_data():
     
     train_y = keras.utils.to_categorical(train_y, 10)
     test_y = keras.utils.to_categorical(test_y, 10)
-    
-    # split validation
+    return (train_x, train_y), (test_x, test_y)
+
+def validation_split(train_x, train_y):
     nval = train_x.shape[0] // 10
     val_x = train_x[-nval:]
     val_y = train_y[-nval:]
     train_x = train_x[:-nval]
     train_y = train_y[:-nval]
-    return (train_x, train_y), (val_x, val_y), (test_x, test_y)
+    return (train_x, train_y), (val_x, val_y)
+    
+def __test():
+    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
 
+def load_cifar10_data():
+    # 32, 32, 3, uint8
+    (train_x, train_y), (test_x, test_y) = keras.datasets.cifar10.load_data()
+    # convert data
+    train_x = train_x.astype('float32') / 255
+    test_x = test_x.astype('float32') / 255
+    # train_x = np.reshape(train_x, (train_x.shape[0], 32, 32,3))
+    # test_x = np.reshape(test_x, (test_x.shape[0], 32, 32,3))
+    
+    train_y = keras.utils.to_categorical(train_y, 10)
+    test_y = keras.utils.to_categorical(test_y, 10)
+    
+    return (train_x, train_y), (test_x, test_y)
     
 def convert_image_255(img):
     return np.round(255 - (img) * 255).reshape((28, 28))
@@ -45,6 +62,19 @@ def grid_show_image(images, width, height, filename='out.pdf', titles=None):
     # the size of image should increase as the number of images
     fig_width = 6.4 * width / 4
     fig_height = 4.8 * height / 3
+
+    # try to be smart on different kinds of images
+    images = np.array(images)
+    if images.shape[1] == 28:
+        # MNIST
+        images = images.reshape((-1, 28, 28))
+        images = 1 - images
+    elif images.shape[1] == 32:
+        # CIFAR10, it has three channels, and cmap will be ignored
+        pass
+    else:
+        # TODO IMAGENET
+        assert False
     
     fig, axes = plt.subplots(nrows=height, ncols=width,
                              # figsize=(12.8, 9.6),
@@ -61,14 +91,23 @@ def grid_show_image(images, width, height, filename='out.pdf', titles=None):
         # TITLE has to appear on top. I want it to be on bottom, so using xlabel
         ax.set_title(title, loc='left')
         # ax.set_xlabel(title)
-        ax.imshow(convert_image_255(image), cmap='gray')
+        # ax.imshow(convert_image_255(image), cmap='gray')
+        # ax.imshow(image)
+        ax.imshow(image, cmap='gray')
     plt.subplots_adjust(hspace=0.5)
     plt.savefig(filename, bbox_inches='tight', pad_inches=0)
     plt.close(fig)
 
 def __test():
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
     grid_show_image(train_x[:10], 5, 2, titles=['hell'] * 10)
+    
+    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
+    grid_show_image(train_x[:10], 5, 2, titles=['hell'] * 10)
+
+    plt.imshow(train_x[0].reshape((28,28)), cmap='gray')
+    plt.show()
+    
 
 def mynorm(a, b, p):
     size = a.shape[0]

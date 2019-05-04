@@ -526,3 +526,84 @@ class MNIST_CNN(CNNModel):
         return logits
     
 # model = AdvAEModel()
+        optimizer = keras.optimizers.Adam(0.001)
+        # 'adadelta'
+        model.compile(optimizer=optimizer,
+                      loss=loss,
+                      metrics=[loss, acc])
+        with sess.as_default():
+            es = keras.callbacks.EarlyStopping(monitor='val_loss',
+                                               min_delta=0,
+                                               patience=10, verbose=0,
+                                               mode='auto')
+            mc = keras.callbacks.ModelCheckpoint('best_model.ckpt',
+                                                 monitor='val_loss', mode='auto', verbose=0,
+                                                 save_weights_only=True,
+                                                 save_best_only=True)
+            model.fit(clean_x, clean_y, epochs=100, validation_split=0.1,
+                      # verbose=2,
+                      callbacks=[es, mc])
+            model.load_weights('best_model.ckpt')
+    def train_CNN_old(self, sess, train_x, train_y):
+        """Train CNN part of the graph."""
+        # TODO I'm going to compute a hash of current CNN
+        # architecture. If the file already there, I'm just going to
+        # load it.
+        inputs = keras.layers.Input(shape=self.xshape(), dtype='float32')
+        logits = self.FC(self.CNN(inputs))
+        model = keras.models.Model(inputs, logits)
+        def loss(y_true, y_pred):
+            return tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(
+                    logits=y_pred, labels=y_true))
+        optimizer = keras.optimizers.Adam(0.001)
+        # 'rmsprop'
+        model.compile(optimizer=optimizer,
+                      loss=loss,
+                      metrics=['accuracy'])
+        with sess.as_default():
+            es = keras.callbacks.EarlyStopping(monitor='val_loss',
+                                               min_delta=0,
+                                               patience=10, verbose=0,
+                                               mode='auto')
+            mc = keras.callbacks.ModelCheckpoint('best_model.ckpt',
+                                                 monitor='val_loss', mode='auto', verbose=0,
+                                                 save_weights_only=True,
+                                                 save_best_only=True)
+            model.fit(clean_x, clean_y, epochs=100, validation_split=0.1,
+                      # verbose=2,
+                      callbacks=[es, mc])
+            model.load_weights('best_model.ckpt')
+    def train_AE_simple(self, sess, clean_x):
+        noise_factor = 0.1
+        noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
+        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
+        self.AE.compile('adam', 'binary_crossentropy')
+        with sess.as_default():
+            self.AE.fit(noisy_x, clean_x, verbose=2)
+        
+    def train_AE_old(self, sess, clean_x):
+        noise_factor = 0.1
+        noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
+        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
+
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        rec = self.AE(inputs)
+        model = keras.models.Model(inputs, rec)
+        optimizer = keras.optimizers.RMSprop(0.001)
+        # 'adadelta'
+        model.compile(optimizer=optimizer,
+                      # loss='binary_crossentropy'
+                      loss=keras.losses.mean_squared_error
+        )
+        with sess.as_default():
+            es = keras.callbacks.EarlyStopping(monitor='val_loss',
+                                               min_delta=0,
+                                               patience=5, verbose=0,
+                                               mode='auto')
+            mc = keras.callbacks.ModelCheckpoint('best_model.ckpt',
+                                                 monitor='val_loss', mode='auto', verbose=0,
+                                                 save_weights_only=True,
+                                                 save_best_only=True)
+            model.fit(noisy_x, clean_x, epochs=100, validation_split=0.1, verbose=2, callbacks=[es, mc])
+            model.load_weights('best_model.ckpt')

@@ -17,6 +17,8 @@ from utils import *
 
 from attacks import CLIP_MIN, CLIP_MAX
 from attacks import *
+from train import *
+from resnet import resnet_v2, lr_schedule
 
 class CNNModel(cleverhans.model.Model):
     """This model is used inside AdvAEModel."""
@@ -53,18 +55,17 @@ class AdvAEModel(cleverhans.model.Model):
         # this CNN model is used as victim for attacks
         self.cnn_model = CNNModel(self.CNN, self.FC)
         
-        self.x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        self.y = keras.layers.Input(shape=(10,), dtype='float32')
-        # FIXME get rid of x_ref, integrate attack into model
-        # when self.x is feeding adv input, this acts as the clean reference
-        self.x_ref = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        self.x = keras.layers.Input(shape=self.xshape(), dtype='float32')
+        self.y = keras.layers.Input(shape=self.yshape(), dtype='float32')
 
+        self.setup_attack_params()
         self.setup_loss()
         self.setup_prediction()
         self.setup_metrics()
+        self.setup_trainloss()
         self.setup_trainstep()
-        self.unified_adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
-            self.unified_adv_loss, var_list=self.AE_vars)
+        
+
     @staticmethod
     def name():
         "Override by children models."
@@ -78,6 +79,11 @@ class AdvAEModel(cleverhans.model.Model):
         return {self.O_LOGITS: logits,
                 self.O_PROBS: tf.nn.softmax(logits=logits)}
 
+    def xshape(self):
+        return (28,28,1)
+    def yshape(self):
+        return (10,)
+
     @staticmethod
     def add_noise(x):
         noise_factor = 0.5
@@ -85,12 +91,17 @@ class AdvAEModel(cleverhans.model.Model):
         noisy_x = tf.clip_by_value(noisy_x, CLIP_MIN, CLIP_MAX)
         return noisy_x
     @staticmethod
-    def ce_wrapper(logits, labels):
+    def sigmoid_xent(logits=None, labels=None):
         return tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=logits, labels=labels))
     @staticmethod
-    def accuracy_wrapper(logits, labels):
+    def softmax_xent(logits=None, labels=None):
+        return tf.reduce_mean(
+            tf.nn.softmax_cross_entropy_with_logits_v2(
+                logits=logits, labels=labels))
+    @staticmethod
+    def accuracy_wrapper(logits=None, labels=None):
         return tf.reduce_mean(tf.cast(tf.equal(
             tf.argmax(logits, axis=1),
             tf.argmax(labels, 1)), dtype=tf.float32))
@@ -102,6 +113,7 @@ class AdvAEModel(cleverhans.model.Model):
         return sess.run(acc, feed_dict={x: x_test, y: y_test})
 
     def setup_loss(self):
+        print('Seting up loss ..')
         high = self.CNN(self.x)
         # logits = self.FC(high)
         
@@ -109,18 +121,19 @@ class AdvAEModel(cleverhans.model.Model):
         rec_high = self.CNN(rec)
         rec_logits = self.FC(rec_high)
 
-        self.C0_loss = self.ce_wrapper(rec, self.x)
-        self.C1_loss = self.ce_wrapper(rec_high, high)
-        self.C2_loss = self.ce_wrapper(rec_logits, self.y)
+        self.C0_loss = self.sigmoid_xent(self.AE1(self.x), self.x)
+        self.C1_loss = self.sigmoid_xent(rec_high, tf.nn.sigmoid(high))
+        self.C2_loss = self.softmax_xent(rec_logits, self.y)
 
         noisy_x = self.add_noise(self.x)
         noisy_rec = self.AE(noisy_x)
         noisy_rec_high = self.CNN(noisy_rec)
         noisy_rec_logits = self.FC(noisy_rec_high)
 
-        self.N0_loss = self.ce_wrapper(noisy_rec, self.x)
-        self.N1_loss = self.ce_wrapper(noisy_rec_high, high)
-        self.N2_loss = self.ce_wrapper(noisy_rec_logits, self.y)
+        self.N0_loss = self.sigmoid_xent(self.AE1(noisy_x), self.x)
+        self.N0_l2_loss = tf.reduce_mean(tf.pow(self.AE(noisy_x) - self.x, 2))
+        self.N1_loss = self.sigmoid_xent(noisy_rec_high, tf.nn.sigmoid(high))
+        self.N2_loss = self.softmax_xent(noisy_rec_logits, self.y)
 
         adv_x = my_PGD(self, self.x)
         adv_high = self.CNN(adv_x)
@@ -130,9 +143,9 @@ class AdvAEModel(cleverhans.model.Model):
         adv_rec_high = self.CNN(adv_rec)
         adv_rec_logits = self.FC(adv_rec_high)
         
-        self.A0_loss = self.ce_wrapper(adv_rec, self.x)
-        self.A1_loss = self.ce_wrapper(adv_rec_high, high)
-        self.A2_loss = self.ce_wrapper(adv_rec_logits, self.y)
+        self.A0_loss = self.sigmoid_xent(self.AE1(adv_x), self.x)
+        self.A1_loss = self.sigmoid_xent(adv_rec_high, tf.nn.sigmoid(high))
+        self.A2_loss = self.softmax_xent(adv_rec_logits, self.y)
 
         # pre-denoiser: train denoiser such that the denoised x is
         # itself robust
@@ -141,11 +154,12 @@ class AdvAEModel(cleverhans.model.Model):
         postadv_high = self.CNN(postadv)
         postadv_logits = self.FC(postadv_high)
 
-        self.P0_loss = self.ce_wrapper(postadv, self.x)
-        self.P1_loss = self.ce_wrapper(postadv_high, high)
-        self.P2_loss = self.ce_wrapper(postadv_logits, self.y)
+        self.P0_loss = self.sigmoid_xent(postadv, tf.nn.sigmoid(self.x))
+        self.P1_loss = self.sigmoid_xent(postadv_high, tf.nn.sigmoid(high))
+        self.P2_loss = self.softmax_xent(postadv_logits, self.y)
         
     def setup_prediction(self):
+        print('Setting up prediction ..')
         # no AE, just CNN
         CNN_logits = self.FC(self.CNN(self.x))
         self.CNN_accuracy = self.accuracy_wrapper(CNN_logits, self.y)
@@ -163,6 +177,7 @@ class AdvAEModel(cleverhans.model.Model):
         noisy_logits = self.FC(self.CNN(self.AE(noisy_x)))
         self.noisy_accuracy = self.accuracy_wrapper(noisy_logits, self.y)
     def setup_metrics(self):
+        print('Setting up metrics ..')
         # TODO monitoring each of these losses and adjust weights
         self.metrics = [
             # clean data
@@ -173,6 +188,7 @@ class AdvAEModel(cleverhans.model.Model):
             self.A0_loss, self.A1_loss, self.A2_loss, self.adv_accuracy,
             # postadv
             self.P0_loss, self.P1_loss, self.P2_loss, self.postadv_accuracy
+            # I also need a baseline for the CNN performance probably?
         ]
         
         self.metric_names = [
@@ -181,10 +197,21 @@ class AdvAEModel(cleverhans.model.Model):
             'A0_loss', 'A1_loss', 'A2_loss', 'adv_accuracy',
             'P0_loss', 'P1_loss', 'P2_loss', 'postadv_accuracy']
 
+    # def setup_AE(self):
+    #     """From noise_x to x."""
+    #     inputs = keras.layers.Input(shape=self.xshape(), dtype='float32')
+    #     x = keras.layers.Flatten()(inputs)
+    #     x = keras.layers.Dense(100, activation='relu')(x)
+    #     x = keras.layers.Dense(20, activation='relu')(x)
+    #     x = keras.layers.Dense(100, activation='relu')(x)
+    #     x = keras.layers.Dense(28*28, activation='sigmoid')(x)
+    #     decoded = keras.layers.Reshape([28,28,1])(x)
+    #     self.AE = keras.models.Model(inputs, decoded)
+        
     def setup_AE(self):
-        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        # x = keras.layers.Input(shape=(28,28,1,), dtype='float32')
         """From noise_x to x."""
+        inputs = keras.layers.Input(shape=self.xshape(), dtype='float32')
+        # inputs = keras.layers.Input(shape=(28,28,1), dtype='float32')
         # denoising
         x = keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
         x = keras.layers.MaxPooling2D((2, 2), padding='same')(x)
@@ -196,14 +223,14 @@ class AdvAEModel(cleverhans.model.Model):
         x = keras.layers.UpSampling2D((2, 2))(x)
         x = keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same')(x)
         x = keras.layers.UpSampling2D((2, 2))(x)
-        decoded = keras.layers.Conv2D(1, (3, 3), activation='sigmoid', padding='same')(x)
-        self.AE = keras.models.Model(inputs, decoded)
-        
+        decoded = keras.layers.Conv2D(1, (3, 3), padding='same')(x)
+        self.AE1 = keras.models.Model(inputs, decoded)
+        self.AE = keras.models.Model(inputs, keras.layers.Activation('sigmoid')(decoded))
 
     def setup_CNN(self):
-        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        inputs = keras.layers.Input(shape=self.xshape(), dtype='float32')
         # FIXME this also assigns self.conv_layers
-        x = keras.layers.Reshape([28, 28, 1])(inputs)
+        x = keras.layers.Reshape(self.xshape())(inputs)
         x = keras.layers.Conv2D(32, 3)(x)
         x = keras.layers.Activation('relu')(x)
         x = keras.layers.Conv2D(32, 3)(x)
@@ -249,127 +276,139 @@ class AdvAEModel(cleverhans.model.Model):
         saver = tf.train.Saver(var_list=self.AE_vars)
         saver.restore(sess, path)
 
-    def train_CNN(self, sess, clean_x, clean_y):
-        """Train CNN part of the graph."""
-        # TODO I'm going to compute a hash of current CNN
-        # architecture. If the file already there, I'm just going to
-        # load it.
-        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        logits = self.FC(self.CNN(inputs))
-        model = keras.models.Model(inputs, logits)
-        def loss(y_true, y_pred):
-            return tf.reduce_mean(
-                tf.nn.softmax_cross_entropy_with_logits(
-                    logits=y_pred, labels=y_true))
-        optimizer = keras.optimizers.Adam(0.001)
-        # 'rmsprop'
-        model.compile(optimizer=optimizer,
-                      loss=loss,
-                      metrics=['accuracy'])
-        with sess.as_default():
-            es = keras.callbacks.EarlyStopping(monitor='val_loss',
-                                               min_delta=0,
-                                               patience=5, verbose=0,
-                                               mode='auto')
-            mc = keras.callbacks.ModelCheckpoint('best_model.ckpt',
-                                                 monitor='val_loss', mode='auto', verbose=0,
-                                                 save_weights_only=True,
-                                                 save_best_only=True)
-            model.fit(clean_x, clean_y, epochs=100, validation_split=0.1, verbose=2, callbacks=[es, mc])
-            model.load_weights('best_model.ckpt')
+    def train_CNN(self, sess, train_x, train_y):
+        my_training(sess, self.x, self.y,
+                    self.CNN_loss,
+                    self.CNN_train_step,
+                    [self.CNN_accuracy], ['accuracy'],
+                    train_x, train_y,
+                    num_epochs=200,
+                    patience=10)
+    def train_Adv(self, sess, train_x, train_y):
+        """Adv training."""
+        my_training(sess, self.x, self.y,
+                    self.adv_loss,
+                    self.adv_train_step,
+                    self.metrics, model.metric_names,
+                    train_x, train_y,
+                    plot_prefix=advprefix,
+                    num_epochs=10,
+                    patience=2)
 
-    def train_AE(self, sess, clean_x):
-        noise_factor = 0.5
-        noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
-        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
-        
-        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        rec = self.AE(inputs)
-        model = keras.models.Model(inputs, rec)
-        # def loss(y_true, y_pred):
-        #     return tf.reduce_mean(
-        #         tf.nn.softmax_cross_entropy_with_logits(
-        #             logits=y_pred, labels=y_true))
-        # model.compile(optimizer='rmsprop', loss=loss, metrics=['accuracy'])
-        optimizer = keras.optimizers.Adam(0.001)
-        # 'adadelta'
-        model.compile(optimizer=optimizer,
-                      loss='binary_crossentropy')
-        with sess.as_default():
-            es = keras.callbacks.EarlyStopping(monitor='val_loss',
-                                               min_delta=0,
-                                               patience=5, verbose=0,
-                                               mode='auto')
-            mc = keras.callbacks.ModelCheckpoint('best_model.ckpt',
-                                                 monitor='val_loss', mode='auto', verbose=0,
-                                                 save_weights_only=True,
-                                                 save_best_only=True)
-            model.fit(noisy_x, clean_x, epochs=100, validation_split=0.1, verbose=2, callbacks=[es, mc])
-            model.load_weights('best_model.ckpt')
+    def train_AE(self, sess, train_x, train_y):
+        """Technically I don't need clean y, but I'm going to monitor the noisy accuracy."""
+        my_training(sess, self.x, self.y,
+                    self.N0_loss, self.AE_train_step,
+                    [self.noisy_accuracy], ['noisy_acc'],
+                    train_x, train_y,
+                    patience=5)
 
-    def test_CW(self, sess, test_x, test_y):
-        """test_x and test_y should be 100 dim."""
-        # Test AE rec output before and after
-        adv_x = my_CW(self, sess, self.x, self.y)
+    def setup_attack_params(self):
+        self.FGSM_params = {'eps': 0.3}
+        self.PGD_params = {'eps': 0.3,
+                           'nb_iter': 40,
+                           'eps_iter': 0.01}
+        self.JSMA_params = {}
+        self.CW_params = {'max_iterations': 1000,
+                          'learning_rate': 0.2}
+
+    def test_attack(self, sess, test_x, test_y, name):
+        """Reurn images and titles."""
+        images = []
+        titles = []
+        # JSMA is pretty slow ..
+        # attack_funcs = [my_FGSM, my_PGD, my_JSMA]
+        # attack_names = ['FGSM', 'PGD', 'JSMA']
+        if name is 'FGSM':
+            attack = lambda m, x: my_FGSM(m, x, self.FGSM_params)
+        elif name is 'PGD':
+            attack = lambda m, x: my_PGD(m, x, self.PGD_params)
+        elif name is 'JSMA':
+            attack = lambda m, x: my_JSMA(m, x, self.JSMA_params)
+        elif name is 'CW':
+            attack = lambda m, x: my_CW(m, sess, x, self.y, self.CW_params)
+        else:
+            assert False
+
+        adv_x = attack(self, self.x)
         adv_rec = self.AE(adv_x)
-        
-        adv_x_CNN = my_CW(self.cnn_model, sess, self.x, self.y)
+
+        # This is tricky. I want to get the baseline of attacking
+        # clean image AND VANILLA CNN. Thus, I'm using the proxy
+        # cnn model.
+        adv_x_CNN = attack(self.cnn_model, self.x)
         logits = self.FC(self.CNN(adv_x_CNN))
         accuracy = self.accuracy_wrapper(logits, self.y)
 
         adv_logits = self.FC(self.CNN(self.AE(adv_x)))
         adv_accuracy = self.accuracy_wrapper(adv_logits, self.y)
 
-        postadv = my_CW(self.cnn_model, sess, self.AE(self.x), self.y)
+        # remember to compare visually postadv with rec (i.e. AE(x))
+        postadv = attack(self.cnn_model, self.AE(self.x))
         postadv_logits = self.FC(self.CNN(postadv))
         postadv_accuracy = self.accuracy_wrapper(postadv_logits, self.y)
 
-        res = {}
-
-        res['adv_x'] = adv_x
-
-        res['adv_x_CNN'] = adv_x_CNN
-        res['pred'] = tf.argmax(logits, axis=1)
-        res['accuracy'] = accuracy
-
-        res['adv_rec'] = adv_rec
-        res['adv_pred'] = tf.argmax(adv_logits, axis=1)
-        res['adv_acc'] = adv_accuracy
-        
-        res['postadv'] = postadv
-        res['postadv_pred'] = tf.argmax(postadv_logits, axis=1)
-        res['postadv_acc'] = postadv_accuracy
-        t = time.time()
-        print('Testing CW attack ..')
-        res = sess.run(res, feed_dict={self.x: test_x, self.y: test_y})
-        print('CW done. Time: {:.3f}'.format(time.time()-t))
-        return res
-        
-
-    def test_all(self, sess, test_x, test_y, run_CW=False, filename='out.pdf'):
-        """Test clean data x and y.
-
-        - Use only CNN, to test whether CNN is functioning
-        - Test AE, output image for before and after
-        - Test AE + CNN, to test whether the entire system works
-
-        CW is costly, so by default no running for it. If you want it,
-        set it to true.
-
-        """
-        # inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        # labels = keras.layers.Input(shape=(10,), dtype='float32')
-
-        indices = random.sample(range(test_x.shape[0]), 100)
-        test_x = test_x[indices]
-        test_y = test_y[indices]
-        feed_dict = {self.x: test_x, self.y: test_y}
-
         to_run = {}
+        to_run['adv_x'] = adv_x
+
+        to_run['adv_x_CNN'] = adv_x_CNN
+        to_run['pred'] = tf.argmax(logits, axis=1)
+        to_run['accuracy'] = accuracy
+
+        to_run['adv_rec'] = adv_rec
+        to_run['adv_pred'] = tf.argmax(adv_logits, axis=1)
+        to_run['adv_acc'] = adv_accuracy
+
+        to_run['postadv'] = postadv
+        to_run['postadv_pred'] = tf.argmax(postadv_logits, axis=1)
+        to_run['postadv_acc'] = postadv_accuracy
+
+        # TODO mark the correct and incorrect predictions
+        # to_run += [adv_x, adv_rec, postadv]
+        # TODO add prediction result
+        # titles += ['{} adv_x'.format(name), 'adv_rec', 'postadv']
+        
+            
+        # TODO select 5 correct and incorrect examples
+        # indices = random.sample(range(test_x.shape[0]), 10)
+        # test_x = test_x[indices]
+        # test_y = test_y[indices]
+        # feed_dict = {self.x: test_x, self.y: test_y}
+        
+        print('Testing attack {} ..'.format(name))
+        t = time.time()
+        res = sess.run(to_run, feed_dict={self.x: test_x, self.y: test_y})
+        print('Attack done. Time: {:.3f}'.format(time.time()-t))
+
+        print('acc: {}, adv_acc: {}, postadv_acc: {}'
+              .format(res['accuracy'], res['adv_acc'], res['postadv_acc']))
+        
+        images += list(res['adv_x_CNN'][:10])
+        tmp = list(res['pred'][:10])
+        tmp[0] = '{} adv_x_CNN\n({:.3f}): {}'.format(name, res['accuracy'], tmp[0])
+        titles += tmp
+
+        images += list(res['adv_x'][:10])
+        titles += ['adv_x'] + ['']*9
+
+        images += list(res['adv_rec'][:10])
+        tmp = list(res['adv_pred'][:10])
+        tmp[0] = '{} adv_rec\n({:.3f}): {}'.format(name, res['adv_acc'], tmp[0])
+        titles += tmp
+
+        images += list(res['postadv'][:10])
+        tmp = list(res['postadv_pred'][:10])
+        tmp[0] = 'postadv\n({:.3f}): {}'.format(res['postadv_acc'], tmp[0])
+        titles += tmp
+        return images, titles
+
+    def test_Model(self, sess, test_x, test_y):
+        """Test CNN and AE models."""
+        # select 10
+        images = []
         titles = []
 
-        if run_CW:
-            cwres = self.test_CW(sess, test_x, test_y)
+        to_run = {}
             
         # Test AE rec output before and after
         rec = self.AE(self.x)
@@ -381,82 +420,13 @@ class AdvAEModel(cleverhans.model.Model):
         to_run['rec'] = rec
         to_run['noisy_x'] = noisy_x
         to_run['noisy_rec'] = noisy_rec
+        print('Testing CNN and AE ..')
+        res = sess.run(to_run, feed_dict={self.x: test_x, self.y: test_y})
 
-        # to_run += [self.x, rec, noisy_x, noisy_rec]
-        # titles += ['x', 'rec', 'noisy_x', 'noisy_rec']
-        # titles += [tf.constant('x', dtype=tf.string, shape=self.x.shape[0])]
-
-        # JSMA is pretty slow ..
-        attack_funcs = [my_FGSM, my_PGD, my_JSMA]
-        attack_names = ['FGSM', 'PGD', 'JSMA']
-        # attack_funcs = [self.myFGSM, self.myPGD]
-        # attack_names = ['FGSM', 'PGD']
-        if run_CW:
-            # attack_funcs += [lambda x: self.myCW(sess, x, self.y)]
-            # this name will be consumed later to add CW result.
-            # FIXME this is very ugly
-            attack_names += ['CW']
-
-        # first class methods!
-        for attack, name in zip(attack_funcs, attack_names):
-            adv_x = attack(self, self.x)
-            adv_rec = self.AE(adv_x)
-
-            # This is tricky. I want to get the baseline of attacking
-            # clean image AND VANILLA CNN. Thus, I'm using the proxy
-            # cnn model.
-            adv_x_CNN = attack(self.cnn_model, self.x)
-            logits = self.FC(self.CNN(adv_x_CNN))
-            accuracy = self.accuracy_wrapper(logits, self.y)
-            
-            adv_logits = self.FC(self.CNN(self.AE(adv_x)))
-            adv_accuracy = self.accuracy_wrapper(adv_logits, self.y)
-
-            # remember to compare visually postadv with rec (i.e. AE(x))
-            postadv = attack(self.cnn_model, self.AE(self.x))
-            postadv_logits = self.FC(self.CNN(postadv))
-            postadv_accuracy = self.accuracy_wrapper(postadv_logits, self.y)
-
-            to_run[name] = {}
-            to_run[name]['adv_x'] = adv_x
-            
-            to_run[name]['adv_x_CNN'] = adv_x_CNN
-            to_run[name]['pred'] = tf.argmax(logits, axis=1)
-            to_run[name]['accuracy'] = accuracy
-            
-            to_run[name]['adv_rec'] = adv_rec
-            to_run[name]['adv_pred'] = tf.argmax(adv_logits, axis=1)
-            to_run[name]['adv_acc'] = adv_accuracy
-            
-            to_run[name]['postadv'] = postadv
-            to_run[name]['postadv_pred'] = tf.argmax(postadv_logits, axis=1)
-            to_run[name]['postadv_acc'] = postadv_accuracy
-            
-            
-            # TODO mark the correct and incorrect predictions
-            # to_run += [adv_x, adv_rec, postadv]
-            # TODO add prediction result
-            # titles += ['{} adv_x'.format(name), 'adv_rec', 'postadv']
-            
-        # TODO select 5 correct and incorrect examples
-        # indices = random.sample(range(test_x.shape[0]), 10)
-        # test_x = test_x[indices]
-        # test_y = test_y[indices]
-        # feed_dict = {self.x: test_x, self.y: test_y}
-        
-        print('Testing AE and Adv attacks ..')
-        res = sess.run(to_run, feed_dict=feed_dict)
-        if run_CW:
-            res['CW'] = cwres
-
-        # select 10
-        images = []
-        titles = []
-        
-        accs = sess.run([self.CNN_accuracy, self.accuracy, self.noisy_accuracy], feed_dict=feed_dict)
+        accs = sess.run([self.CNN_accuracy, self.accuracy, self.noisy_accuracy],
+                        feed_dict={self.x: test_x, self.y: test_y})
         print('raw accuracies (raw CNN, AE clean, AE noisy): {}'.format(accs))
-
-        # FIXME so ugly
+        
         images += list(res['x'][:10])
         tmp = list(res['y'][:10])
         tmp[0] = 'x ({:.3f}): {}'.format(accs[0], tmp[0])
@@ -465,36 +435,52 @@ class AdvAEModel(cleverhans.model.Model):
         for name, acc in zip(['rec', 'noisy_x', 'noisy_rec'], [accs[1], accs[2], accs[2]]):
             images += list(res[name][:10])
             titles += ['{} ({:.3f})'.format(name, acc)] + ['']*9
-        for name in attack_names:
-            images += list(res[name]['adv_x_CNN'][:10])
-            tmp = list(res[name]['pred'][:10])
-            tmp[0] = '{} adv_x_CNN\n({:.3f}): {}'.format(name, res[name]['accuracy'], tmp[0])
-            titles += tmp
 
-            images += list(res[name]['adv_x'][:10])
-            titles += ['adv_x'] + ['']*9
-
-            images += list(res[name]['adv_rec'][:10])
-            tmp = list(res[name]['adv_pred'][:10])
-            tmp[0] = '{} adv_rec\n({:.3f}): {}'.format(name, res[name]['adv_acc'], tmp[0])
-            titles += tmp
-            
-            images += list(res[name]['postadv'][:10])
-            tmp = list(res[name]['postadv_pred'][:10])
-            tmp[0] = 'postadv\n({:.3f}): {}'.format(res[name]['postadv_acc'], tmp[0])
-            titles += tmp
-            # titles += list(res[name]['postadv_pred'][:10])
-
-            print('{} attack accuracy: adv: {}, postadv: {}'
-                  .format(name, res[name]['adv_acc'], res[name]['postadv_acc']))
+        return images, titles
         
-        # res = np.array(res)[:,:10]
-        # images = np.concatenate(res)
-        # titles = np.transpose([titles] * 10).reshape(-1)
+        
+
+    def test_all(self, sess, test_x, test_y, attacks=[], filename='out.pdf'):
+        """Test clean data x and y.
+
+        - Use only CNN, to test whether CNN is functioning
+        - Test AE, output image for before and after
+        - Test AE + CNN, to test whether the entire system works
+
+        CW is costly, so by default no running for it. If you want it,
+        set it to true.
+
+        """
+        # random 100 images for testing
+        indices = random.sample(range(test_x.shape[0]), 100)
+        test_x = test_x[indices]
+        test_y = test_y[indices]
+
+        all_images = []
+        all_titles = []
+
+        images, titles = self.test_Model(sess, test_x, test_y)
+        all_images.extend(images)
+        all_titles.extend(titles)
+        for name in attacks:
+            images, titles = self.test_attack(sess, test_x, test_y, name)
+            all_images.extend(images)
+            all_titles.extend(titles)
+        
         print('Plotting result ..')
-        grid_show_image(images, 10, int(len(images)/10), filename=filename, titles=titles)
+        grid_show_image(all_images, 10, int(len(all_images)/10), filename=filename, titles=all_titles)
         print('Done. Saved to {}'.format(filename))
+
     def setup_trainstep(self):
+        print('Setting up train step ..')
+        self.AE_train_step = tf.train.AdamOptimizer(0.001).minimize(
+            self.AE_loss, var_list=self.AE_vars)
+        self.adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
+            self.adv_loss, var_list=self.AE_vars)
+        self.CNN_train_step = tf.train.AdamOptimizer(0.001).minimize(
+            self.CNN_loss, var_list=self.CNN_vars+self.FC_vars)
+        
+    def setup_trainloss(self):
         """Overwrite by subclasses to customize the loss.
 
         - 0: pixel
@@ -522,93 +508,112 @@ class AdvAEModel(cleverhans.model.Model):
         self.P0_loss, self.P1_loss, self.P2_loss,
         
         """
-        self.unified_adv_loss = (self.A2_loss)
+        print('Setting up train loss ..')
+        self.adv_loss = (self.A2_loss)
+        CNN_logits = self.FC(self.CNN(self.x))
+        self.CNN_loss = self.softmax_xent(CNN_logits, self.y)
+        self.AE_loss = self.N0_loss + self.N0_l2_loss
 # one
 class A2_Model(AdvAEModel):
     """This is a dummy class, exactly same as AdvAEModel except name()."""
     def name():
         return 'A2'
-    def setup_trainstep(self):
-        self.unified_adv_loss = self.A2_loss
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = self.A2_loss
 class A1_Model(AdvAEModel):
     def name():
         return 'A1'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A1_loss)
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A1_loss)
 class A12_Model(AdvAEModel):
     def name():
         return 'A12'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A2_loss + self.A1_loss)
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A2_loss + self.A1_loss)
 # two
 class N0_A2_Model(AdvAEModel):
     def name():
         return 'N0_A2'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A2_loss + self.N0_loss)
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A2_loss + self.N0_loss)
 class C0_A2_Model(AdvAEModel):
     def name():
         return 'C0_A2'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A2_loss + self.C0_loss)
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A2_loss + self.C0_loss)
 class C2_A2_Model(AdvAEModel):
     def name():
         return 'C2_A2'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A2_loss + self.C2_loss)
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A2_loss + self.C2_loss)
 
 # three
 class C0_N0_A2_Model(AdvAEModel):
     def name():
         return 'C0_N0_A2'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A2_loss + self.N0_loss + self.C0_loss)
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A2_loss + self.N0_loss + self.C0_loss)
 class C2_N0_A2_Model(AdvAEModel):
     def name():
         return 'C2_N0_A2'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A2_loss + self.N0_loss + self.C2_loss)
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A2_loss + self.N0_loss + self.C2_loss)
 
 # P models
 class P2_Model(AdvAEModel):
     def name():
         return 'P2'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.P2_loss)
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.P2_loss)
 class A2_P2_Model(AdvAEModel):
     def name():
         return 'A2_P2'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A2_loss + self.P2_loss)
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A2_loss + self.P2_loss)
 class N0_A2_P2_Model(AdvAEModel):
     def name():
         return 'N0_A2_P2'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A2_loss + self.P2_loss + self.N0_loss)
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A2_loss + self.P2_loss + self.N0_loss)
         
 class C0_N0_A2_P2_Model(AdvAEModel):
     def name():
         return 'C0_N0_A2_P2'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A2_loss + self.P2_loss +
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A2_loss + self.P2_loss +
                                  self.N0_loss + self.C0_loss)
 class C2_A2_P2_Model(AdvAEModel):
     def name():
         return 'C2_A2_P2'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A2_loss + self.P2_loss +
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A2_loss + self.P2_loss +
                                  self.C2_loss)
 class C2_N0_A2_P2_Model(AdvAEModel):
     def name():
         return 'C2_N0_A2_P2'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A2_loss + self.P2_loss +
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A2_loss + self.P2_loss +
                                  self.N0_loss + self.C2_loss)
 class A2_P1_Model(AdvAEModel):
     def name():
         return 'A2_P1'
-    def setup_trainstep(self):
-        self.unified_adv_loss = (self.A2_loss + self.P1_loss)
+    def setup_trainloss(self):
+        super().setup_trainloss()
+        self.adv_loss = (self.A2_loss + self.P1_loss)
         
 class AdvAEModel_Var0(AdvAEModel):
     "This is the same as AdvAEModel. I'm not using it, just use as a reference."
@@ -679,6 +684,105 @@ class FCAdvAEModel(AdvAEModel):
         decoded = keras.layers.Reshape([28,28,1])(x)
         self.AE = keras.models.Model(inputs, decoded)
 
+# TODO use data augmentation during training
+# TODO add lr schedule
+class MyResNet(AdvAEModel):
+    def setup_CNN(self):
+        n = 3
+        depth = n * 9 + 2
+        print('Creating resnet graph ..')
+        model = resnet_v2(input_shape=self.xshape(), depth=depth)
+        print('Resnet graph created.')
+        self.CNN = model
+    def train_CNN(self, sess, train_x, train_y):
+        print('Using data augmentation for training Resnet ..')
+        augment = Cifar10Augment()
+        my_training(sess, self.x, self.y,
+                    self.CNN_loss,
+                    self.CNN_train_step,
+                    [self.CNN_accuracy], ['accuracy'],
+                    train_x, train_y,
+                    num_epochs=200,
+                    data_augment=augment,
+                    patience=10)
+    def setup_trainstep(self):
+        """Resnet needs scheduled training rate decay.
+
+        lr = 1e-3
+        if epoch > 180:
+            lr *= 0.5e-3
+        elif epoch > 160:
+            lr *= 1e-3
+        elif epoch > 120:
+            lr *= 1e-2
+        elif epoch > 80:
+            lr *= 1e-1
+
+        values: 1e-3, 1e-1, 1e-2, 1e-3, 0.5e-3
+        boundaries: 0, 80, 120, 160, 180
+        
+        "step_size_schedule": [[0, 0.1], [40000, 0.01], [60000, 0.001]],
+        
+        """
+        # FIXME what optimizer to use?
+        self.AE_train_step = tf.train.AdamOptimizer(0.001).minimize(
+            self.AE_loss, var_list=self.AE_vars)
+        self.adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
+            self.adv_loss, var_list=self.AE_vars)
+
+        global_step = tf.train.get_or_create_global_step()
+        # schedules = [[0, 0.1], [400, 0.01], [600, 0.001]]
+        schedules = [[0, 1e-3], [400, 1e-3], [800, 0.5e-3]]
+        boundaries = [s[0] for s in schedules][1:]
+        values = [s[1] for s in schedules]
+        learning_rate = tf.train.piecewise_constant(
+            tf.cast(global_step, tf.int32),
+            boundaries,
+            values)
+        momentum = 0.9
+        # FIXME verify the learning rate schedule is functioning
+        # self.CNN_train_step = tf.train.MomentumOptimizer(
+        self.CNN_train_step = tf.train.AdamOptimizer(
+            learning_rate).minimize(
+            # learning_rate, momentum).minimize(
+                self.CNN_loss,
+                global_step=global_step,
+                var_list=self.CNN_vars+self.FC_vars)
+        # self.CNN_train_step = tf.train.AdamOptimizer(0.001).minimize(
+        #     self.CNN_loss, var_list=self.CNN_vars+self.FC_vars)
+    def xshape(self):
+        return (32,32,3,)
+    def yshape(self):
+        return (10,)
+    def setup_AE(self):
+        inputs = keras.layers.Input(shape=self.xshape(), dtype='float32')
+        # denoising
+        x = keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same')(inputs)
+        x = keras.layers.MaxPooling2D((2, 2), padding='same')(x)
+        x = keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same')(x)
+        encoded = keras.layers.MaxPooling2D((2, 2), padding='same')(x)
+        # at this point the representation is (7, 7, 32)
+        # (?, 8, 8, 32) for cifar10
+
+        x = keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same')(encoded)
+        x = keras.layers.UpSampling2D((2, 2))(x)
+        x = keras.layers.Conv2D(32, (3, 3), activation='relu', padding='same')(x)
+        x = keras.layers.UpSampling2D((2, 2))(x)
+        
+        # here the fisrt channel is 3 for CIFAR model
+        decoded = keras.layers.Conv2D(3, (3, 3), padding='same')(x)
+        
+        self.AE1 = keras.models.Model(inputs, decoded)
+        self.AE = keras.models.Model(inputs, keras.layers.Activation('sigmoid')(decoded))
+        
+    def setup_attack_params(self):
+        self.FGSM_params = {'eps': 4}
+        self.PGD_params = {'eps': 8.,
+                           'nb_iter': 10,
+                           'eps_iter': 2.}
+        self.JSMA_params = {}
+        self.CW_params = {'max_iterations': 1000,
+                          'learning_rate': 0.2}
     
 def __test():
     sess = tf.Session()

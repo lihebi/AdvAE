@@ -47,7 +47,65 @@ def __test():
     plt.savefig('out.pdf')
     plt.close(fig)
 
-def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS):
+class Cifar10Augment():
+    """Augment CIFAR10 data.
+
+    I'm going to build a TF graph for augmenting it. Then, I have two
+    ways to use it:
+
+    1. each time I generate a batch, I'm going to feed the batch data
+    into the graph and obtain the concrete augmented data.
+
+    2. build the augmentation graph into the model.
+
+    I'm going to try the first method here, as the testing anti adv
+    examples should be generated against only original data.
+
+    But during adv training, the adv examples can (and should) be
+    generated from augmented data.
+
+    FIXME seems that original image (without these augmentation) are
+    not used for training at all. Why is that? Is it because clean
+    ones are not necessary anymore after using these random augmentations?
+
+    """
+    def __init__(self):
+        self.x = keras.layers.Input(shape=(32,32,3), dtype='float32')
+        model = self.__augment_model()
+        self.y = model(self.x)
+        
+    def augment_batch(self, sess, batch_x):
+        return sess.run(self.y, feed_dict={self.x: batch_x})
+        
+    @staticmethod
+    def __augment_model():
+        IMAGE_SIZE = 32
+
+        # create augmentation computational graph
+        # x_input_placeholder = tf.placeholder(tf.float32, shape=[None, 32, 32, 3])
+        inputs = keras.layers.Input(shape=(32,32,3), dtype='float32')
+        def pad_func(x):
+            return tf.map_fn(lambda img: tf.image.resize_image_with_crop_or_pad(
+                img, IMAGE_SIZE + 4, IMAGE_SIZE + 4),
+                      x)
+        padded = keras.layers.Lambda(pad_func)(inputs)
+        def crop_func(x):
+            return tf.map_fn(lambda img: tf.random_crop(
+                img, [IMAGE_SIZE, IMAGE_SIZE, 3]),
+                             x)
+        cropped = keras.layers.Lambda(crop_func)(padded)
+
+        def flip_func(x):
+            return tf.map_fn(lambda img: tf.image.random_flip_left_right(img), x)
+        flipped = keras.layers.Lambda(flip_func)(cropped)
+        return keras.models.Model(inputs, flipped)
+
+
+def my_training(sess, model_x, model_y,
+                loss, train_step, metrics, metric_names,
+                train_x, train_y,
+                data_augment=None,
+                plot_prefix='', patience=2, batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS):
     """Adversarially training the model. Each batch, use PGD to generate
     adv examples, and use that to train the model.
 
@@ -59,21 +117,18 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
     FIXME metrics and metric_names are not coming from the same source.
 
     """
-    # FIXME refactor this with train.
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
+    (train_x, train_y), (val_x, val_y) = validation_split(train_x, train_y)
 
     best_loss = math.inf
     best_epoch = 0
-    # DEBUG
-    PATIENCE = 2
-    patience = PATIENCE
+    pat = patience
     print_interval = 20
 
     plot_data = {'metrics': [],
                  'simple': [],
                  'loss': []}
 
-    saver = tf.train.Saver(max_to_keep=10)
+    saver = tf.train.Saver(max_to_keep=100)
     
     for i in range(num_epochs):
         epoch_t = time.time()
@@ -86,7 +141,11 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
             end = (j+1) * batch_size
             batch_x = train_x[shuffle_idx[start:end]]
             batch_y = train_y[shuffle_idx[start:end]]
-            feed_dict = {model.x: batch_x, model.y: batch_y}
+
+            if data_augment is not None:
+                batch_x = data_augment.augment_batch(sess, batch_x)
+            
+            feed_dict = {model_x: batch_x, model_y: batch_y}
             # actual training
             # 0.12
             sess.run([train_step], feed_dict=feed_dict)
@@ -101,8 +160,8 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
                 plot_data['metrics'].append(m)
                 plot_data['loss'].append(l)
                 # this introduces only small overhead
-                adv_training_plot(plot_data['metrics'], model.metric_names, '{}-training-process.pdf'.format(plot_prefix), False)
-                adv_training_plot(plot_data['metrics'], model.metric_names, '{}-training-process-split.pdf'.format(plot_prefix), True)
+                adv_training_plot(plot_data['metrics'], metric_names, '{}-training-process.pdf'.format(plot_prefix), False)
+                adv_training_plot(plot_data['metrics'], metric_names, '{}-training-process-split.pdf'.format(plot_prefix), True)
                 # plot loss
                 fig, ax = plt.subplots(dpi=300)
                 ax.plot(plot_data['loss'])
@@ -127,7 +186,7 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
             end = (j+1) * batch_size
             batch_x = val_x[shuffle_idx[start:end]]
             batch_y = val_y[shuffle_idx[start:end]]
-            feed_dict = {model.x: batch_x, model.y: batch_y}
+            feed_dict = {model_x: batch_x, model_y: batch_y}
             # actual training
             l, m = sess.run([loss, metrics], feed_dict=feed_dict)
             all_l.append(l)
@@ -138,7 +197,7 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
         m = np.mean(all_m, 0)
         plot_data['simple'].append(m)
 
-        adv_training_plot(plot_data['simple'], model.metric_names, '{}-training-process-simple.pdf'.format(plot_prefix), True)
+        adv_training_plot(plot_data['simple'], metric_names, '{}-training-process-simple.pdf'.format(plot_prefix), True)
         # save plot data
         with open('images/{}-data.pkl'.format(plot_prefix), 'wb') as fp:
             pickle.dump(plot_data, fp)
@@ -147,18 +206,18 @@ def my_adv_training(sess, model, loss, metrics, train_step, plot_prefix='', batc
         save_path = saver.save(sess, 'tmp/epoch-{}'.format(i))
         
         if best_loss < l:
-            patience -= 1
+            pat -= 1
         else:
             best_loss = l
             best_epoch = i
-            patience = PATIENCE
-        print('EPOCH {}: loss: {:.5f}, time: {:.2f}, patience: {},\t metrics: {}'
-              .format(i, l, time.time()-epoch_t, patience, ', '.join(['{:.5f}'.format(mi) for mi in m])))
-        if patience <= 0:
+            pat = patience
+        print('EPOCH {} / {}: loss: {:.5f}, time: {:.2f}, patience: {},\t metrics: {}'
+              .format(i, num_epochs, l, time.time()-epoch_t, pat, ', '.join(['{:.5f}'.format(mi) for mi in m])))
+        if pat <= 0:
             # restore the best model
             saver.restore(sess, 'tmp/epoch-{}'.format(best_epoch))
             # verify if the best model is restored
-            clean_dict = {model.x: val_x, model.y: val_y}
+            clean_dict = {model_x: val_x, model_y: val_y}
             l = sess.run(loss, feed_dict=clean_dict)
             print('Best loss: {}, restored loss: {}'.format(l, best_loss))
             # FIXME this is not equal, as there's randomness in PGD?

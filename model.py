@@ -477,7 +477,7 @@ class AdvAEModel(cleverhans.model.Model):
 
         to_run['obliadv'] = obliadv, tf.argmax(baseline_logits, axis=1), baseline_acc
         to_run['obliadv_rec'] = obliadv_rec, tf.argmax(obliadv_logits, axis=1), obliadv_acc
-        to_run['whiteadv'] = whiteadv, tf.constant('', shape=(10,), dtype=tf.string), tf.constant(0)
+        to_run['whiteadv'] = whiteadv, tf.constant(0, shape=(10,)), tf.constant(-1)
         to_run['whiteadv_rec'] = whiteadv_rec, tf.argmax(whiteadv_logits, axis=1), whiteadv_acc
         to_run['postadv'] = postadv, tf.argmax(postadv_logits, axis=1), postadv_acc
         
@@ -489,8 +489,12 @@ class AdvAEModel(cleverhans.model.Model):
         for key in res:
             tmp_images, tmp_titles, acc = res[key]
             images.append(tmp_images[:10])
-            titles.append(tmp_titles[:10])
-            fringe = '{}\n{}\n{:.3f}'.format(name, key, acc)
+            if acc == -1:
+                titles.append(['']*10)
+                fringe = '{}\n{}'.format(name, key)
+            else:
+                titles.append(tmp_titles[:10])
+                fringe = '{}\n{}\n{:.3f}'.format(name, key, acc)
             fringes.append(fringe)
             print(fringe.replace('\n', ' '))
         return images, titles, fringes

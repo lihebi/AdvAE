@@ -61,6 +61,7 @@ def my_JSMA(model, x, params=dict()):
     jsma_params = {'theta': 1., 'gamma': 0.1,
                    'clip_min': CLIP_MIN, 'clip_max': CLIP_MAX,
                    'y_target': None}
+    jsma_params.update(params)
     return jsma.generate(x, **jsma_params)
 def my_CW(model, sess, x, y, targeted=False, params=dict()):
     """When targeted=True, remember to put target as y."""
@@ -78,6 +79,7 @@ def my_CW(model, sess, x, y, targeted=False, params=dict()):
                  'initial_const': 10,
                  'clip_min': CLIP_MIN,
                  'clip_max': CLIP_MAX}
+    cw_params.update(params)
     adv_x = cw.generate(x, **cw_params)
     return adv_x
 

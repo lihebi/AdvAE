@@ -607,3 +607,172 @@ class MNIST_CNN(CNNModel):
                                                  save_best_only=True)
             model.fit(noisy_x, clean_x, epochs=100, validation_split=0.1, verbose=2, callbacks=[es, mc])
             model.load_weights('best_model.ckpt')
+    # def setup_AE(self):
+    #     """From noise_x to x."""
+    #     inputs = keras.layers.Input(shape=self.xshape(), dtype='float32')
+    #     x = keras.layers.Flatten()(inputs)
+    #     x = keras.layers.Dense(100, activation='relu')(x)
+    #     x = keras.layers.Dense(20, activation='relu')(x)
+    #     x = keras.layers.Dense(100, activation='relu')(x)
+    #     x = keras.layers.Dense(28*28, activation='sigmoid')(x)
+    #     decoded = keras.layers.Reshape([28,28,1])(x)
+    #     self.AE = keras.models.Model(inputs, decoded)
+        
+        
+    def save_AE(self, sess, path):
+        """Save AE weights to checkpoint."""
+        saver = tf.train.Saver(var_list=self.AE_vars)
+        saver.save(sess, path)
+
+
+    def load_AE(self, sess, path):
+        saver = tf.train.Saver(var_list=self.AE_vars)
+        saver.restore(sess, path)
+    def save_CNN(self, sess, path):
+        """Save AE weights to checkpoint."""
+        saver = tf.train.Saver(var_list=self.CNN_vars + self.FC_vars)
+        saver.save(sess, path)
+            
+    def load_CNN(self, sess, path):
+        saver = tf.train.Saver(var_list=self.CNN_vars + self.FC_vars)
+        saver.restore(sess, path)
+class AE2_Model(AEModel):
+    def setup_AE(self):
+        
+        inputs = keras.layers.Input(shape=self.xshape(), dtype='float32')
+        # denoising
+        x = keras.layers.Conv2D(32, (3, 3), padding='same')(inputs)
+        # x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPooling2D((2, 2), padding='same')(x)
+
+        x = keras.layers.Conv2D(32, (3, 3), padding='same')(x)
+        # x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.Activation('relu')(x)
+        encoded = keras.layers.MaxPooling2D((2, 2), padding='same')(x)
+
+        # at this point the representation is (7, 7, 32)
+        # (?, 8, 8, 32) for cifar10
+
+        x = keras.layers.Conv2D(32, (3, 3), padding='same')(encoded)
+        # x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.UpSampling2D((2, 2))(x)
+        
+        x = keras.layers.Conv2D(32, (3, 3), padding='same')(x)
+        # x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.UpSampling2D((2, 2))(x)
+        
+        # here the fisrt channel is 3 for CIFAR model
+        x = keras.layers.Conv2D(3, (3, 3), padding='same')(x)
+        # x = keras.layers.BatchNormalization()(x)
+        
+        self.AE1 = keras.models.Model(inputs, x)
+        
+        decoded = keras.layers.Activation('sigmoid')(x)
+        self.AE = keras.models.Model(inputs, decoded)
+def test_model_against_attack(sess, model, attack_func, inputs, labels, targets, prefix=''):
+    """
+    testing against several attacks. Return the atatck accuracy and L2 distortion.
+    """
+    # generate victims
+    adv_x = attack_func(sess, model)
+    # adv_x = my_CW(sess, model)
+    adv_preds = model.predict(adv_x)
+    if targets is None:
+        adv_x_concrete = sess.run(adv_x, feed_dict={model.x: inputs, model.y: labels})
+        adv_preds_concrete = sess.run(adv_preds, feed_dict={model.x: inputs, model.y: labels})
+        
+        correct_indices = np.equal(np.argmax(adv_preds_concrete, 1), np.argmax(labels, 1))
+        incorrect_indices = np.not_equal(np.argmax(adv_preds_concrete, 1), np.argmax(labels, 1))
+        
+        incorrect_x = inputs[incorrect_indices]
+        incorrect_adv_x = adv_x_concrete[incorrect_indices]
+        incorrect_y = labels[incorrect_indices]
+        incorrect_pred = adv_preds_concrete[incorrect_indices]
+        
+        # FIXME seems the tf acc is different from np calculated acc
+        adv_acc = model.compute_accuracy(sess, model.x, model.y, adv_preds, inputs, labels)
+    else:
+        # FIXME incorrect instances
+        adv_x_concrete = sess.run(adv_x, feed_dict={model.x: inputs, model.y: targets})
+        adv_preds_concrete = sess.run(adv_preds, feed_dict={model.x: inputs, model.y: targets})
+        adv_acc = model.compute_accuracy(sess, model.x, model.y, model.logits, adv_x_concrete, labels)
+
+    l2 = np.mean(mynorm(inputs, adv_x_concrete, 2))
+    if attack_func == my_CW:
+        # CW l2 is a bit problematic, because in case it fails, it
+        # will output the same value, and thus 0 l2. In general, I
+        # need to calculate L2 only for successful attacks.
+        l2old = l2
+        l2 = np.mean(mynorm(inputs[incorrect_indices], adv_x_concrete[incorrect_indices], 2))
+        print('CW, calculate l2 only for incorrect examples {} (old l2: {}).'.format(l2, l2old))
+
+    filename = 'attack-result-{}.pdf'.format(prefix)
+    print('Writing adv examples to {} ..'.format(filename))
+    # correct: row1: clean, row2: adv
+    images = np.concatenate((inputs[correct_indices][:5],
+                             inputs[incorrect_indices][:5],
+                             adv_x_concrete[correct_indices][:5],
+                             adv_x_concrete[incorrect_indices][:5]))
+    titles = np.concatenate((np.argmax(labels[correct_indices][:5], 1),
+                             np.argmax(labels[incorrect_indices][:5], 1),
+                             np.argmax(adv_preds_concrete[correct_indices][:5], 1),
+                             np.argmax(adv_preds_concrete[incorrect_indices][:5], 1)))
+    grid_show_image(images, int(len(images)/2), 2, filename=filename, titles=titles)
+    
+    # print('True label: {}'.format(np.argmax(labels, 1)))
+    # print('Predicted label: {}'.format(np.argmax(adv_preds_concrete, 1)))
+    # print('Adv input accuracy: {}'.format(adv_acc))
+    # print("L2: {}".format(l2))
+    if targets is not None:
+        target_acc = model.compute_accuracy(sess, model.x, model.y, model.logits, adv_x_concrete, targets)
+        print('Targeted label: {}'.format(np.argmax(targets, 1)))
+        print('Targeted accuracy: {}'.format(target_acc))
+    return adv_acc, l2
+
+def test_against_attacks(sess, model):
+    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
+     # all 10000 inputs
+    inputs, labels = test_x, test_y
+    # random 100 inputs
+    indices = random.sample(range(test_x.shape[0]), 100)
+    inputs = test_x[indices]
+    labels = test_y[indices]
+
+    print('testing FGSM ..')
+    acc, l2 = test_model_against_attack(sess, model, my_FGSM, inputs, labels, None, prefix='FGSM')
+    print('{} acc: {}, l2: {}'.format('FGSM', acc, l2))
+    
+    print('testing PGD ..')
+    acc, l2 = test_model_against_attack(sess, model, my_PGD, inputs, labels, None, prefix='PGD')
+    print('{} acc: {}, l2: {}'.format('PGD', acc, l2))
+    
+    print('testing JSMA ..')
+    acc, l2 = test_model_against_attack(sess, model, my_JSMA, inputs, labels, None, prefix='JSMA')
+    print('{} acc: {}, l2: {}'.format('JSMA', acc, l2))
+    
+    print('testing CW ..')
+    acc, l2 = test_model_against_attack(sess, model, my_CW, inputs, labels, None, prefix='CW')
+    print('{} acc: {}, l2: {}'.format('CW', acc, l2))
+
+        # to_run['baseline_pred'] = tf.argmax(baseline_logits, axis=1)
+        # to_run['baseline_acc'] = baseline_acc
+
+        # to_run['obliadv_pred'] = tf.argmax(obliadv_logits, axis=1)
+        # to_run['obliadv_acc'] = obliadv_acc
+
+        # to_run['whiteadv_pred'] = tf.argmax(whiteadv_logits, axis=1)
+        # to_run['whiteadv_acc'] = whiteadv_accuracy
+
+        # to_run['postadv_pred'] = tf.argmax(postadv_logits, axis=1)
+        # to_run['postadv_acc'] = postadv_accuracy
+
+        # print('baseline_acc: {}, obliadv_acc: {}, whiteadv_acc: {}, postadv_acc: {}'
+        #       .format(res['obliadv'][2], res['obliadv_rec'][2],
+        #               res['whiteadv'][2], res['postadv'][2]))
+        
+        # images += list(res['adv_x'][:10])
+        # titles += ['adv_x'] + ['']*9
+

@@ -88,91 +88,6 @@ def train_denoising(model_cls, saved_folder, prefix, advprefix, train_x, train_y
             # model.test_Adv_Denoiser(sess, test_x[:10], test_y[:10])
 
     
-def test_model_against_attack(sess, model, attack_func, inputs, labels, targets, prefix=''):
-    """
-    testing against several attacks. Return the atatck accuracy and L2 distortion.
-    """
-    # generate victims
-    adv_x = attack_func(sess, model)
-    # adv_x = my_CW(sess, model)
-    adv_preds = model.predict(adv_x)
-    if targets is None:
-        adv_x_concrete = sess.run(adv_x, feed_dict={model.x: inputs, model.y: labels})
-        adv_preds_concrete = sess.run(adv_preds, feed_dict={model.x: inputs, model.y: labels})
-        
-        correct_indices = np.equal(np.argmax(adv_preds_concrete, 1), np.argmax(labels, 1))
-        incorrect_indices = np.not_equal(np.argmax(adv_preds_concrete, 1), np.argmax(labels, 1))
-        
-        incorrect_x = inputs[incorrect_indices]
-        incorrect_adv_x = adv_x_concrete[incorrect_indices]
-        incorrect_y = labels[incorrect_indices]
-        incorrect_pred = adv_preds_concrete[incorrect_indices]
-        
-        # FIXME seems the tf acc is different from np calculated acc
-        adv_acc = model.compute_accuracy(sess, model.x, model.y, adv_preds, inputs, labels)
-    else:
-        # FIXME incorrect instances
-        adv_x_concrete = sess.run(adv_x, feed_dict={model.x: inputs, model.y: targets})
-        adv_preds_concrete = sess.run(adv_preds, feed_dict={model.x: inputs, model.y: targets})
-        adv_acc = model.compute_accuracy(sess, model.x, model.y, model.logits, adv_x_concrete, labels)
-
-    l2 = np.mean(mynorm(inputs, adv_x_concrete, 2))
-    if attack_func == my_CW:
-        # CW l2 is a bit problematic, because in case it fails, it
-        # will output the same value, and thus 0 l2. In general, I
-        # need to calculate L2 only for successful attacks.
-        l2old = l2
-        l2 = np.mean(mynorm(inputs[incorrect_indices], adv_x_concrete[incorrect_indices], 2))
-        print('CW, calculate l2 only for incorrect examples {} (old l2: {}).'.format(l2, l2old))
-
-    filename = 'attack-result-{}.pdf'.format(prefix)
-    print('Writing adv examples to {} ..'.format(filename))
-    # correct: row1: clean, row2: adv
-    images = np.concatenate((inputs[correct_indices][:5],
-                             inputs[incorrect_indices][:5],
-                             adv_x_concrete[correct_indices][:5],
-                             adv_x_concrete[incorrect_indices][:5]))
-    titles = np.concatenate((np.argmax(labels[correct_indices][:5], 1),
-                             np.argmax(labels[incorrect_indices][:5], 1),
-                             np.argmax(adv_preds_concrete[correct_indices][:5], 1),
-                             np.argmax(adv_preds_concrete[incorrect_indices][:5], 1)))
-    grid_show_image(images, int(len(images)/2), 2, filename=filename, titles=titles)
-    
-    # print('True label: {}'.format(np.argmax(labels, 1)))
-    # print('Predicted label: {}'.format(np.argmax(adv_preds_concrete, 1)))
-    # print('Adv input accuracy: {}'.format(adv_acc))
-    # print("L2: {}".format(l2))
-    if targets is not None:
-        target_acc = model.compute_accuracy(sess, model.x, model.y, model.logits, adv_x_concrete, targets)
-        print('Targeted label: {}'.format(np.argmax(targets, 1)))
-        print('Targeted accuracy: {}'.format(target_acc))
-    return adv_acc, l2
-
-def test_against_attacks(sess, model):
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
-     # all 10000 inputs
-    inputs, labels = test_x, test_y
-    # random 100 inputs
-    indices = random.sample(range(test_x.shape[0]), 100)
-    inputs = test_x[indices]
-    labels = test_y[indices]
-
-    print('testing FGSM ..')
-    acc, l2 = test_model_against_attack(sess, model, my_FGSM, inputs, labels, None, prefix='FGSM')
-    print('{} acc: {}, l2: {}'.format('FGSM', acc, l2))
-    
-    print('testing PGD ..')
-    acc, l2 = test_model_against_attack(sess, model, my_PGD, inputs, labels, None, prefix='PGD')
-    print('{} acc: {}, l2: {}'.format('PGD', acc, l2))
-    
-    print('testing JSMA ..')
-    acc, l2 = test_model_against_attack(sess, model, my_JSMA, inputs, labels, None, prefix='JSMA')
-    print('{} acc: {}, l2: {}'.format('JSMA', acc, l2))
-    
-    print('testing CW ..')
-    acc, l2 = test_model_against_attack(sess, model, my_CW, inputs, labels, None, prefix='CW')
-    print('{} acc: {}, l2: {}'.format('CW', acc, l2))
-
 def __test():
     (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_cifar10_data()
     model = MyResNet()
@@ -188,9 +103,6 @@ def main2():
     (train_x, train_y), (test_x, test_y) = load_cifar10_data()
     train_denoising(MyResNet, 'saved_models', 'resnet', 'Default', train_x, train_y)
     
-
-if __name__ == '__main__':
-    main2()
 
 def main1():
     # tf.random.set_random_seed(0)
@@ -222,11 +134,13 @@ def main1():
 def load_default_model():
     tf.reset_default_graph()
     sess = tf.Session()
-    model = AdvAEModel()
+    # model = AdvAEModel()
+    model = MyResNet()
     init = tf.global_variables_initializer()
     sess.run(init)
-    model.load_CNN(sess, 'saved_models/aecnn-CNN.ckpt')
-    model.load_AE(sess, 'saved_models/A2-AdvAE.ckpt')
+    # model.load_CNN(sess, 'saved_models/aecnn-CNN.ckpt')
+    model.load_CNN(sess, 'saved_models/resnet-CNN.ckpt')
+    # model.load_AE(sess, 'saved_models/A2-AdvAE.ckpt')
     return model, sess
 
 def __test():
@@ -289,14 +203,13 @@ def __test_denoising(path):
 
     model.train_CNN(sess, train_x, train_y)
 
-
+    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
+    model, sess = load_default_model()
     model.train_AE(sess, train_x, train_y)
-    # model.train_AE_old(sess, train_x)
-    # model.train_AE_simple(sess, train_x)
-    
-    # model.AE.compile('adam', 'binary_crossentropy')
 
     # testing
+    model.test_all(sess, test_x, test_y, attacks=[], num_sample=1000)
+    
     model.test_all(sess, test_x, test_y, attacks=[])
     model.test_all(sess, test_x, test_y, attacks=['FGSM', 'PGD'])
     model.test_all(sess, test_x, test_y, attacks=['CW', 'FGSM', 'PGD'])
@@ -307,9 +220,38 @@ def __test_denoising(path):
 
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
     
-    model, sess = load_default_model()
     model.test_CW(sess, test_x, test_y)
 
+def __test():
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+
+    tf.reset_default_graph()
+    
+    sess = tf.Session()
+
+    cnn = CNNModel()
+    ae = AEModel(cnn)
+    adv = AdvAEModel(cnn, ae)
+    
+    init = tf.global_variables_initializer()
+    sess.run(init)
+    
+    cnn.train_CNN(sess, train_x, train_y)
+    cnn.save_weights(sess, 'tmp/cnn.hdf5')
+    cnn.load_weights(sess, 'tmp/cnn.hdf5')
+    
+    ae.train_AE(sess, train_x, train_y)
+    # ae.train_AE_keras(sess, train_x, train_y)
+    ae.save_weights(sess, 'tmp/ae.hdf5')
+    ae.load_weights(sess, 'tmp/ae.hdf5')
+
+    adv.train_Adv(sess, train_x, train_y)
+
+    adv.test_all(sess, test_x, test_y, attacks=[])
+    adv.test_all(sess, test_x, test_y, attacks=['FGSM', 'PGD'])
+    adv.test_all(sess, test_x, test_y, attacks=['CW', 'FGSM', 'PGD'])
+
+    
     
 def __test():
     x=tf.constant([[0.1,0.1,0.2,0.2],
@@ -320,3 +262,30 @@ def __test():
     sess.run(tf.nn.softmax_cross_entropy_with_logits(labels=x, logits=y))
     sess.run(tf.nn.softmax_cross_entropy_with_logits_v2(labels=x, logits=y))
 
+
+if __name__ == '__main__':
+    main2()
+    
+def __test():
+    # This snippet demonstrate that even if I give a new
+    # tf.variable_scope or tf.name_scope, keras will add new suffix to
+    # the variables. This is quite annoying when saving and loading
+    # model weights.
+    def conv_block(inputs, filters, kernel_size, strides, scope):
+        '''Create a simple Conv --> BN --> ReLU6 block'''
+
+        with tf.name_scope(scope):
+            x = tf.keras.layers.Conv2D(filters, kernel_size, strides)(inputs)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.Activation(tf.nn.relu6)(x)
+            return x
+    tf.reset_default_graph()
+    inputs = tf.keras.Input(shape=[224, 224, 3], batch_size=1, name='inputs')
+    hidden = conv_block(inputs, 32, 3, 2, scope='block_1')
+    outputs = conv_block(hidden, 64, 3, 2, scope='block_2')
+    
+    # model = tf.keras.Model(inputs, outputs)
+    model.summary()
+
+def foo():
+    pass

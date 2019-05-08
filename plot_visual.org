@@ -4,6 +4,8 @@
 #+LATEX_HEADER: \usepackage[export]{adjustbox}
 #+LATEX_HEADER: \pagenumbering{gobble}
 
+* Sec 1                                                            :noexport:
+
 #+CAPTION: AdvAE
 #+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/AdvAE-test-result.pdf]]
@@ -47,3 +49,79 @@
 #+ATTR_LATEX: :width 0.8\linewidth,center
 [[./images/PostHigh_Adv-test-result.pdf]]
 
+
+* Sec 2
+
+** Visual
+
+#+CAPTION: =mnistcnn-ae-A2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/test-result-mnistcnn-ae-A2.pdf]]
+
+#+CAPTION: =mnistcnn-ae-B2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/test-result-mnistcnn-ae-B2.pdf]]
+
+#+CAPTION: =mnistcnn-ae-C0_A2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/test-result-mnistcnn-ae-C0_A2.pdf]]
+
+#+CAPTION: =mnistcnn-ae-N0_A2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/test-result-mnistcnn-ae-N0_A2.pdf]]
+
+** Training process
+
+#+CAPTION: =mnistcnn-ae-A2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/mnistcnn-ae-A2-training-process-split.pdf]]
+
+#+CAPTION: =mnistcnn-ae-B2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/mnistcnn-ae-B2-training-process-split.pdf]]
+
+#+CAPTION: =mnistcnn-ae-C0_A2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/mnistcnn-ae-C0_A2-training-process-split.pdf]]
+
+#+CAPTION: =mnistcnn-ae-N0_A2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/mnistcnn-ae-N0_A2-training-process-split.pdf]]
+
+* Cifar
+
+** Visual
+
+#+CAPTION: =mnistcnn-ae-A2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/test-result-mnistcnn-ae-A2.pdf]]
+
+#+CAPTION: =mnistcnn-ae-B2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/test-result-mnistcnn-ae-B2.pdf]]
+
+#+CAPTION: =mnistcnn-ae-C0_A2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/test-result-mnistcnn-ae-C0_A2.pdf]]
+
+#+CAPTION: =mnistcnn-ae-N0_A2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/test-result-mnistcnn-ae-N0_A2.pdf]]
+
+** Training process
+
+#+CAPTION: =mnistcnn-ae-A2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/mnistcnn-ae-A2-training-process-split.pdf]]
+
+#+CAPTION: =mnistcnn-ae-B2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/mnistcnn-ae-B2-training-process-split.pdf]]
+
+#+CAPTION: =mnistcnn-ae-C0_A2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/mnistcnn-ae-C0_A2-training-process-split.pdf]]
+
+#+CAPTION: =mnistcnn-ae-N0_A2=
+#+ATTR_LATEX: :width 0.8\linewidth,center
+[[./images/mnistcnn-ae-N0_A2-training-process-split.pdf]]

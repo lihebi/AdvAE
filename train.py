@@ -105,7 +105,9 @@ def my_training(sess, model_x, model_y,
                 loss, train_step, metrics, metric_names,
                 train_x, train_y,
                 data_augment=None,
-                plot_prefix='', patience=2, batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS):
+                do_plot=True,
+                plot_prefix='', patience=2, batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS,
+                print_interval=20):
     """Adversarially training the model. Each batch, use PGD to generate
     adv examples, and use that to train the model.
 
@@ -122,7 +124,6 @@ def my_training(sess, model_x, model_y,
     best_loss = math.inf
     best_epoch = 0
     pat = patience
-    print_interval = 20
 
     plot_data = {'metrics': [],
                  'simple': [],
@@ -156,20 +157,27 @@ def my_training(sess, model_x, model_y,
                 # 0.46
                 l, m = sess.run([loss, metrics], feed_dict=feed_dict)
                 # print('metrics time: {}'.format(time.time() - t))
+
+                # the time for running train step
+                t1 = time.time() - t
                 
                 plot_data['metrics'].append(m)
                 plot_data['loss'].append(l)
-                # this introduces only small overhead
-                adv_training_plot(plot_data['metrics'], metric_names, '{}-training-process.pdf'.format(plot_prefix), False)
-                adv_training_plot(plot_data['metrics'], metric_names, '{}-training-process-split.pdf'.format(plot_prefix), True)
-                # plot loss
-                fig, ax = plt.subplots(dpi=300)
-                ax.plot(plot_data['loss'])
-                plt.savefig('images/{}-training-process-loss.pdf'.format(plot_prefix))
-                plt.close(fig)
+
+                if do_plot:
+                    # this introduces only small overhead
+                    adv_training_plot(plot_data['metrics'], metric_names,
+                                      'training-process-{}.pdf'.format(plot_prefix), False)
+                    adv_training_plot(plot_data['metrics'], metric_names,
+                                      'training-process-split-{}.pdf'.format(plot_prefix), True)
+                    # plot loss
+                    fig, ax = plt.subplots(dpi=300)
+                    ax.plot(plot_data['loss'])
+                    plt.savefig('images/training-process-loss-{}.pdf'.format(plot_prefix))
+                    plt.close(fig)
                 
-                print('Batch {} / {},   \t time {:.2f}, loss: {:.5f},\t metrics: {}'
-                      .format(j, nbatch, time.time()-t, l, ', '.join(['{:.5f}'.format(mi) for mi in m])))
+                print('Batch {} / {}, \t time {:.2f} ({:.2f}), loss: {:.5f},\t metrics: {}'
+                      .format(j, nbatch, time.time()-t, t1, l, ', '.join(['{:.5f}'.format(mi) for mi in m])))
                 t = time.time()
             # print('plot time: {}'.format(time.time() - t))
         print('EPOCH ends, calculating total loss')
@@ -197,9 +205,13 @@ def my_training(sess, model_x, model_y,
         m = np.mean(all_m, 0)
         plot_data['simple'].append(m)
 
-        adv_training_plot(plot_data['simple'], metric_names, '{}-training-process-simple.pdf'.format(plot_prefix), True)
+        if do_plot:
+            print('plotting ..')
+            adv_training_plot(plot_data['simple'], metric_names, 'training-process-simple-{}.pdf'.format(plot_prefix), True)
+            
         # save plot data
-        with open('images/{}-data.pkl'.format(plot_prefix), 'wb') as fp:
+        print('saving plot data ..')
+        with open('images/train-data-{}.pkl'.format(plot_prefix), 'wb') as fp:
             pickle.dump(plot_data, fp)
 
         # save the weights

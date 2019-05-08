@@ -776,3 +776,35 @@ def test_against_attacks(sess, model):
         # images += list(res['adv_x'][:10])
         # titles += ['adv_x'] + ['']*9
 
+    # clses = [
+    #     # default model
+    #     # ONE
+    #     B2_Model,
+    #     A2_Model,
+    #     # A1_Model,
+    #     # A12_Model,
+    #     # TWO
+    #     N0_A2_Model,
+    #     C0_A2_Model,
+    #     # C2_A2_Model,
+    #     # THREE
+    #     C0_N0_A2_Model,
+    #     # C2_N0_A2_Model
+    # ]
+    # for cls in clses:
+    #     train_denoising(cls, train_x, train_y, prefix='mnist', advprefix='mnist-' + cls.name())
+    
+    # train_denoising(FCAdvAEModel, 'saved_models', 'fccnn', 'FCAdvAE')
+    
+    # train_denoising(PostNoisy_Adv_Model, 'saved_models', 'aecnn', 'PostNoisy_Adv')
+        # target = self.x
+        # output = noisy_x
+
+        # tmp = tf.clip_by_value(output, tf.epsilon(), 1.0 - tf.epsilon())
+        # tmp = -target * tf.log(tmp) - (1.0 - target) * tf.log(1.0 - tmp)
+        # loss = tf.reduce_mean(tmp, 1)
+        
+        # cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(y), reduction_indices=[1]))
+        
+        # loss = tf.reduce_mean(keras.backend.binary_crossentropy(self.AE(noisy_x), self.x), 1)
+        

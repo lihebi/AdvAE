@@ -145,13 +145,15 @@ def resnet_v2(input_shape, depth, num_classes=10):
     x = BatchNormalization()(x)
     x = Activation('relu')(x)
     x = AveragePooling2D(pool_size=8)(x)
+    
     # y = Flatten()(x)
     # outputs = Dense(num_classes,
-    #                 # activation='softmax',
+    #                 activation='softmax',
     #                 kernel_initializer='he_normal')(y)
 
     # Instantiate model.
     model = Model(inputs=inputs, outputs=x)
+    # model = Model(inputs=inputs, outputs=outputs)
     return model
 
 def lr_schedule(epoch):
@@ -173,12 +175,10 @@ def lr_schedule(epoch):
         lr *= 1e-3
     elif epoch > 120:
         lr *= 1e-2
-    elif epoch > 80:
+    elif epoch > 30:
         lr *= 1e-1
     print('Learning rate: ', lr)
     return lr
-
-
 
 def __test():
     (x_train, y_train), (x_test, y_test) = cifar10.load_data()
@@ -230,6 +230,9 @@ def __test():
     scores = model.evaluate(x_test, y_test, verbose=1)
     print('Test loss:', scores[0])
     print('Test accuracy:', scores[1])
+
+if __name__ == '__main__':
+    __test()
 
 def __fit_augment():
     # This will do preprocessing and realtime data augmentation:

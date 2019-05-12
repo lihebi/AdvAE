@@ -116,6 +116,7 @@ def train_model(cnn_cls, ae_cls, advae_cls,
             # experimenting with changing training or loss for that.
             pAdvAE = os.path.join(saved_folder, '{}-{}-{}-AdvAE.hdf5'.format(cnnprefix, aeprefix, advprefix))
             if not os.path.exists(pAdvAE) or overwrite:
+                print('Trainng AdvAE ..')
                 adv.train_Adv(sess, train_x, train_y)
                 ae.save_weights(sess, pAdvAE)
             else:
@@ -150,29 +151,43 @@ def main_train():
 
     # train_model(MyResNet, AEModel, Test_Model, train_x, train_y)
 
+
+    train_model(MyResNet, CifarAEModel, A2_Model, train_x, train_y)
+    train_model(MyResNet, DunetModel, A2_Model, train_x, train_y)
+    
 def __test():
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
     (train_x, train_y), (test_x, test_y) = load_cifar10_data()
     
-    cnn = MyResNet()
-    # cnn = CNNModel()
-    ae = AEModel(cnn)
-    adv = A2_Model(cnn, ae)
-    
     tf.reset_default_graph()
     sess = tf.Session()
+    
+    cnn = MyResNet()
+    cnn = MyResNet56()
+    cnn = MyResNet110()
+    cnn = CNNModel()
+    ae = AEModel(cnn)
+    ae = CifarAEModel(cnn)
+    ae = TestCifarAEModel(cnn)
+    ae = DunetModel(cnn)
+    adv = A2_Model(cnn, ae)
+    
     init = tf.global_variables_initializer()
     sess.run(init)
 
+    cnn.train_CNN(sess, train_x, train_y)
+    cnn.train_CNN_keras(sess, train_x, train_y)
+
     cnn.load_weights(sess, 'saved_models/resnet-CNN.hdf5')
-    ae.load_weights(sess, 'saved_models/resnet-ae-AE.hdf5')
+    ae.load_weights(sess, 'saved_models/resnet-cifarae-AE.hdf5')
     
     ae.train_AE(sess, train_x, train_y)
     ae.train_AE_keras(sess, train_x, train_y)
     
     adv.train_Adv(sess, train_x, train_y)
 
-    ae.test_AE(sess, train_x, train_y)
+    ae.test_AE(sess, test_x, test_y)
+
 
 def test_model(cnn_cls, ae_cls, advae_cls,
                train_x, train_y,
@@ -211,9 +226,36 @@ def main_test():
     test_model(MyResNet, AEModel, C0_A2_Model, train_x, train_y)
     test_model(MyResNet, AEModel, C0_N0_A2_Model, train_x, train_y)
 
+def main():
+    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
+    
+    sess = tf.Session()
+    
+    cnn = MyResNet()
+    # cnn = MyResNet56()
+    # cnn = MyResNet110()
+    # cnn = CNNModel()
+    ae = AEModel(cnn)
+    # ae = CifarAEModel(cnn)
+    # ae = TestCifarAEModel(cnn)
+    # ae = DunetModel(cnn)
+    # adv = A2_Model(cnn, ae)
+    
+    init = tf.global_variables_initializer()
+    sess.run(init)
+
+    # cnn.train_CNN(sess, train_x, train_y)
+    # cnn.train_CNN_keras(sess, train_x, train_y, test_x, test_y)
+    # cnn.save_weights(sess, 'saved_models/test-resnet-CNN.hdf5')
+    cnn.load_weights(sess, 'saved_models/resnet-CNN.hdf5')
+    ae.train_AE(sess, train_x, train_y)
+    ae.save_weights(sess, 'saved_models/test-resnet-ae-AE.hdf5')
+    # test
+    ae.test_AE(sess, test_x, test_y)
+    
 
 if __name__ == '__main__':
-    # main2()
+    main()
     pass
 
 def __test():

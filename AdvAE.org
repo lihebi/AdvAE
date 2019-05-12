@@ -24,22 +24,57 @@ logits, as that is the whole model
 * Implementations notes                                            :noexport:
 ** DONE debug training time
    CLOSED: [2019-04-30 Tue 17:42]
-** TODO inconsistency problems
+** DONE inconsistency problems
+   CLOSED: [2019-05-07 Tue 11:42]
 
 - standalone attacks vs. integrated (in class as method) attacks: running time, accuracy
 - accuracy computation inconsistency
 
-** TODO CW visual result
-** TODO add postadv baseline
+** DONE CW visual result
+   CLOSED: [2019-05-07 Tue 11:41]
+** DONE add postadv baseline
+   CLOSED: [2019-05-07 Tue 11:41]
 
 ** I want to try not pre-training auto encoder
-** one iteration high adv prove it fail on white box
-    
+** https://www.robust-ml.org/
+
+** Defense GAN break
+** Auto encoder (pre)-training without noise
+** Resnet 56/110
+
+** Other CNN structure
+*** VGG
+*** Wide Resnet
+*** Fully convolutional network
+
+** More dataset
+*** CIFAR exp
+*** Fashion MNIST
+*** MNIST
+*** Large-scale CelebFaces Attributes (CelebA) Dataset
+Seems to be human face, maybe commonly used in generative networks.
+
+** Train AE using classification logits
+*** try learning rate decay
+*** try data augmentation
+*** try Unet
+*** integrate this with adv training
+
+** Adv training of GANs?
+
+** investigate not only accuracy, but also confidence
 
 
 * Other Ideas                                                      :noexport:
+** Add data augmentation during AE and adv training?
 ** Add noise, and then add PGD, and then use in training
 ** TODO add a little CW into PGD training
+** unsuperwisely train AE
+Do not use image data at all. Generate a data, assign random labels,
+train the network. The network might have random guessing for
+test/validation data, but can be 100% at training data. 
+
+Using this network, train the AE.
 
 * Experiment
 ** TODO train on several digits, leave out 2
@@ -55,10 +90,12 @@ Because training AE for CIFAR is pretty hard
 ** TODO Imagenet
 
 ** TODO compare with other defenses
-- HAE: high-level feature guided AE
+*** Adv training
+*** HAE: high-level feature guided AE
+**** one iteration high adv prove it fail on white box
   - oblivious
   - unet
-- Adv training
+*** Ensemble method
 
 *** TODO Compare to generative models
 analyze the difference, pros and cons, compared to generative methods.
@@ -126,6 +163,9 @@ different CNN architecture:
 
 How to ensemble? Create many CNN layers. When training, add all loss
 terms of different CNNs together.
+
+** Ensemble different attack parameters
+Or random
 
 ** TODO Analyze of different loss terms
 - [ ] plot the training and loss

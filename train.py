@@ -100,13 +100,66 @@ class Cifar10Augment():
         flipped = keras.layers.Lambda(flip_func)(cropped)
         return keras.models.Model(inputs, flipped)
 
+class KerasAugment():
+    def __init__(self, train_x):
+        """train_x is the training data you are going to use. The generator
+will fit on these data first."""
+        # This will do preprocessing and realtime data augmentation:
+        self.datagen = keras.preprocessing.image.ImageDataGenerator(
+            # set input mean to 0 over the dataset
+            featurewise_center=False,
+            # set each sample mean to 0
+            samplewise_center=False,
+            # divide inputs by std of dataset
+            featurewise_std_normalization=False,
+            # divide each input by its std
+            samplewise_std_normalization=False,
+            # apply ZCA whitening
+            zca_whitening=False,
+            # epsilon for ZCA whitening
+            zca_epsilon=1e-06,
+            # randomly rotate images in the range (deg 0 to 180)
+            rotation_range=0,
+            # randomly shift images horizontally
+            width_shift_range=0.1,
+            # randomly shift images vertically
+            height_shift_range=0.1,
+            # set range for random shear
+            shear_range=0.,
+            # set range for random zoom
+            zoom_range=0.,
+            # set range for random channel shifts
+            channel_shift_range=0.,
+            # set mode for filling points outside the input boundaries
+            fill_mode='nearest',
+            # value used for fill_mode = "constant"
+            cval=0.,
+            # randomly flip images
+            horizontal_flip=True,
+            # randomly flip images
+            vertical_flip=False,
+            # set rescaling factor (applied before any other transformation)
+            rescale=None,
+            # set function that will be applied on each input
+            preprocessing_function=None,
+            # image data format, either "channels_first" or "channels_last"
+            data_format=None,
+            # fraction of images reserved for validation (strictly between 0 and 1)
+            validation_split=0.0)
+        self.datagen.fit(train_x)
+
+    def augment_batch(self, sess, batch_x):
+        return self.datagen.flow(batch_x, batch_size=1)
+
 
 def my_training(sess, model_x, model_y,
                 loss, train_step, metrics, metric_names,
                 train_x, train_y,
                 data_augment=None,
+                keras_augment=None,
                 do_plot=True,
-                plot_prefix='', patience=2, batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS,
+                plot_prefix='', patience=2,
+                batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS,
                 print_interval=20):
     """Adversarially training the model. Each batch, use PGD to generate
     adv examples, and use that to train the model.
@@ -137,7 +190,12 @@ def my_training(sess, model_x, model_y,
         np.random.shuffle(shuffle_idx)
         nbatch = train_x.shape[0] // batch_size
         t = time.time()
+        # DEBUG trying keras preprocessor
         for j in range(nbatch):
+        # j = 0
+        # for batch_x, batch_y in keras_augment.datagen.flow(train_x, train_y, batch_size=batch_size):
+        #     j += 1
+        #     if j > nbatch: break
             start = j * batch_size
             end = (j+1) * batch_size
             batch_x = train_x[shuffle_idx[start:end]]
@@ -166,6 +224,9 @@ def my_training(sess, model_x, model_y,
 
                 if do_plot:
                     # this introduces only small overhead
+                    #
+                    # FIXME I should more focus on the validation
+                    # metrics instead of these training ones
                     adv_training_plot(plot_data['metrics'], metric_names,
                                       'training-process-{}.pdf'.format(plot_prefix), False)
                     adv_training_plot(plot_data['metrics'], metric_names,
@@ -230,11 +291,22 @@ def my_training(sess, model_x, model_y,
             saver.restore(sess, 'tmp/epoch-{}'.format(best_epoch))
             # verify if the best model is restored
             clean_dict = {model_x: val_x, model_y: val_y}
-            l = sess.run(loss, feed_dict=clean_dict)
+            l,m = sess.run([loss, metrics], feed_dict=clean_dict)
             print('Best loss: {}, restored loss: {}'.format(l, best_loss))
+            print('Corresponding metris: {}'.format(m))
             # FIXME this is not equal, as there's randomness in PGD?
             # assert abs(l - best_loss) < 0.001
             print('Early stopping .., best loss: {}'.format(best_loss))
+            # TODO I actually want to implement lr reducer here. When
+            # the given patience is reached, I'll reduce the learning
+            # rate by half if it is larger than a minimum (say 1e-6),
+            # and restore the patience counting. This should be done
+            # after restoring the previously best model.
+            #
+            # FIXME however, seems that I need to create a new
+            # optimizer, and thus a new train step. But creating this
+            # would create new variables. I need to initialize those
+            # variables alone. This should not be very difficult.
             break
     
 def train(sess, model, loss):

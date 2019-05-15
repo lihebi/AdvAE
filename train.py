@@ -100,57 +100,114 @@ class Cifar10Augment():
         flipped = keras.layers.Lambda(flip_func)(cropped)
         return keras.models.Model(inputs, flipped)
 
-class KerasAugment():
-    def __init__(self, train_x):
-        """train_x is the training data you are going to use. The generator
-will fit on these data first."""
-        # This will do preprocessing and realtime data augmentation:
-        self.datagen = keras.preprocessing.image.ImageDataGenerator(
-            # set input mean to 0 over the dataset
-            featurewise_center=False,
-            # set each sample mean to 0
-            samplewise_center=False,
-            # divide inputs by std of dataset
-            featurewise_std_normalization=False,
-            # divide each input by its std
-            samplewise_std_normalization=False,
-            # apply ZCA whitening
-            zca_whitening=False,
-            # epsilon for ZCA whitening
-            zca_epsilon=1e-06,
-            # randomly rotate images in the range (deg 0 to 180)
-            rotation_range=0,
-            # randomly shift images horizontally
-            width_shift_range=0.1,
-            # randomly shift images vertically
-            height_shift_range=0.1,
-            # set range for random shear
-            shear_range=0.,
-            # set range for random zoom
-            zoom_range=0.,
-            # set range for random channel shifts
-            channel_shift_range=0.,
-            # set mode for filling points outside the input boundaries
-            fill_mode='nearest',
-            # value used for fill_mode = "constant"
-            cval=0.,
-            # randomly flip images
-            horizontal_flip=True,
-            # randomly flip images
-            vertical_flip=False,
-            # set rescaling factor (applied before any other transformation)
-            rescale=None,
-            # set function that will be applied on each input
-            preprocessing_function=None,
-            # image data format, either "channels_first" or "channels_last"
-            data_format=None,
-            # fraction of images reserved for validation (strictly between 0 and 1)
-            validation_split=0.0)
-        self.datagen.fit(train_x)
+class MyPlot(keras.callbacks.Callback):
+    def __init__(self):
+        super().__init__()
+        self.batch_plot_data = {'metrics': [],
+                                'loss': []}
+        self.epoch_plot_data = {'metrics': [],
+                                'loss': []}
+    def on_epoch_begin(self, epoch, logs=None):
+        print('MyPlot epoch begin')
 
-    def augment_batch(self, sess, batch_x):
-        return self.datagen.flow(batch_x, batch_size=1)
+    def on_epoch_end(self, epoch, logs=None):
+        print('MyPlot epoch begin')
+        # DEBUG
+        print(logs.keys())
+        # evaluate the loss on validation data, also batched
+        nbatch = val_x.shape[0] // batch_size
+        shuffle_idx = np.arange(val_x.shape[0])
+        np.random.shuffle(shuffle_idx)
+        all_l = []
+        all_m = []
+        print('validating on {} batches: '.format(nbatch), end='', flush=True)
+        for j in range(nbatch):
+            start = j * batch_size
+            end = (j+1) * batch_size
+            batch_x = val_x[shuffle_idx[start:end]]
+            batch_y = val_y[shuffle_idx[start:end]]
+            feed_dict = {model_x: batch_x, model_y: batch_y}
+            # actual training
+            l, m = sess.run([loss, metrics], feed_dict=feed_dict)
+            all_l.append(l)
+            all_m.append(m)
+            print('.', end='', flush=True)
+        print('')
+        l = np.mean(all_l)
+        m = np.mean(all_m, 0)
+        plot_data['simple'].append(m)
 
+        if do_plot:
+            print('plotting ..')
+            adv_training_plot(plot_data['simple'], metric_names, 'training-process-simple-{}.pdf'.format(plot_prefix), True)
+            
+        # save plot data
+        print('saving plot data ..')
+        with open('images/train-data-{}.pkl'.format(plot_prefix), 'wb') as fp:
+            pickle.dump(plot_data, fp)
+
+    def on_batch_begin(self, batch, logs=None):
+        pass
+
+    def on_batch_end(self, batch, logs=None):
+        """Save and plot batch training results."""
+        print_interval = 20
+        metrics = self.model.metrics
+        metric_names = self.model.metric_names
+        plot_prefix = 'keras_fit_testing'
+        # DEBUG
+        print(logs.keys())
+        
+        logs = logs or {}
+        
+        if batch % print_interval == 0:
+            l = logs.get('loss')
+            m = {}
+            # FIXME performance issue of running metrics every
+            # time. So maybe I should evalute the metrics here. But
+            # how can I access the training data here?
+            for k in self.params['metrics']:
+                if k in logs:
+                    m[k] = logs[k]
+            self.batch_plot_data['metrics'].append(m)
+            self.batch_plot_data['loss'].append(l)
+
+            # FIXME I should more focus on the validation
+            # metrics instead of these training ones
+            adv_training_plot(self.batch_plot_data['metrics'], metric_names,
+                              'training-process-{}.pdf'.format(plot_prefix), False)
+            adv_training_plot(self.batch_plot_data['metrics'], metric_names,
+                              'training-process-split-{}.pdf'.format(plot_prefix), True)
+            # plot loss
+            fig, ax = plt.subplots(dpi=300)
+            ax.plot(plot_data['loss'])
+            plt.savefig('images/training-process-loss-{}.pdf'.format(plot_prefix))
+            plt.close(fig)
+
+    def on_train_begin(self, logs=None):
+        print('MyPlot train begin')
+
+    def on_train_end(self, logs=None):
+        print('MyPlot train end')
+
+def run_on_batch(sess, res, x, y, npx, npy, batch_size=BATCH_SIZE):
+    nbatch = npx.shape[0] // batch_size
+    shuffle_idx = np.arange(npx.shape[0])
+    np.random.shuffle(shuffle_idx)
+    print('running on {} batches: '.format(nbatch), end='', flush=True)
+    allres = []
+    for i in range(nbatch):
+        start = i * batch_size
+        end = (i+1) * batch_size
+        batch_x = npx[shuffle_idx[start:end]]
+        batch_y = npy[shuffle_idx[start:end]]
+        feed_dict = {x: batch_x, y: batch_y}
+        # actual training
+        npres = sess.run(res, feed_dict=feed_dict)
+        allres.append(npres)
+        print('.', end='', flush=True)
+    print('')
+    return allres
 
 def my_training(sess, model_x, model_y,
                 loss, train_step, metrics, metric_names,
@@ -182,6 +239,8 @@ def my_training(sess, model_x, model_y,
                  'simple': [],
                  'loss': []}
 
+    # FIXME seems that the saver is causing tf memory issues when
+    # restoring. So trying keras.
     saver = tf.train.Saver(max_to_keep=100)
     
     for i in range(num_epochs):
@@ -241,27 +300,17 @@ def my_training(sess, model_x, model_y,
                       .format(j, nbatch, time.time()-t, t1, l, ', '.join(['{:.5f}'.format(mi) for mi in m])))
                 t = time.time()
             # print('plot time: {}'.format(time.time() - t))
-        print('EPOCH ends, calculating total loss')
 
         # evaluate the loss on validation data, also batched
-        nbatch = val_x.shape[0] // batch_size
-        shuffle_idx = np.arange(val_x.shape[0])
-        np.random.shuffle(shuffle_idx)
+        print('EPOCH ends, calculating total validation loss ..')
+        allres = run_on_batch(sess, [loss, metrics], model_x, model_y, val_x, val_y)
         all_l = []
         all_m = []
-        print('validating on {} batches: '.format(nbatch), end='', flush=True)
-        for j in range(nbatch):
-            start = j * batch_size
-            end = (j+1) * batch_size
-            batch_x = val_x[shuffle_idx[start:end]]
-            batch_y = val_y[shuffle_idx[start:end]]
-            feed_dict = {model_x: batch_x, model_y: batch_y}
-            # actual training
-            l, m = sess.run([loss, metrics], feed_dict=feed_dict)
+        for l,m in allres:
             all_l.append(l)
             all_m.append(m)
-            print('.', end='', flush=True)
-        print('')
+        # FIXME these are list of list. np.mean should have returned a
+        # single number, as I wanted.
         l = np.mean(all_l)
         m = np.mean(all_m, 0)
         plot_data['simple'].append(m)
@@ -288,12 +337,17 @@ def my_training(sess, model_x, model_y,
               .format(i, num_epochs, l, time.time()-epoch_t, pat, ', '.join(['{:.5f}'.format(mi) for mi in m])))
         if pat <= 0:
             # restore the best model
-            saver.restore(sess, 'tmp/epoch-{}'.format(best_epoch))
+            filename = 'tmp/epoch-{}'.format(best_epoch)
+            print('restoring from {} ..'.format(filename))
+            saver.restore(sess, filename)
+
             # verify if the best model is restored
-            clean_dict = {model_x: val_x, model_y: val_y}
-            l,m = sess.run([loss, metrics], feed_dict=clean_dict)
-            print('Best loss: {}, restored loss: {}'.format(l, best_loss))
-            print('Corresponding metris: {}'.format(m))
+            # FIXME I need batched version. This will run out of GPU memory.
+            # clean_dict = {model_x: val_x, model_y: val_y}
+            # l,m = sess.run([loss, metrics], feed_dict=clean_dict)
+            # print('Best loss: {}, restored loss: {}'.format(best_loss, l))
+            # print('Corresponding metris: {}'.format(m))
+            
             # FIXME this is not equal, as there's randomness in PGD?
             # assert abs(l - best_loss) < 0.001
             print('Early stopping .., best loss: {}'.format(best_loss))

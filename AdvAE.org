@@ -57,16 +57,36 @@ Seems to be human face, maybe commonly used in generative networks.
 ** Train AE using classification logits
 *** try learning rate decay
 *** try data augmentation
-*** try Unet
+*** TODO understand Unet
+- Understand the unet, what to use (addition?) as output.
+- test training dunet using only noisy term
+- try dunet without pre-training. The pretraining of dunet is weird:
+  the accuracy reaches 85 very soon, but it still trains a lot of
+  epochs. If overfitting it at this time, it might have negative
+  effects on adv training step. So maybe just directly do adv training
+  with C0 or C2 as a loss term. I probably have to use a C0/C2 term anyway.
+*** test all the different loss terms
+only if the dunet is not giving promising results.
 *** integrate this with adv training
 
 ** Adv training of GANs?
+** Compare with adv training
+- show that the performance drop is not significant.
+*** Try cifar10 challenge code
+- model
+- data augmentation
+- PGD with their iteration
+- CW by using CW loss function but PGD iterations
 
 ** investigate not only accuracy, but also confidence
 
 
 * Other Ideas                                                      :noexport:
-** Add data augmentation during AE and adv training?
+** Ensemble
+** random CNN as task
+
+
+** TODO Add data augmentation during AE and adv training?
 ** Add noise, and then add PGD, and then use in training
 ** TODO add a little CW into PGD training
 ** unsuperwisely train AE
@@ -75,6 +95,7 @@ train the network. The network might have random guessing for
 test/validation data, but can be 100% at training data. 
 
 Using this network, train the AE.
+
 
 * Experiment
 ** TODO train on several digits, leave out 2
@@ -220,8 +241,35 @@ high-level guided models
 - add adv noise at CNN input, after AE
 - AE acts as a anti-adv example generator
 
-* Related Work
-* Conclusion
+* Result
+
+MNIST
+
+| attacks | No defense | AdvAE obli | AdvAE white-box | HGD obli | HGD white-box | adv training white-box |
+|---------+------------+------------+-----------------+----------+---------------+------------------------|
+| clean   |       0.98 |            |            0.98 |       1. |          0.97 |                   0.99 |
+| CW      |         0. |       0.97 |            0.81 |     0.96 |            0. |                   0.86 |
+| FGSM    |       0.16 |       0.95 |            0.95 |     0.98 |          0.24 |                   0.97 |
+| PGD     |       0.01 |       0.96 |            0.94 |     0.99 |          0.02 |                   0.95 |
+
+AdvAE Cifar10
+
+| attacks | No defense | AdvAE obli | AdvAE white-box | HGD obli | HGD white-box | adv training white-box |
+|---------+------------+------------+-----------------+----------+---------------+------------------------|
+| clean   |       0.89 |            |            0.61 |          |          0.82 |                   0.67 |
+| CW      |          0 |       0.62 |            0.01 |     0.82 |            0. |                     0. |
+| FGSM    |       0.17 |       0.62 |            0.52 |     0.84 |          0.15 |                   0.48 |
+| PGD     |       0.07 |       0.61 |            0.46 |     0.83 |          0.11 |                   0.43 |
+
+Notes:
+- HGD: B2 loss
+- AdvAE MNIST: A2 loss
+- AdvAE Cifar10: C0_A2 loss
+- adv training: IdentityModel
+
+
+
+
 
 * Appendix
 

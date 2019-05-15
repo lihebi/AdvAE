@@ -68,7 +68,17 @@ def train_model(cnn_cls, ae_cls, advae_cls,
     if not aeprefix:
         aeprefix = ae_cls.NAME()
         
+    pCNN = os.path.join(saved_folder, '{}-CNN.hdf5'.format(cnnprefix))
+    pAE = os.path.join(saved_folder, '{}-{}-AE.hdf5'.format(cnnprefix, aeprefix))
+    pAdvAE = os.path.join(saved_folder, '{}-{}-{}-AdvAE.hdf5'.format(cnnprefix, aeprefix, advprefix))
+
+    # DEBUG early return here to avoid the big overhead of creating the graph
+    if os.path.exists(pAdvAE):
+        print('Already trained AdvAE model {}, break'.format(pAdvAE))
+        return
+    
     print('====== Denoising training for {} ..'.format(advprefix))
+    
     tf.reset_default_graph()
     with tf.Session() as sess:
         cnn = cnn_cls()
@@ -81,28 +91,26 @@ def train_model(cnn_cls, ae_cls, advae_cls,
         sess.run(init)
 
         # 1. train CNN
-        pCNN = os.path.join(saved_folder, '{}-CNN.hdf5'.format(cnnprefix))
         if not os.path.exists(pCNN):
             print('Trianing CNN ..')
             cnn.train_CNN(sess, train_x, train_y)
             print('Saving model to {} ..'.format(pCNN))
             cnn.save_weights(sess, pCNN)
         else:
-            print('Trained, directly loading ..')
+            print('Trained, directly loading {} ..'.format(pCNN))
             cnn.load_weights(sess, pCNN)
         # print('Testing CNN ..')
         # model.test_CNN(sess, test_x, test_y)
 
         # 2. train denoiser
         # FIXME whether this pretraining is useful or not?
-        pAE = os.path.join(saved_folder, '{}-{}-AE.hdf5'.format(cnnprefix, aeprefix))
         if not os.path.exists(pAE):
             print('Training AE ..')
             ae.train_AE(sess, train_x, train_y)
-            print('Saving model ..')
+            print('Saving model to {} ..'.format(pAE))
             ae.save_weights(sess, pAE)
         else:
-            print('Trained, directly loading ..')
+            print('Trained, directly loading {} ..'.format(pAE))
             ae.load_weights(sess, pAE)
         
         # 3. train denoiser using adv training, with high level feature guidance
@@ -114,13 +122,13 @@ def train_model(cnn_cls, ae_cls, advae_cls,
             # overwrite controls only the AdvAE weights. CNN and AE
             # weights do not need to be retrained because I'm not
             # experimenting with changing training or loss for that.
-            pAdvAE = os.path.join(saved_folder, '{}-{}-{}-AdvAE.hdf5'.format(cnnprefix, aeprefix, advprefix))
             if not os.path.exists(pAdvAE) or overwrite:
                 print('Trainng AdvAE ..')
                 adv.train_Adv(sess, train_x, train_y)
+                print('saving to {} ..'.format(pAdvAE))
                 ae.save_weights(sess, pAdvAE)
             else:
-                print('Already trained ..')
+                print('Already trained {} ..'.format(pAdvAE))
                 # adv.load_AE(sess, pAdvAE)
             # print('Testing AdvAE ..')
             # model.test_Adv_Denoiser(sess, test_x[:10], test_y[:10])
@@ -128,32 +136,41 @@ def train_model(cnn_cls, ae_cls, advae_cls,
     
 
 def main_train():
-    # tf.random.set_random_seed(0)
-    # np.random.seed(0)
-    # random.seed(0)
     
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
-    # train_model(CNNModel, AEModel, AdvAEModel, train_x, train_y)
+    # adv training baseline
+    train_model(CNNModel, IdentityAEModel, A2_Model, train_x, train_y)
+
+    # train models
     train_model(CNNModel, AEModel, A2_Model, train_x, train_y)
     train_model(CNNModel, AEModel, B2_Model, train_x, train_y)
     train_model(CNNModel, AEModel, N0_A2_Model, train_x, train_y)
     train_model(CNNModel, AEModel, C0_A2_Model, train_x, train_y)
-    train_model(CNNModel, AEModel, C0_N0_A2_Model, train_x, train_y)
-
-    # train_model(CNNModel, AEModel, Test_Model, train_x, train_y)
+    # train_model(CNNModel, AEModel, C0_N0_A2_Model, train_x, train_y)
 
     (train_x, train_y), (test_x, test_y) = load_cifar10_data()
-    train_model(MyResNet, AEModel, A2_Model, train_x, train_y)
-    train_model(MyResNet, AEModel, B2_Model, train_x, train_y)
-    train_model(MyResNet, AEModel, N0_A2_Model, train_x, train_y)
-    train_model(MyResNet, AEModel, C0_A2_Model, train_x, train_y)
-    train_model(MyResNet, AEModel, C0_N0_A2_Model, train_x, train_y)
+    # adv training baseline
+    train_model(MyResNet, IdentityAEModel, A2_Model, train_x, train_y)
+
+    # train models
+    train_model(MyResNet, DunetModel, C0_A2_Model, train_x, train_y)
+    train_model(MyResNet, DunetModel, C2_A2_Model, train_x, train_y)
+    train_model(MyResNet, DunetModel, A2_Model, train_x, train_y)
+    train_model(MyResNet, DunetModel, B2_Model, train_x, train_y)
+    train_model(MyResNet, DunetModel, C0_B2_Model, train_x, train_y)
+    train_model(MyResNet, DunetModel, A2_B2_C2_Model, train_x, train_y)
+    train_model(MyResNet, DunetModel, C1_A1_Model, train_x, train_y)
+    train_model(MyResNet, DunetModel, C1_A2_Model, train_x, train_y)
+    train_model(MyResNet, DunetModel, C2_A2_P2_Model, train_x, train_y)
+    train_model(MyResNet, DunetModel, P2_Model, train_x, train_y)
+    
+    # train_model(MyResNet, DunetModel, N0_A2_Model, train_x, train_y)
+    # train_model(MyResNet, DunetModel, C0_N0_A2_Model, train_x, train_y)
 
     # train_model(MyResNet, AEModel, Test_Model, train_x, train_y)
 
-
-    train_model(MyResNet, CifarAEModel, A2_Model, train_x, train_y)
-    train_model(MyResNet, DunetModel, A2_Model, train_x, train_y)
+    # train_model(MyResNet, CifarAEModel, A2_Model, train_x, train_y)
+    # train_model(MyResNet, DunetModel, A2_Model, train_x, train_y)
     
 def __test():
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
@@ -190,19 +207,21 @@ def __test():
 
 
 def test_model(cnn_cls, ae_cls, advae_cls,
-               train_x, train_y,
+               test_x, test_y,
                saved_folder='saved_models',
-               cnnprefix='', aeprefix='', advprefix=''):
+               cnnprefix='', aeprefix='', advprefix='', force=False):
 
 
     # FIXME keep consistent with advae.name()
     model_name = '{}-{}-{}'.format(cnn_cls.NAME(), ae_cls.NAME(), advae_cls.NAME())
     filename = 'images/test-result-{}.pdf'.format(model_name)
 
-    if not os.path.exists(filename):
+    if not os.path.exists(filename) or force:
+        print('loading model ..')
         model, sess = load_model(cnn_cls, ae_cls, advae_cls)
         # model.test_all(sess, test_x, test_y, attacks=[])
         # model.test_all(sess, test_x, test_y, attacks=[], num_sample=1000)
+        print('testing {} ..'.format(model.name()))
         model.test_all(sess, test_x, test_y, attacks=['CW', 'FGSM', 'PGD'],
                        filename='images/test-result-{}.pdf'.format(model.name()))
         # model.test_all(sess, test_x, test_y, attacks=['CW', 'FGSM', 'PGD'])
@@ -211,21 +230,37 @@ def test_model(cnn_cls, ae_cls, advae_cls,
         print('Already tested, see {}'.format(filename))
     
 def main_test():
-    (train_x, train_y), (test_x, test_y) = load_mnist_data()
-    test_model(CNNModel, AEModel, A2_Model, train_x, train_y)
-    test_model(CNNModel, AEModel, B2_Model, train_x, train_y)
-    test_model(CNNModel, AEModel, N0_A2_Model, train_x, train_y)
-    test_model(CNNModel, AEModel, C0_A2_Model, train_x, train_y)
-    test_model(CNNModel, AEModel, C0_N0_A2_Model, train_x, train_y)
 
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    test_model(CNNModel, IdentityAEModel, A2_Model, test_x, test_y)
+    
+    test_model(CNNModel, AEModel, A2_Model, test_x, test_y)
+    test_model(CNNModel, AEModel, B2_Model, test_x, test_y)
+    test_model(CNNModel, AEModel, N0_A2_Model, test_x, test_y)
+    test_model(CNNModel, AEModel, C0_A2_Model, test_x, test_y)
+    # test_model(CNNModel, AEModel, C0_N0_A2_Model, test_x, test_y)
+
+    # (train_x, train_y), (test_x, test_y) = load_cifar10_data()
+    # test_model(MyResNet, AEModel, A2_Model, test_x, test_y)
+    # test_model(MyResNet, AEModel, B2_Model, test_x, test_y)
+    # test_model(MyResNet, AEModel, N0_A2_Model, test_x, test_y)
+    # test_model(MyResNet, AEModel, C0_A2_Model, test_x, test_y)
+    # test_model(MyResNet, AEModel, C0_N0_A2_Model, test_x, test_y)
 
     (train_x, train_y), (test_x, test_y) = load_cifar10_data()
-    test_model(MyResNet, AEModel, A2_Model, train_x, train_y)
-    test_model(MyResNet, AEModel, B2_Model, train_x, train_y)
-    test_model(MyResNet, AEModel, N0_A2_Model, train_x, train_y)
-    test_model(MyResNet, AEModel, C0_A2_Model, train_x, train_y)
-    test_model(MyResNet, AEModel, C0_N0_A2_Model, train_x, train_y)
-
+    test_model(MyResNet, IdentityAEModel, A2_Model, test_x, test_y)
+    
+    test_model(MyResNet, DunetModel, C0_A2_Model, test_x, test_y)
+    test_model(MyResNet, DunetModel, C2_A2_Model, test_x, test_y)
+    test_model(MyResNet, DunetModel, A2_Model, test_x, test_y)
+    test_model(MyResNet, DunetModel, B2_Model, test_x, test_y)
+    test_model(MyResNet, DunetModel, C0_B2_Model, test_x, test_y)
+    test_model(MyResNet, DunetModel, A2_B2_C2_Model, test_x, test_y)
+    test_model(MyResNet, DunetModel, C1_A1_Model, test_x, test_y)
+    test_model(MyResNet, DunetModel, C1_A2_Model, test_x, test_y)
+    test_model(MyResNet, DunetModel, C2_A2_P2_Model, test_x, test_y)
+    test_model(MyResNet, DunetModel, P2_Model, test_x, test_y)
+    
 def main():
     (train_x, train_y), (test_x, test_y) = load_cifar10_data()
     
@@ -235,11 +270,13 @@ def main():
     # cnn = MyResNet56()
     # cnn = MyResNet110()
     # cnn = CNNModel()
-    ae = AEModel(cnn)
+    # ae = AEModel(cnn)
     # ae = CifarAEModel(cnn)
     # ae = TestCifarAEModel(cnn)
     # ae = DunetModel(cnn)
-    # adv = A2_Model(cnn, ae)
+    ae = IdentityAEModel(cnn)
+    
+    adv = A2_Model(cnn, ae)
     
     init = tf.global_variables_initializer()
     sess.run(init)
@@ -248,15 +285,23 @@ def main():
     # cnn.train_CNN_keras(sess, train_x, train_y, test_x, test_y)
     # cnn.save_weights(sess, 'saved_models/test-resnet-CNN.hdf5')
     cnn.load_weights(sess, 'saved_models/resnet-CNN.hdf5')
-    ae.train_AE(sess, train_x, train_y)
-    ae.save_weights(sess, 'saved_models/test-resnet-ae-AE.hdf5')
-    # test
-    ae.test_AE(sess, test_x, test_y)
     
+    # ae.train_AE(sess, train_x, train_y)
+    # ae.save_weights(sess, 'saved_models/test-resnet-ae-AE.hdf5')
+    # ae.load_weights(sess, 'saved_models/resnet-dunet-AE.hdf5')
+    # test
+    # ae.test_AE(sess, test_x, test_y)
+    
+    adv.train_Adv(sess, train_x, train_y)
 
 if __name__ == '__main__':
-    main()
-    pass
+    tf.random.set_random_seed(0)
+    np.random.seed(0)
+    random.seed(0)
+    
+    main_train()
+    main_test()
+    # main()
 
 def __test():
     (train_x, train_y), (test_x, test_y) = load_mnist_data()

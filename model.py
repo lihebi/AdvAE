@@ -30,6 +30,8 @@ def my_sigmoid_xent(logits=None, labels=None):
     return tf.reduce_mean(
         tf.nn.sigmoid_cross_entropy_with_logits(
             logits=logits, labels=labels))
+def my_l2loss(x1, x2):
+    return tf.reduce_mean(tf.square(x1-x2))
 
 def my_softmax_xent(logits=None, labels=None):
     return tf.reduce_mean(
@@ -236,7 +238,7 @@ class MyResNet(CNNModel):
         global_step = tf.train.get_or_create_global_step()
         self.global_step = global_step
         # These numbers are batches
-        schedules = [[0, 1e-3], [400*30, 1e-4], [400*40, 1e-5], [400*50, 1e-6]]
+        schedules = [[0, 1e-3], [400*30, 1e-4], [400*60, 1e-5]]
         boundaries = [s[0] for s in schedules][1:]
         values = [s[1] for s in schedules]
         learning_rate = tf.train.piecewise_constant(
@@ -337,7 +339,7 @@ class AEModel():
         ##############################
         ## noisy
         
-        # noisy, xent, pixel
+        # noisy, xent, pixel, (0.36)
         # loss = my_sigmoid_xent(self.AE1(noisy_x), self.x)
         
         # noisy, l2, pixel, 0.3
@@ -351,23 +353,24 @@ class AEModel():
         # 0.42
         # mu = 0.5
         # 0.48
-        # mu = 0.2
-        # loss = (mu * tf.reduce_mean(tf.abs(self.AE(noisy_x) - self.x))
-        #         + (1 - mu) * tf.reduce_mean(tf.abs(self.AE(self.x) - self.x)))
+        mu = 0.2
+        loss = (mu * tf.reduce_mean(tf.abs(self.AE(noisy_x) - self.x))
+                + (1 - mu) * tf.reduce_mean(tf.abs(self.AE(self.x) - self.x)))
         ###############################
         ## Clean
 
-        # xent, pixel, 0.515
+        # xent, pixel, 0.515 (0.63)
         # loss = my_sigmoid_xent(self.AE1(self.x), self.x)
+        # self.C0_loss = my_sigmoid_xent(self.AE1(self.x), self.x)
         # l2, pixel, 0.48
         # loss = tf.reduce_mean(tf.square(self.AE(self.x) - self.x))
         # l1, pixel, 0.52
         # loss = tf.reduce_mean(tf.abs(self.AE(self.x) - self.x))
 
 
-        # L2, logits, .62
-        loss = tf.reduce_mean(tf.square(self.cnn_model.predict(self.AE(self.x)) -
-                                        self.cnn_model.predict(self.x)))
+        # L2, logits, .79
+        # loss = tf.reduce_mean(tf.square(self.cnn_model.predict(self.AE(self.x)) -
+        #                                 self.cnn_model.predict(self.x)))
         # L1, logits, .30
         # loss = tf.reduce_mean(tf.abs(self.cnn_model.predict(self.AE(self.x)) -
         #                              self.cnn_model.predict(self.x)))
@@ -378,12 +381,16 @@ class AEModel():
         # loss = tf.reduce_mean(tf.abs(self.cnn_model.CNN(self.AE(self.x)) -
         #                              self.cnn_model.CNN(self.x)))
 
+
         # xent, logits, .30
         # loss = my_sigmoid_xent(self.cnn_model.predict(self.AE(self.x)),
         #                        tf.nn.sigmoid(self.cnn_model.predict(self.x)))
         # xent, label, .38
         # loss = my_softmax_xent(self.cnn_model.predict(self.AE(self.x)),
         #                        self.y)
+        
+        # self.C1_loss = my_sigmoid_xent(rec_high, tf.nn.sigmoid(high))
+        # self.C2_loss = my_softmax_xent(rec_logits, self.y)
         
         self.AE_loss = loss
         
@@ -404,17 +411,18 @@ class AEModel():
         schedules = [[0, 1e-3], [400*20, 1e-4], [400*40, 1e-5], [400*60, 1e-6]]
         boundaries = [s[0] for s in schedules][1:]
         values = [s[1] for s in schedules]
-        learning_rate = tf.train.piecewise_constant(
+        learning_rate = tf.train.piecewise_constant_decay(
             tf.cast(global_step, tf.int32),
             boundaries,
             values)
         self.AE_train_step = tf.train.AdamOptimizer(
             learning_rate).minimize(
+            # 1e-3).minimize(
                 self.AE_loss,
                 global_step=global_step,
                 var_list=self.AE_vars)
-        # self.AE_train_step = tf.train.AdamOptimizer(0.001).minimize(
-        #     self.AE_loss, var_list=self.AE_vars)
+        # self.AE_train_step = tf.train.AdamOptimizer(0.01).minimize(
+        #     self.AE_loss, global_step=global_step, var_list=self.AE_vars)
     def setup_AE(self):
         """From noise_x to x.
 
@@ -457,6 +465,8 @@ class AEModel():
                     # Seems that the denoiser converge fast
                     patience=5,
                     print_interval=50,
+                    # default: 100
+                    # num_epochs=60,
                     do_plot=False)
 
     def train_AE_keras(self, sess, train_x, train_y):
@@ -592,7 +602,9 @@ class TestCifarAEModel(AEModel):
         self.AE = keras.models.Model(inputs, keras.layers.Activation('sigmoid')(decoded))
 class DunetModel(AEModel):
     """Unet TODO"""
-    def name():
+    @staticmethod
+    def NAME():
+        # FIXME change NAME to CLSNAME to avoid bugs
         return "dunet"
     # def __init__(self, cnn_model):
     #     super().__init__(cnn_model)
@@ -647,7 +659,8 @@ class DunetModel(AEModel):
         # channel = 1 or 3 depending on dataset
         # channel = self.shape[2]
         # decoded = keras.layers.Conv2D(channel, (3, 3), padding='same')(x)
-        
+
+        # DEBUG XXX TODO HEBI NOW use add?
         decoded = keras.layers.Add()([inputs, conv10])
         # decoded = keras.layers.Subtract()([inputs, conv10])
         # DEBUG what if I just use this as output?
@@ -656,6 +669,45 @@ class DunetModel(AEModel):
         
         self.AE = keras.models.Model(inputs, keras.layers.Activation('sigmoid')(decoded))
 
+class IdentityAEModel(AEModel):
+    """This model implementation is a HACK. The AE model does not have any
+parameters. It is merely an identity map. However, it still supports
+the load and save function, in which the underline CNN model
+parameters are saved and loaded. The AE_vars are set to the CNN/FC
+vars, so that adv training would change those instead.
+
+    """
+    def setup_AE(self):
+        inputs = keras.layers.Input(shape=self.shape, dtype='float32')
+        keras.layers.copy
+        outputs = keras.layers.Lambda(lambda x: x, output_shape=self.shape)(inputs)
+
+        # FIMXE this is dummy
+        self.AE1 = keras.models.Model(inputs, outputs)
+        self.AE = keras.models.Model(inputs, outputs)
+    @staticmethod
+    def NAME():
+        return "identityAE"
+    def __init__(self, cnn_model):
+        """I have cnn model here because I might use CNN model to train this AE."""
+        # FIXME I need to make sure these setups are only called
+        # once. Otherwise I need to set the AE_vars variables accordingly
+
+        self.cnn_model = cnn_model
+        self.shape = self.cnn_model.xshape()
+        
+        with tf.variable_scope('my_AE'):
+            self.setup_AE()
+            
+        # self.AE_vars = tf.trainable_variables('my_AE')
+        self.AE_vars = self.cnn_model.CNN_vars + self.cnn_model.FC_vars
+    def train_AE(self, sess, train_x, train_y):
+        print('Dummy training, do nothing.')
+        pass
+    def save_weights(self, sess, path):
+        self.cnn_model.save_weights(sess, path)
+    def load_weights(self, sess, path):
+        self.cnn_model.load_weights(sess, path)
 
 class AdvAEModel(cleverhans.model.Model):
     """Implement a denoising auto encoder.
@@ -673,13 +725,28 @@ class AdvAEModel(cleverhans.model.Model):
         self.x = keras.layers.Input(shape=self.cnn_model.xshape(), dtype='float32')
         self.y = keras.layers.Input(shape=self.cnn_model.yshape(), dtype='float32')
 
-        # self.setup_attack_params()
         self.setup_loss()
-        # self.setup_loss_simple()
         
         self.setup_trainloss()
+        # FIXME add lr decay
         self.adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
             self.adv_loss, var_list=self.ae_model.AE_vars)
+        # DEBUG train the cnn
+        # self.CNNAdv_loss = self.B2_loss
+        # self.CNNAdv_train_step = tf.train.AdadeltaOptimizer(0.001).minimize(
+        #     self.CNNAdv_loss, var_list=self.cnn_model.CNN_vars+self.cnn_model.FC_vars)
+    # def train_CNNAdv(self, sess, train_x, train_y):
+    #     """Adv training."""
+    #     my_training(sess, self.x, self.y,
+    #                 self.CNNAdv_loss,
+    #                 self.CNNAdv_train_step,
+    #                 self.metrics, self.metric_names,
+    #                 train_x, train_y,
+    #                 plot_prefix='CNNADVTEST-'+self.name(),
+    #                 # 10 to speed it up
+    #                 num_epochs=20,
+    #                 # 2 to speed it up
+    #                 patience=5)
 
     @staticmethod
     def NAME():
@@ -699,76 +766,6 @@ class AdvAEModel(cleverhans.model.Model):
         return {self.O_LOGITS: logits,
                 self.O_PROBS: tf.nn.softmax(logits=logits)}
 
-    def setup_loss_simple(self):
-        print('Seting up loss ..')
-        high = self.CNN(self.x)
-        # logits = self.FC(high)
-        
-        rec = self.AE(self.x)
-        rec_high = self.CNN(rec)
-        rec_logits = self.FC(rec_high)
-
-        self.C0_loss = my_sigmoid_xent(self.AE1(self.x), self.x)
-        self.C1_loss = my_sigmoid_xent(rec_high, tf.nn.sigmoid(high))
-        self.C2_loss = my_softmax_xent(rec_logits, self.y)
-
-        noisy_x = my_add_noise(self.x)
-        noisy_rec = self.AE(noisy_x)
-        noisy_rec_high = self.CNN(noisy_rec)
-        noisy_rec_logits = self.FC(noisy_rec_high)
-
-        self.N0_loss = my_sigmoid_xent(self.AE1(noisy_x), self.x)
-        self.N0_l2_loss = tf.reduce_mean(tf.pow(self.AE(noisy_x) - self.x, 2))
-        self.N1_loss = my_sigmoid_xent(noisy_rec_high, tf.nn.sigmoid(high))
-        self.N2_loss = my_softmax_xent(noisy_rec_logits, self.y)
-
-        adv_x = my_PGD(self, self.x, params=self.cnn_model.PGD_params)
-        adv_high = self.CNN(adv_x)
-        adv_logits = self.FC(adv_high)
-
-        adv_rec = self.AE(adv_x)
-        adv_rec_high = self.CNN(adv_rec)
-        adv_rec_logits = self.FC(adv_rec_high)
-        
-        self.A0_loss = my_sigmoid_xent(self.AE1(adv_x), self.x)
-        self.A1_loss = my_sigmoid_xent(adv_rec_high, tf.nn.sigmoid(high))
-        self.A2_loss = my_softmax_xent(adv_rec_logits, self.y)
-
-        print('Setting up prediction ..')
-        # no AE, just CNN
-        CNN_logits = self.FC(self.CNN(self.x))
-        self.CNN_accuracy = my_accuracy_wrapper(CNN_logits, self.y)
-        # Should work on rec_logits
-        logits = self.FC(self.CNN(self.AE(self.x)))
-        self.accuracy = my_accuracy_wrapper(logits, self.y)
-        
-        noisy_x = my_add_noise(self.x)
-        noisy_logits = self.FC(self.CNN(self.AE(noisy_x)))
-        self.noisy_accuracy = my_accuracy_wrapper(noisy_logits, self.y)
-
-        print('Setting up metrics ..')
-        # TODO monitoring each of these losses and adjust weights
-        self.metrics = [
-            # clean data
-            self.C0_loss, self.C1_loss, self.C2_loss, self.accuracy,
-            # noisy data
-            self.N0_loss, self.N1_loss, self.N2_loss, self.noisy_accuracy,
-            # adv data
-            # self.A0_loss, self.A1_loss, self.A2_loss, self.adv_accuracy,
-            # postadv
-            # self.P0_loss, self.P1_loss, self.P2_loss, self.postadv_accuracy,
-            # I also need a baseline for the CNN performance probably?
-            # self.CNN_accuracy, self.B1_loss, self.B2_loss, self.obli_accuracy
-        ]
-        
-        self.metric_names = [
-            'C0_loss', 'C1_loss', 'C2_loss', 'accuracy',
-            'N0_loss', 'N1_loss', 'N2_loss', 'noisy_accuracy',
-            # 'A0_loss', 'A1_loss', 'A2_loss', 'adv_accuracy',
-            # 'P0_loss', 'P1_loss', 'P2_loss', 'postadv_accuracy',
-            # 'cnn_accuracy', 'B1_loss', 'B2_loss', 'obli_accuracy'
-        ]
-        
     def setup_loss(self):
         print('Seting up loss ..')
         high = self.CNN(self.x)
@@ -779,7 +776,10 @@ class AdvAEModel(cleverhans.model.Model):
         rec_logits = self.FC(rec_high)
 
         self.C0_loss = my_sigmoid_xent(self.AE1(self.x), self.x)
-        self.C1_loss = my_sigmoid_xent(rec_high, tf.nn.sigmoid(high))
+        # I'm replacing all "1" losses from xent to l1
+        # FIXME maybe replace "0" losses as well
+        # self.C1_loss = my_sigmoid_xent(rec_high, tf.nn.sigmoid(high))
+        self.C1_loss = tf.reduce_mean(tf.abs(rec_high - high))
         self.C2_loss = my_softmax_xent(rec_logits, self.y)
 
         noisy_x = my_add_noise(self.x)
@@ -801,7 +801,8 @@ class AdvAEModel(cleverhans.model.Model):
         adv_rec_logits = self.FC(adv_rec_high)
         
         self.A0_loss = my_sigmoid_xent(self.AE1(adv_x), self.x)
-        self.A1_loss = my_sigmoid_xent(adv_rec_high, tf.nn.sigmoid(high))
+        # self.A1_loss = my_sigmoid_xent(adv_rec_high, tf.nn.sigmoid(high))
+        self.A1_loss = tf.reduce_mean(tf.abs(adv_rec_high - high))
         self.A2_loss = my_softmax_xent(adv_rec_logits, self.y)
 
         postadv = my_PGD(self.cnn_model, rec, params=self.cnn_model.PGD_params)
@@ -816,7 +817,8 @@ class AdvAEModel(cleverhans.model.Model):
         obliadv_high = self.CNN(self.AE(obliadv))
         obliadv_logits = self.FC(obliadv_high)
 
-        self.B1_loss = my_sigmoid_xent(obliadv_high, tf.nn.sigmoid(high))
+        # self.B1_loss = my_sigmoid_xent(obliadv_high, tf.nn.sigmoid(high))
+        self.B1_loss = tf.reduce_mean(tf.abs(obliadv_high - high))
         self.B2_loss = my_softmax_xent(obliadv_logits, self.y)
         
         print('Setting up prediction ..')
@@ -871,10 +873,10 @@ class AdvAEModel(cleverhans.model.Model):
                     self.metrics, self.metric_names,
                     train_x, train_y,
                     plot_prefix=self.name(),
-                    num_epochs=10,
-                    patience=3)
-
-
+                    # 10 to speed it up
+                    num_epochs=20,
+                    # 2 to speed it up
+                    patience=5)
 
     def test_attack(self, sess, test_x, test_y, name):
         """Reurn images and titles."""
@@ -907,6 +909,18 @@ class AdvAEModel(cleverhans.model.Model):
             assert False
 
 
+        def myl2dist(x1, x2, logits, labels):
+            # calculate the correct indices
+            indices = tf.not_equal(tf.argmax(logits, axis=1),
+                                   tf.argmax(labels, 1))
+            diff = tf.boolean_mask(x1, indices) - tf.boolean_mask(x2, indices)
+            diff_norm = tf.norm(diff, ord=2, axis=(1,2))
+            # print(diff.shape[0])
+            # print(diff_norm.shape[0])
+            # ? != ?
+            # assert diff.shape[0] == diff_norm.shape[0]
+            return tf.reduce_mean(diff_norm)
+
         # This is tricky. I want to get the baseline of attacking
         # clean image AND VANILLA CNN. Thus, I'm using the proxy
         # cnn model.
@@ -917,25 +931,27 @@ class AdvAEModel(cleverhans.model.Model):
         baseline_acc = my_accuracy_wrapper(baseline_logits, self.y)
         obliadv_logits = self.FC(self.CNN(self.AE(obliadv)))
         obliadv_acc = my_accuracy_wrapper(obliadv_logits, self.y)
+        obliadv_l2 = myl2dist(obliadv, self.x, obliadv_logits, self.y)
         
         whiteadv = attack(self, self.x)
         whiteadv_rec = self.AE(whiteadv)
         whiteadv_logits = self.FC(self.CNN(self.AE(whiteadv)))
         whiteadv_acc = my_accuracy_wrapper(whiteadv_logits, self.y)
+        whiteadv_l2 = myl2dist(whiteadv, self.x, whiteadv_logits, self.y)
 
         # remember to compare visually postadv with rec (i.e. AE(x))
         postadv = attack(self.cnn_model, self.AE(self.x))
         postadv_logits = self.FC(self.CNN(postadv))
         postadv_acc = my_accuracy_wrapper(postadv_logits, self.y)
-
+        postadv_l2 = myl2dist(postadv, self.x, postadv_logits, self.y)
         
         to_run = {}
 
-        to_run['obliadv'] = obliadv, tf.argmax(baseline_logits, axis=1), baseline_acc
-        to_run['obliadv_rec'] = obliadv_rec, tf.argmax(obliadv_logits, axis=1), obliadv_acc
-        to_run['whiteadv'] = whiteadv, tf.constant(0, shape=(10,)), tf.constant(-1)
-        to_run['whiteadv_rec'] = whiteadv_rec, tf.argmax(whiteadv_logits, axis=1), whiteadv_acc
-        to_run['postadv'] = postadv, tf.argmax(postadv_logits, axis=1), postadv_acc
+        to_run['obliadv'] = obliadv, tf.argmax(baseline_logits, axis=1), baseline_acc, tf.constant(-1)
+        to_run['obliadv_rec'] = obliadv_rec, tf.argmax(obliadv_logits, axis=1), obliadv_acc, obliadv_l2
+        to_run['whiteadv'] = whiteadv, tf.constant(0, shape=(10,)), tf.constant(-1), tf.constant(-1)
+        to_run['whiteadv_rec'] = whiteadv_rec, tf.argmax(whiteadv_logits, axis=1), whiteadv_acc, whiteadv_l2
+        to_run['postadv'] = postadv, tf.argmax(postadv_logits, axis=1), postadv_acc, postadv_l2
         
         print('Testing attack {} ..'.format(name))
         t = time.time()
@@ -943,17 +959,44 @@ class AdvAEModel(cleverhans.model.Model):
         print('Attack done. Time: {:.3f}'.format(time.time()-t))
 
         for key in res:
-            tmp_images, tmp_titles, acc = res[key]
+            tmp_images, tmp_titles, acc, l2 = res[key]
             images.append(tmp_images[:10])
             if acc == -1:
                 titles.append(['']*10)
                 fringe = '{}\n{}'.format(name, key)
             else:
                 titles.append(tmp_titles[:10])
-                fringe = '{}\n{}\n{:.3f}'.format(name, key, acc)
+                fringe = '{}\n{}\n{:.3f}\nL2: {:.3f}'.format(name, key, acc, l2)
             fringes.append(fringe)
             print(fringe.replace('\n', ' '))
         return images, titles, fringes
+
+    def __test():
+        c = tf.constant([1,2,3,4])
+        i = tf.constant([1,2])
+        ii = tf.constant([1,0,0,1])
+
+        v = tf.constant([[[1,2,3],
+                          [4,5,200]],
+                         [[4,5,6],
+                          [1,2,3]]], dtype=tf.float32)
+        vv = tf.constant([[1,2,3], [4,5,6]], dtype=tf.float32)
+        keras.backend.eval(tf.norm(v, ord=2, axis=(1,2)))
+        keras.backend.eval(tf.norm(vv))
+
+        
+        iii = tf.cast(ii, tf.bool)
+        x = tf.gather(c, i)
+        xx = tf.gather(c, tf.where(ii))
+        xxx = tf.where(iii, c, tf.zeros_like(c))
+        xxxx = tf.boolean_mask(c, ii)
+        # x = tf.gather_nd(c, i)
+        keras.backend.eval(xxxx)
+        keras.backend.eval(tf.zeros_like(c))
+        keras.backend.eval(tf.where(ii))
+        c[iii]
+        tf.slice(c, iii)
+        
 
     def test_Model(self, sess, test_x, test_y):
         """Test CNN and AE models."""
@@ -1087,6 +1130,16 @@ class B2_Model(AdvAEModel):
         self.adv_loss = self.B2_loss
     def NAME():
         return 'B2'
+class C0_B2_Model(AdvAEModel):
+    def setup_trainloss(self):
+        self.adv_loss = self.B2_loss
+    def NAME():
+        return 'C0_B2'
+class A2_B2_C2_Model(AdvAEModel):
+    def NAME():
+        return 'A2_B2_C2'
+    def setup_trainloss(self):
+        self.adv_loss = self.A2_loss + self.B2_loss + self.C2_loss
 class A1_Model(AdvAEModel):
     def NAME():
         return 'A1'
@@ -1107,12 +1160,26 @@ class C0_A2_Model(AdvAEModel):
     def NAME():
         return 'C0_A2'
     def setup_trainloss(self):
-        self.adv_loss = (self.A2_loss + self.C0_loss)
+        # FIXME DEBUG add mu for all models
+        # mu = 0.5
+        self.adv_loss = self.A2_loss + self.C0_loss
+        
 class C2_A2_Model(AdvAEModel):
     def NAME():
         return 'C2_A2'
     def setup_trainloss(self):
         self.adv_loss = (self.A2_loss + self.C2_loss)
+
+class C1_A1_Model(AdvAEModel):
+    def NAME():
+        return 'C1_A1'
+    def setup_trainloss(self):
+        self.adv_loss = self.A1_loss + self.C1_loss
+class C1_A2_Model(AdvAEModel):
+    def NAME():
+        return 'C1_A2'
+    def setup_trainloss(self):
+        self.adv_loss = (self.A2_loss + self.C1_loss)
 
 # three
 class C0_N0_A2_Model(AdvAEModel):

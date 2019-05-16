@@ -992,3 +992,101 @@ def __test():
     # applied. I have to modify the function to get a pre-softmax
     # tensor.
 
+   
+
+def __test():
+    from tensorflow.python.tools import inspect_checkpoint as chkp
+    chkp.print_tensors_in_checkpoint_file('saved_model/AE.ckpt', tensor_name='', all_tensors=True)
+
+def __test():
+    train_double_backprop("saved_model/double-backprop.ckpt")
+    train_group_lasso("saved_model/group-lasso.ckpt")
+    
+    sess, model = restore_model("saved_model/double-backprop.ckpt")
+    sess, model = restore_model("saved_model/group-lasso.ckpt")
+    sess, model = restore_model("saved_model/ce.ckpt")
+    sess, model = restore_model("saved_model/adv.ckpt")
+    # sess, model = restore_model("saved_model/adv2.ckpt")
+
+    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
+    
+    # testing model accuracy on clean data
+    model.compute_accuracy(sess, model.x, model.y, model.logits, test_x, test_y)
+    
+    # 10 targeted inputs for demonstration
+    inputs, labels, targets = generate_victim(test_x, test_y)
+    # all 10000 inputs
+    inputs, labels = test_x, test_y
+    # random 100 inputs
+    indices = random.sample(range(test_x.shape[0]), 100)
+    inputs = test_x[indices]
+    labels = test_y[indices]
+    
+    test_model_against_attack(sess, model, my_FGSM, inputs, labels, None, prefix='FGSM')
+    test_model_against_attack(sess, model, my_PGD, inputs, labels, None, prefix='PGD')
+    test_model_against_attack(sess, model, my_JSMA, inputs, labels, None, prefix='JSMA')
+    # test_model_against_attack(sess, model, my_CW_targeted, inputs, labels, targets, prefix='CW_targeted')
+    test_model_against_attack(sess, model, my_CW, inputs, labels, None, prefix='CW')
+    
+def my_distillation():
+    """1. train a normal model, save the weights
+    
+    2. teacher model: load the weights, train the model with ce loss
+    function but replace: logits=predicted/train_temp(10)
+    
+    3. predicted = teacher.predict(data.train_data)
+       y = sess.run(tf.nn.softmax(predicted/train_temp))
+       data.train_labels = y
+    
+    4. Use the updated data to train the student. The student should
+    load the original weights. Still use the loss function with temp.
+
+    https://github.com/carlini/nn_robust_attacks
+
+    """
+    pass
+
+
+class TestA():
+    def __init__(self, x):
+        self.a = 1
+        self.x = x
+        self.foo()
+        self.bar(x)
+    def foo(self):
+        self.b = 2
+    def bar(self, xx):
+        self.xx = xx
+class TestB(TestA):
+    def foo(self):
+        self.b = 3
+class TestC(TestA):
+    def __init__(self, x):
+        super().__init__(x)
+    def foo(self):
+        self.b = 4
+
+def __test():
+    TestA(1).b
+    TestB(2).a
+    TestB(2).b
+    TestB(8).x
+    TestB(8).xx
+    TestC(4).a
+    TestC(5).b
+    TestC(3).x
+def restore_model(path):
+    tf.reset_default_graph()
+    sess = tf.Session()
+    model = MNIST_CNN()
+    saver = tf.train.Saver()
+    saver.restore(sess, path)
+    print("Model restored.")
+    return sess, model
+
+    
+def __test():
+    sess = tf.Session()
+    model = MNIST_CNN()
+    loss = model.cross_entropy()
+    my_adv_training(sess, model, loss)

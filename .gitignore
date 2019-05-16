@@ -7,3 +7,6 @@ tmp
 *.pdf
 *.tex
 *.pkl
+
+images/
+back/*-models*

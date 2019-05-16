@@ -81,3 +81,6 @@ avg: Distortion: L2: 1.5010, L1: 16.0486, L0: 769.3000
 
 For the first 0: Distortion: L2: 3.0370, L1: 11.1007, L0: 14.0000
 The average of 10: Distortion: L2: 3.6233, L1: 19.5815, L0: 29.0000
+
+* Tmp
+*** DONE [#A] cite:2018-ICLR-Samangouei-Defense Defense-GAN: Protecting classifiers against adversarial attacks using generative models

@@ -96,14 +96,28 @@ test/validation data, but can be 100% at training data.
 
 Using this network, train the AE.
 
+* Additional Experiments
+** Black box substitute model accuracy
+** Model transfer
+*** DONE Simple CNNs for MNIST
+    CLOSED: [2019-05-16 Thu 00:28]
+*** VGG for CIFAR
+** DefenseGAN break
+** Adv train both AE and CNN
+** Test using all test data
+instead of random 100
+
+
 
 * Experiment
+
 ** TODO train on several digits, leave out 2
 Do it on both AdvAE and adv training. This may even show better
 performance than adv training.
 
 
-** TODO CIFAR
+** DONE CIFAR
+   CLOSED: [2019-05-15 Wed 23:07]
 *** TODO resnet AE design
 *** TODO add high level xent when pretraining AE
 *** TODO VGG etc for CIFAR
@@ -111,7 +125,8 @@ Because training AE for CIFAR is pretty hard
 ** TODO Imagenet
 
 ** TODO compare with other defenses
-*** Adv training
+*** DONE Adv training
+    CLOSED: [2019-05-15 Wed 23:07]
 *** HAE: high-level feature guided AE
 **** one iteration high adv prove it fail on white box
   - oblivious
@@ -243,23 +258,40 @@ high-level guided models
 
 * Result
 
-MNIST
+MNIST (A2)
 
-| attacks | No defense | AdvAE obli | AdvAE white-box | HGD obli | HGD white-box | adv training white-box |
-|---------+------------+------------+-----------------+----------+---------------+------------------------|
-| clean   |       0.98 |            |            0.98 |       1. |          0.97 |                   0.99 |
-| CW      |         0. |       0.97 |            0.81 |     0.96 |            0. |                   0.86 |
-| FGSM    |       0.16 |       0.95 |            0.95 |     0.98 |          0.24 |                   0.97 |
-| PGD     |       0.01 |       0.96 |            0.94 |     0.99 |          0.02 |                   0.95 |
+| attacks | No defense | AdvAE obli | AdvAE white-box | HGD obli | HGD white-box | adv training white-box | DefGAN |
+|---------+------------+------------+-----------------+----------+---------------+------------------------+--------|
+| clean   |       0.98 |            |            0.98 |          |          0.97 |                   0.99 |        |
+| CW      |         0. |       0.97 |            0.81 |     0.96 |            0. |                   0.86 |   0.55 |
+| FGSM    |       0.16 |       0.95 |            0.95 |     0.98 |          0.24 |                   0.97 |        |
+| PGD     |       0.01 |       0.96 |            0.94 |     0.99 |          0.02 |                   0.95 |        |
 
-AdvAE Cifar10
+F-MNIST (A2)
+| attacks | No defense | AdvAE obli | AdvAE white-box | HGD obli | HGD white-box | adv training white-box | DefGAN |
+|---------+------------+------------+-----------------+----------+---------------+------------------------+--------|
+| clean   |       0.94 |            |            0.72 |          |          0.70 |                   0.83 |        |
+| CW      |          0 |       0.72 |            0.45 |     0.74 |           0.0 |                   0.66 |        |
+| FGSM    |       0.07 |       0.80 |            0.81 |     0.80 |          0.32 |                   0.83 |        |
+| PGD     |       0.03 |       0.78 |            0.73 |     0.96 |          0.21 |                   0.69 |        |
 
-| attacks | No defense | AdvAE obli | AdvAE white-box | HGD obli | HGD white-box | adv training white-box |
-|---------+------------+------------+-----------------+----------+---------------+------------------------|
-| clean   |       0.89 |            |            0.61 |          |          0.82 |                   0.67 |
-| CW      |          0 |       0.62 |            0.01 |     0.82 |            0. |                     0. |
-| FGSM    |       0.17 |       0.62 |            0.52 |     0.84 |          0.15 |                   0.48 |
-| PGD     |       0.07 |       0.61 |            0.46 |     0.83 |          0.11 |                   0.43 |
+F-MNIST (C0 A2)
+
+| attacks | No defense | AdvAE obli | AdvAE white-box | HGD obli | HGD white-box | adv training white-box | DefGAN |
+|---------+------------+------------+-----------------+----------+---------------+------------------------+--------|
+| clean   |       0.94 |            |            0.82 |          |          0.70 |                   0.83 |        |
+| CW      |          0 |       0.81 |            0.52 |     0.74 |           0.0 |                   0.66 |        |
+| FGSM    |       0.07 |       0.76 |            0.72 |     0.80 |          0.32 |                   0.83 |        |
+| PGD     |       0.03 |       0.78 |            0.63 |     0.96 |          0.21 |                   0.69 |        |
+
+AdvAE Cifar10 (C0 A2)
+
+| attacks | No defense | AdvAE obli | AdvAE white-box | HGD obli | HGD white-box | adv training white-box | DefGAN  |
+|---------+------------+------------+-----------------+----------+---------------+------------------------+---------|
+| clean   |       0.89 |            |            0.61 |          |          0.82 |                   0.67 |         |
+| CW      |          0 |       0.62 |            0.01 |     0.82 |            0. |                     0. |         |
+| FGSM    |       0.17 |       0.62 |            0.52 |     0.84 |          0.15 |                   0.48 |         |
+| PGD     |       0.07 |       0.61 |            0.46 |     0.83 |          0.11 |                   0.43 |         |
 
 Notes:
 - HGD: B2 loss
@@ -267,38 +299,3 @@ Notes:
 - AdvAE Cifar10: C0_A2 loss
 - adv training: IdentityModel
 
-
-
-
-
-* Appendix
-
-# #+CAPTION: AdvAE
-# [[./images/AdvAE-training-process-split.pdf]]
-# #+CAPTION: Post
-# [[./images/Post-training-process-split.pdf]]
-
-# #+CAPTION: =Post_Adv=
-# [[./images/Post_Adv-training-process-split.pdf]]
-# #+CAPTION: =Noisy_Adv=
-# [[./images/Noisy_Adv-training-process-split.pdf]]
-# #+CAPTION: =PostNoisy_Adv=
-# [[./images/PostNoisy_Adv-training-process-split.pdf]]
-
-# #+CAPTION: CleanAdv
-# [[./images/CleanAdv-training-process-split.pdf]]
-# #+CAPTION: =Post_CleanAdv=
-# [[./images/Post_CleanAdv-training-process-split.pdf]]
-# #+CAPTION: =Noisy_CleanAdv=
-# [[./images/Noisy_CleanAdv-training-process-split.pdf]]
-# #+CAPTION: =PostNoisy_CleanAdv=
-# [[./images/PostNoisy_CleanAdv-training-process-split.pdf]]
-
-# #+CAPTION: High
-# [[./images/High-training-process-split.pdf]]
-# #+CAPTION: =High_Adv=
-# [[./images/High_Adv-training-process-split.pdf]]
-# #+CAPTION: =PostHigh_Adv=
-# [[./images/PostHigh_Adv-training-process-split.pdf]]
-
-# [[./images/PostNoisy_Adv_Rec-training-process-split.pdf]]

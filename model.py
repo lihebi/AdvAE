@@ -49,6 +49,7 @@ def my_compute_accuracy(sess, x, y, preds, x_test, y_test):
         dtype=tf.float32))
     return sess.run(acc, feed_dict={x: x_test, y: y_test})
 
+
 class CNNModel(cleverhans.model.Model):
     """This model is used inside AdvAEModel."""
     @staticmethod
@@ -99,8 +100,8 @@ class CNNModel(cleverhans.model.Model):
                           'learning_rate': 0.2}
     def setup_CNN(self):
         inputs = keras.layers.Input(shape=self.xshape(), dtype='float32')
-        # FIXME this also assigns self.conv_layers
-        x = keras.layers.Reshape(self.xshape())(inputs)
+        x = inputs
+        # x = keras.layers.Reshape(self.xshape())(inputs)
         x = keras.layers.Conv2D(32, 3)(x)
         x = keras.layers.Activation('relu')(x)
         x = keras.layers.Conv2D(32, 3)(x)
@@ -127,14 +128,14 @@ class CNNModel(cleverhans.model.Model):
         x = keras.layers.Activation('relu')(x)
         logits = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, logits)
-    def train_CNN(self, sess, train_x, train_y):
+    def train_CNN(self, sess, train_x, train_y, patience=10, num_epoches=200):
         my_training(sess, self.x, self.y,
                     self.CNN_loss,
                     self.CNN_train_step,
                     [self.CNN_accuracy], ['accuracy'],
                     train_x, train_y,
-                    num_epochs=200,
-                    patience=10)
+                    num_epochs=num_epoches,
+                    patience=patience)
         
     def save_weights(self, sess, path):
         """Save weights using keras API."""
@@ -148,20 +149,10 @@ class CNNModel(cleverhans.model.Model):
     def yshape(self):
         return (10,)
 
-
-def __test():
-    sys.path.append('/home/hebi/github/reading/')
-    from cifar10_challenge import model as madry_resnet
-    madrynet = madry_resnet.Model(mode='train')
-    
-    madrynet.x_input
-    keras.layers.Lambda()
-
-    sys.path.append('/home/hebi/github/reading/tensorflow-models')
-    from official.resnet.keras.resnet_cifar_model import resnet56
-    # the problem of using this model is that, the softmax is
-    # applied. I have to modify the function to get a pre-softmax
-    # tensor.
+class FashionCNNModel(CNNModel):
+    @staticmethod
+    def NAME():
+        return "fashion"
 
 class MyResNet(CNNModel):
     @staticmethod
@@ -679,7 +670,6 @@ vars, so that adv training would change those instead.
     """
     def setup_AE(self):
         inputs = keras.layers.Input(shape=self.shape, dtype='float32')
-        keras.layers.copy
         outputs = keras.layers.Lambda(lambda x: x, output_shape=self.shape)(inputs)
 
         # FIMXE this is dummy
@@ -752,11 +742,6 @@ class AdvAEModel(cleverhans.model.Model):
     def NAME():
         "Override by children models."
         return "AdvAE"
-    def name(self):
-        return '{}-{}-{}'.format(self.cnn_model.NAME(),
-                                 self.ae_model.NAME(),
-                                 # FIXME ugly and why??
-                                 type(self).NAME())
     # cleverhans
     def predict(self, x):
         return self.FC(self.CNN(self.AE(x)))
@@ -865,14 +850,14 @@ class AdvAEModel(cleverhans.model.Model):
             'cnn_accuracy', 'B1_loss', 'B2_loss', 'obli_accuracy']
 
 
-    def train_Adv(self, sess, train_x, train_y):
+    def train_Adv(self, sess, train_x, train_y, plot_prefix=''):
         """Adv training."""
         my_training(sess, self.x, self.y,
                     self.adv_loss,
                     self.adv_train_step,
                     self.metrics, self.metric_names,
                     train_x, train_y,
-                    plot_prefix=self.name(),
+                    plot_prefix=plot_prefix,
                     # 10 to speed it up
                     num_epochs=20,
                     # 2 to speed it up
@@ -931,19 +916,22 @@ class AdvAEModel(cleverhans.model.Model):
         baseline_acc = my_accuracy_wrapper(baseline_logits, self.y)
         obliadv_logits = self.FC(self.CNN(self.AE(obliadv)))
         obliadv_acc = my_accuracy_wrapper(obliadv_logits, self.y)
-        obliadv_l2 = myl2dist(obliadv, self.x, obliadv_logits, self.y)
+        # obliadv_l2 = myl2dist(obliadv, self.x, obliadv_logits, self.y)
+        obliadv_l2 = tf.constant(1, tf.float32)
         
         whiteadv = attack(self, self.x)
         whiteadv_rec = self.AE(whiteadv)
         whiteadv_logits = self.FC(self.CNN(self.AE(whiteadv)))
         whiteadv_acc = my_accuracy_wrapper(whiteadv_logits, self.y)
-        whiteadv_l2 = myl2dist(whiteadv, self.x, whiteadv_logits, self.y)
+        # whiteadv_l2 = myl2dist(whiteadv, self.x, whiteadv_logits, self.y)
+        whiteadv_l2 = tf.constant(1, tf.float32)
 
         # remember to compare visually postadv with rec (i.e. AE(x))
         postadv = attack(self.cnn_model, self.AE(self.x))
         postadv_logits = self.FC(self.CNN(postadv))
         postadv_acc = my_accuracy_wrapper(postadv_logits, self.y)
-        postadv_l2 = myl2dist(postadv, self.x, postadv_logits, self.y)
+        # postadv_l2 = myl2dist(postadv, self.x, postadv_logits, self.y)
+        postadv_l2 = tf.constant(1, tf.float32)
         
         to_run = {}
 
@@ -952,11 +940,23 @@ class AdvAEModel(cleverhans.model.Model):
         to_run['whiteadv'] = whiteadv, tf.constant(0, shape=(10,)), tf.constant(-1), tf.constant(-1)
         to_run['whiteadv_rec'] = whiteadv_rec, tf.argmax(whiteadv_logits, axis=1), whiteadv_acc, whiteadv_l2
         to_run['postadv'] = postadv, tf.argmax(postadv_logits, axis=1), postadv_acc, postadv_l2
+
+        data_torun = {
+            'obliadv': baseline_acc,
+            'obliadv_rec': obliadv_acc,
+            'whiteadv_rec': whiteadv_acc,
+            'whiteadv_l2': whiteadv_l2,
+        }
         
         print('Testing attack {} ..'.format(name))
         t = time.time()
-        res = sess.run(to_run, feed_dict={self.x: test_x, self.y: test_y})
+        res, data = sess.run([to_run, data_torun], feed_dict={self.x: test_x, self.y: test_y})
         print('Attack done. Time: {:.3f}'.format(time.time()-t))
+
+        tmp = {}
+        for key in data:
+            tmp[key] = float(data[key])
+        data = tmp
 
         for key in res:
             tmp_images, tmp_titles, acc, l2 = res[key]
@@ -969,7 +969,7 @@ class AdvAEModel(cleverhans.model.Model):
                 fringe = '{}\n{}\n{:.3f}\nL2: {:.3f}'.format(name, key, acc, l2)
             fringes.append(fringe)
             print(fringe.replace('\n', ' '))
-        return images, titles, fringes
+        return images, titles, fringes, data
 
     def __test():
         c = tf.constant([1,2,3,4])
@@ -983,6 +983,10 @@ class AdvAEModel(cleverhans.model.Model):
         vv = tf.constant([[1,2,3], [4,5,6]], dtype=tf.float32)
         keras.backend.eval(tf.norm(v, ord=2, axis=(1,2)))
         keras.backend.eval(tf.norm(vv))
+
+        x = keras.backend.eval(tf.constant(1, tf.float32))
+        type(x)
+        type(float(x))
 
         
         iii = tf.cast(ii, tf.bool)
@@ -1023,7 +1027,11 @@ class AdvAEModel(cleverhans.model.Model):
         accs = sess.run([self.CNN_accuracy, self.accuracy, self.noisy_accuracy],
                         feed_dict={self.x: test_x, self.y: test_y})
         print('raw accuracies (raw CNN, AE clean, AE noisy): {}'.format(accs))
-        
+        data = {
+            'CNN clean': float(accs[0]),
+            'AE clean': float(accs[1]),
+            'AE noisy': float(accs[2])
+        }
         images.append(res['x'][:10])
         titles.append(res['y'][:10])
         fringes.append('x\n{:.3f}'.format(accs[0]))
@@ -1033,11 +1041,14 @@ class AdvAEModel(cleverhans.model.Model):
             titles.append(['']*10)
             fringes.append('{}\n{:.3f}'.format(name, acc))
 
-        return images, titles, fringes
+        return images, titles, fringes, data
         
         
 
-    def test_all(self, sess, test_x, test_y, attacks=[], filename='out.pdf', num_sample=100, batch_size=100):
+    def test_all(self, sess, test_x, test_y, attacks=[],
+                 # filename='out.pdf',
+                 save_prefix='test',
+                 num_sample=100, batch_size=100):
         """Test clean data x and y.
 
         - Use only CNN, to test whether CNN is functioning
@@ -1057,6 +1068,7 @@ class AdvAEModel(cleverhans.model.Model):
         all_images = []
         all_titles = []
         all_fringes = []
+        all_data = []
         
         # nbatch = num_sample // batch_size
         # for i in range(nbatch):
@@ -1065,19 +1077,26 @@ class AdvAEModel(cleverhans.model.Model):
         #     batch_x = test_x[indices[start:end]]
         #     batch_y = test_y[indices[start:end]]
 
-        images, titles, fringes = self.test_Model(sess, test_x, test_y)
+        images, titles, fringes, data = self.test_Model(sess, test_x, test_y)
         all_images.extend(images)
         all_titles.extend(titles)
         all_fringes.extend(fringes)
+        all_data.append(data)
         for name in attacks:
-            images, titles, fringes = self.test_attack(sess, test_x, test_y, name)
+            images, titles, fringes, data = self.test_attack(sess, test_x, test_y, name)
             all_images.extend(images)
             all_titles.extend(titles)
             all_fringes.extend(fringes)
+            all_data.append({name: data})
         
         print('Plotting result ..')
-        grid_show_image(all_images, filename=filename, titles=all_titles, fringes=all_fringes)
-        print('Done. Saved to {}'.format(filename))
+        plot_filename = 'images/{}.pdf'.format(save_prefix)
+        data_filename = 'images/{}.json'.format(save_prefix)
+        grid_show_image(all_images, filename=plot_filename, titles=all_titles, fringes=all_fringes)
+        # saving data
+        with open(data_filename, 'w') as fp:
+            json.dump(all_data, fp, indent=4)
+        print('Done. Saved to {}'.format(plot_filename))
 
     def setup_trainloss(self):
         """DEPRECATED Overwrite by subclasses to customize the loss.

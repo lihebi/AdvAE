@@ -978,3 +978,17 @@ will fit on these data first."""
     def augment_batch(self, sess, batch_x):
         return self.datagen.flow(batch_x, batch_size=1)
 
+def __test():
+    sys.path.append('/home/hebi/github/reading/')
+    from cifar10_challenge import model as madry_resnet
+    madrynet = madry_resnet.Model(mode='train')
+    
+    madrynet.x_input
+    keras.layers.Lambda()
+
+    sys.path.append('/home/hebi/github/reading/tensorflow-models')
+    from official.resnet.keras.resnet_cifar_model import resnet56
+    # the problem of using this model is that, the softmax is
+    # applied. I have to modify the function to get a pre-softmax
+    # tensor.
+

@@ -21,6 +21,19 @@ def load_mnist_data():
     test_y = keras.utils.to_categorical(test_y, 10)
     return (train_x, train_y), (test_x, test_y)
 
+def load_fashion_mnist_data():
+    (train_x, train_y), (test_x, test_y) = keras.datasets.fashion_mnist.load_data()
+    # convert data
+    train_x = train_x.astype('float32') / 255
+    test_x = test_x.astype('float32') / 255
+    train_x.shape
+    train_x = np.reshape(train_x, (train_x.shape[0], 28,28,1))
+    test_x = np.reshape(test_x, (test_x.shape[0], 28,28,1))
+    
+    train_y = keras.utils.to_categorical(train_y, 10)
+    test_y = keras.utils.to_categorical(test_y, 10)
+    return (train_x, train_y), (test_x, test_y)
+
 def validation_split(train_x, train_y):
     nval = train_x.shape[0] // 10
     val_x = train_x[-nval:]

@@ -15,18 +15,57 @@ from cleverhans.attacks import CarliniWagnerL2
 
 from utils import *
 from model import *
+from defensegan_models import *
 from attacks import *
 
-def load_model(cnn_cls, ae_cls, advae_cls,
-               saved_folder='saved_models',
-               cnnprefix='', aeprefix='', advprefix='', load_adv=True):
-    """If load_adv = False, try to load ae instead."""
+def compute_names(cnn_cls, ae_cls, advae_cls,
+                  saved_folder='saved_models',
+                  cnnprefix='', aeprefix='', advprefix='',
+                  prefix='',
+                  # TODO refactor prefix to dataset_prefix
+                  cnnorig='',
+                  prefixorig=''):
     if not cnnprefix:
         cnnprefix = cnn_cls.NAME()
     if not advprefix:
         advprefix = advae_cls.NAME()
     if not aeprefix:
         aeprefix = ae_cls.NAME()
+
+    if prefix:
+        prefix += '-'
+    if prefixorig:
+        prefixorig += '-'
+    pCNN = os.path.join(saved_folder, '{}{}-CNN.hdf5'.format(prefix, cnnprefix))
+    
+    if cnnorig:
+        # transfer mode. This should only be used when testing
+        pAE = os.path.join(saved_folder, '{}{}-{}-AE.hdf5'.format(prefixorig, cnnorig, aeprefix))
+        pAdvAE = os.path.join(saved_folder, '{}{}-{}-{}-AdvAE.hdf5'.format(prefixorig, cnnorig, aeprefix, advprefix))
+        plot_prefix='{}{}-TransTo-{}-{}-{}'.format(prefixorig, cnnorig, cnnprefix, aeprefix, advprefix)
+    else:
+        pAE = os.path.join(saved_folder, '{}{}-{}-AE.hdf5'.format(prefix, cnnprefix, aeprefix))
+        pAdvAE = os.path.join(saved_folder, '{}{}-{}-{}-AdvAE.hdf5'.format(prefix, cnnprefix, aeprefix, advprefix))
+        plot_prefix='{}{}-{}-{}'.format(prefix, cnnprefix, aeprefix, advprefix)
+    return pCNN, pAE, pAdvAE, plot_prefix
+
+def load_model(cnn_cls, ae_cls, advae_cls,
+               saved_folder='saved_models',
+               cnnprefix='', aeprefix='', advprefix='',
+               prefix='',
+               cnnorig='',
+               prefixorig='',
+               load_adv=True):
+    """If load_adv = False, try to load ae instead.
+
+    cnnorig: the transfer model for CNN to be loaded.
+    """
+    pCNN, pAE, pAdvAE, _ = compute_names(cnn_cls, ae_cls, advae_cls,
+                                         cnnprefix=cnnprefix, aeprefix=aeprefix, advprefix=advprefix,
+                                         cnnorig=cnnorig,
+                                         prefix=prefix,
+                                         prefixorig=prefixorig)
+    
     tf.reset_default_graph()
     sess = tf.Session()
     
@@ -34,43 +73,53 @@ def load_model(cnn_cls, ae_cls, advae_cls,
     ae = ae_cls(cnn)
     adv = advae_cls(cnn, ae)
      
-    pCNN = os.path.join(saved_folder, '{}-CNN.hdf5'.format(cnnprefix))
-    pAE = os.path.join(saved_folder, '{}-{}-AE.hdf5'.format(cnnprefix, aeprefix))
-    pAdvAE = os.path.join(saved_folder, '{}-{}-{}-AdvAE.hdf5'.format(cnnprefix, aeprefix, advprefix))
    
     init = tf.global_variables_initializer()
     sess.run(init)
 
+    print('loading {} ..'.format(pCNN))
     cnn.load_weights(sess, pCNN)
     if load_adv:
+        print('loading {} ..'.format(pAdvAE))
         ae.load_weights(sess, pAdvAE)
     else:
+        print('loading {} ..'.format(pAE))
         ae.load_weights(sess, pAE)
     return adv, sess
-    
 
+def train_CNN(cnn_cls, train_x, train_y, saved_folder='saved_models', prefix=''):
+    """This function currently is exclusively training transfer CNN models."""
+    if not os.path.exists('images'):
+        os.makedirs('images')
+    pCNN, _, _, _ = compute_names(cnn_cls, cnn_cls, cnn_cls, prefix=prefix)
+    if os.path.exists(pCNN):
+        print('Already trained {}'.format(pCNN))
+    else:
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            cnn = cnn_cls()
+            init = tf.global_variables_initializer()
+            sess.run(init)
+
+            print('Trianing CNN ..')
+            cnn.train_CNN(sess, train_x, train_y, patience=5)
+            print('Saving model to {} ..'.format(pCNN))
+            cnn.save_weights(sess, pCNN)
+    
 def train_model(cnn_cls, ae_cls, advae_cls,
                 train_x, train_y,
                 saved_folder='saved_models',
                 cnnprefix='', aeprefix='', advprefix='',
+                prefix='',
                 run_adv=True, overwrite=False):
     """Train AdvAE.
 
-    - prefix: CNN and AE ckpt prefix
-    - advprefix: AdvAE ckpt prefix
     """
     if not os.path.exists('images'):
         os.makedirs('images')
-    if not cnnprefix:
-        cnnprefix = cnn_cls.NAME()
-    if not advprefix:
-        advprefix = advae_cls.NAME()
-    if not aeprefix:
-        aeprefix = ae_cls.NAME()
-        
-    pCNN = os.path.join(saved_folder, '{}-CNN.hdf5'.format(cnnprefix))
-    pAE = os.path.join(saved_folder, '{}-{}-AE.hdf5'.format(cnnprefix, aeprefix))
-    pAdvAE = os.path.join(saved_folder, '{}-{}-{}-AdvAE.hdf5'.format(cnnprefix, aeprefix, advprefix))
+    pCNN, pAE, pAdvAE, plot_prefix = compute_names(cnn_cls, ae_cls, advae_cls,
+                                                   cnnprefix=cnnprefix, aeprefix=aeprefix, advprefix=advprefix,
+                                                   prefix=prefix)
 
     # DEBUG early return here to avoid the big overhead of creating the graph
     if os.path.exists(pAdvAE):
@@ -124,7 +173,7 @@ def train_model(cnn_cls, ae_cls, advae_cls,
             # experimenting with changing training or loss for that.
             if not os.path.exists(pAdvAE) or overwrite:
                 print('Trainng AdvAE ..')
-                adv.train_Adv(sess, train_x, train_y)
+                adv.train_Adv(sess, train_x, train_y, plot_prefix=plot_prefix)
                 print('saving to {} ..'.format(pAdvAE))
                 ae.save_weights(sess, pAdvAE)
             else:
@@ -135,42 +184,6 @@ def train_model(cnn_cls, ae_cls, advae_cls,
 
     
 
-def main_train():
-    
-    (train_x, train_y), (test_x, test_y) = load_mnist_data()
-    # adv training baseline
-    train_model(CNNModel, IdentityAEModel, A2_Model, train_x, train_y)
-
-    # train models
-    train_model(CNNModel, AEModel, A2_Model, train_x, train_y)
-    train_model(CNNModel, AEModel, B2_Model, train_x, train_y)
-    train_model(CNNModel, AEModel, N0_A2_Model, train_x, train_y)
-    train_model(CNNModel, AEModel, C0_A2_Model, train_x, train_y)
-    # train_model(CNNModel, AEModel, C0_N0_A2_Model, train_x, train_y)
-
-    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
-    # adv training baseline
-    train_model(MyResNet, IdentityAEModel, A2_Model, train_x, train_y)
-
-    # train models
-    train_model(MyResNet, DunetModel, C0_A2_Model, train_x, train_y)
-    train_model(MyResNet, DunetModel, C2_A2_Model, train_x, train_y)
-    train_model(MyResNet, DunetModel, A2_Model, train_x, train_y)
-    train_model(MyResNet, DunetModel, B2_Model, train_x, train_y)
-    train_model(MyResNet, DunetModel, C0_B2_Model, train_x, train_y)
-    train_model(MyResNet, DunetModel, A2_B2_C2_Model, train_x, train_y)
-    train_model(MyResNet, DunetModel, C1_A1_Model, train_x, train_y)
-    train_model(MyResNet, DunetModel, C1_A2_Model, train_x, train_y)
-    train_model(MyResNet, DunetModel, C2_A2_P2_Model, train_x, train_y)
-    train_model(MyResNet, DunetModel, P2_Model, train_x, train_y)
-    
-    # train_model(MyResNet, DunetModel, N0_A2_Model, train_x, train_y)
-    # train_model(MyResNet, DunetModel, C0_N0_A2_Model, train_x, train_y)
-
-    # train_model(MyResNet, AEModel, Test_Model, train_x, train_y)
-
-    # train_model(MyResNet, CifarAEModel, A2_Model, train_x, train_y)
-    # train_model(MyResNet, DunetModel, A2_Model, train_x, train_y)
     
 def __test():
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
@@ -209,57 +222,109 @@ def __test():
 def test_model(cnn_cls, ae_cls, advae_cls,
                test_x, test_y,
                saved_folder='saved_models',
-               cnnprefix='', aeprefix='', advprefix='', force=False):
+               cnnprefix='', aeprefix='', advprefix='',
+               prefix='',
+               cnnorig='',
+               prefixorig='',
+               force=False):
 
 
     # FIXME keep consistent with advae.name()
     model_name = '{}-{}-{}'.format(cnn_cls.NAME(), ae_cls.NAME(), advae_cls.NAME())
-    filename = 'images/test-result-{}.pdf'.format(model_name)
+    _, _, _, plot_prefix = compute_names(cnn_cls, ae_cls, advae_cls,
+                                         cnnprefix=cnnprefix, aeprefix=aeprefix, advprefix=advprefix,
+                                         cnnorig=cnnorig,
+                                         prefix=prefix)
+    save_prefix = 'test-result-{}'.format(plot_prefix)
+    
+    filename = 'images/{}.pdf'.format(save_prefix)
+    filename2 = 'images/{}.json'.format(save_prefix)
 
-    if not os.path.exists(filename) or force:
+    if not os.path.exists(filename2) or force:
         print('loading model ..')
-        model, sess = load_model(cnn_cls, ae_cls, advae_cls)
+        model, sess = load_model(cnn_cls, ae_cls, advae_cls,
+                                 cnnprefix=cnnprefix, aeprefix=aeprefix, advprefix=advprefix,
+                                 prefix=prefix, cnnorig=cnnorig, prefixorig=prefixorig)
         # model.test_all(sess, test_x, test_y, attacks=[])
         # model.test_all(sess, test_x, test_y, attacks=[], num_sample=1000)
-        print('testing {} ..'.format(model.name()))
-        model.test_all(sess, test_x, test_y, attacks=['CW', 'FGSM', 'PGD'],
-                       filename='images/test-result-{}.pdf'.format(model.name()))
+        print('testing {} ..'.format(plot_prefix))
+        model.test_all(sess, test_x, test_y,
+                       attacks=['CW', 'FGSM', 'PGD'],
+                       # attacks=['CW', 'FGSM', 'PGD', 'JSMA'],
+                       save_prefix=save_prefix)
         # model.test_all(sess, test_x, test_y, attacks=['CW', 'FGSM', 'PGD'])
         # model.test_all(sess, test_x, test_y, attacks=['CW', 'JSMA', 'FGSM', 'PGD'])
     else:
         print('Already tested, see {}'.format(filename))
+
+def main_train():
+    ##############################
+    ## MNIST
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
+        train_CNN(m, train_x, train_y, prefix='DGANMNIST')
+    for m in [A2_Model, B2_Model, C0_A2_Model]:
+        train_model(CNNModel, AEModel, m, train_x, train_y)
+    train_model(CNNModel, IdentityAEModel, A2_Model, train_x, train_y)
+
+    ##############################
+    ## Fashion MNIST
+    (train_x, train_y), (test_x, test_y) = load_fashion_mnist_data()
+    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
+        train_CNN(m, train_x, train_y, prefix='DGANFashion')
+    for m in [A2_Model, B2_Model, C0_A2_Model]:
+        train_model(FashionCNNModel, AEModel, m, train_x, train_y)
+    train_model(FashionCNNModel, IdentityAEModel, A2_Model, train_x, train_y)
+    
+    ##############################
+    ## CIFAR10
+    
+    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
+    # adv training baseline
+    train_model(MyResNet, IdentityAEModel, A2_Model, train_x, train_y)
+
+    for m in [C0_A2_Model]:
+        train_model(MyResNet, DunetModel, m, train_x, train_y)
     
 def main_test():
 
+    ##############################
+    ## MNIST
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    # test_model(CNNModel, AEModel, A2_Model, test_x, test_y, force=True)
+    # adv training baseline
+    for m in [A2_Model, B2_Model, C0_A2_Model]:
+        test_model(CNNModel, AEModel, m, test_x, test_y)
+    # test whether the model works for other models
+    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
+        test_model(m, AEModel, A2_Model,
+                   test_x, test_y,
+                   prefix='DGANMNIST',
+                   prefixorig='',
+                   cnnorig=CNNModel.NAME())
     test_model(CNNModel, IdentityAEModel, A2_Model, test_x, test_y)
+
+    ##############################
+    ## Fashion MNIST
+    (train_x, train_y), (test_x, test_y) = load_fashion_mnist_data()
+    # adv training baseline
+    for m in [A2_Model, B2_Model, C0_A2_Model]:
+        test_model(FashionCNNModel, AEModel, m, test_x, test_y)
+    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
+        test_model(m, AEModel, A2_Model,
+                   test_x, test_y,
+                   prefix='DGANFashion',
+                   prefixorig='',
+                   cnnorig=FashionCNNModel.NAME())
+    test_model(FashionCNNModel, IdentityAEModel, A2_Model, test_x, test_y)
     
-    test_model(CNNModel, AEModel, A2_Model, test_x, test_y)
-    test_model(CNNModel, AEModel, B2_Model, test_x, test_y)
-    test_model(CNNModel, AEModel, N0_A2_Model, test_x, test_y)
-    test_model(CNNModel, AEModel, C0_A2_Model, test_x, test_y)
-    # test_model(CNNModel, AEModel, C0_N0_A2_Model, test_x, test_y)
-
-    # (train_x, train_y), (test_x, test_y) = load_cifar10_data()
-    # test_model(MyResNet, AEModel, A2_Model, test_x, test_y)
-    # test_model(MyResNet, AEModel, B2_Model, test_x, test_y)
-    # test_model(MyResNet, AEModel, N0_A2_Model, test_x, test_y)
-    # test_model(MyResNet, AEModel, C0_A2_Model, test_x, test_y)
-    # test_model(MyResNet, AEModel, C0_N0_A2_Model, test_x, test_y)
-
+    ##############################
+    ## CIFAR10
     (train_x, train_y), (test_x, test_y) = load_cifar10_data()
     test_model(MyResNet, IdentityAEModel, A2_Model, test_x, test_y)
-    
-    test_model(MyResNet, DunetModel, C0_A2_Model, test_x, test_y)
-    test_model(MyResNet, DunetModel, C2_A2_Model, test_x, test_y)
-    test_model(MyResNet, DunetModel, A2_Model, test_x, test_y)
-    test_model(MyResNet, DunetModel, B2_Model, test_x, test_y)
-    test_model(MyResNet, DunetModel, C0_B2_Model, test_x, test_y)
-    test_model(MyResNet, DunetModel, A2_B2_C2_Model, test_x, test_y)
-    test_model(MyResNet, DunetModel, C1_A1_Model, test_x, test_y)
-    test_model(MyResNet, DunetModel, C1_A2_Model, test_x, test_y)
-    test_model(MyResNet, DunetModel, C2_A2_P2_Model, test_x, test_y)
-    test_model(MyResNet, DunetModel, P2_Model, test_x, test_y)
+
+    for m in [C0_A2_Model, C0_B2_Model]:
+        test_model(MyResNet, DunetModel, m, test_x, test_y)
     
 def main():
     (train_x, train_y), (test_x, test_y) = load_cifar10_data()
@@ -302,6 +367,60 @@ if __name__ == '__main__':
     main_train()
     main_test()
     # main()
+def parse_single_whitebox(json_file):
+    with open(json_file, 'r') as fp:
+        j = json.load(fp)
+        return [j[0]['AE clean'],
+                j[3]['PGD']['whiteadv_rec'],
+                j[2]['FGSM']['whiteadv_rec'],
+                j[1]['CW']['whiteadv_rec']]
+    
+
+def parse_result(advae_json, advtrain_json, hgd_json):
+    with open(advae_json, 'r') as fp:
+        advae = json.load(fp)
+
+    res = {}
+    res['nodef'] = [advae[0]['CNN clean'],
+                    advae[3]['PGD']['obliadv'],
+                    advae[2]['FGSM']['obliadv'],
+                    advae[1]['CW']['obliadv']]
+    
+    res['advae obli'] = [-1,
+                         advae[3]['PGD']['obliadv_rec'],
+                         advae[2]['FGSM']['obliadv_rec'],
+                         advae[1]['CW']['obliadv_rec']]
+    
+    res['advae whitebox'] = parse_single_whitebox(advae_json)
+    res['hgd whitebox'] = parse_single_whitebox(hgd_json)
+    res['advtrain whitebox'] = parse_single_whitebox(advtrain_json)
+    return res
+def __test():
+    # extracting experiment results
+
+    # MNIST
+    res = parse_result('images/test-result-mnistcnn-ae-A2.json',
+                       'images/test-result-mnistcnn-identityAE-A2.json',
+                       'images/test-result-mnistcnn-ae-B2.json')
+    # fashion
+    res = parse_result('images/test-result-fashion-ae-A2.json',
+                       'images/test-result-fashion-identityAE-A2.json',
+                       'images/test-result-fashion-ae-B2.json')
+    # cifar
+    res = parse_result('images/test-result-resnet-dunet-C0_A2.json',
+                       'images/test-result-resnet-identityAE-A2.json',
+                       'images/test-result-resnet-dunet-C0_B2.json')
+    # transfer models
+    res = {}
+    for defgan_var in ['a', 'b', 'c', 'd', 'e', 'f']:
+        # fname = 'images/test-result-{}-TransTo-DefenseGAN_{}-ae-A2.json'.format('mnist', defgan_var)
+        fname = 'images/test-result-{}-TransTo-DefenseGAN_{}-ae-A2.json'.format('fashion', defgan_var)
+        res[defgan_var] = parse_single_whitebox(fname)
+        
+    for i in range(4):
+        for k in res:
+            print('{:.3f}'.format(res[k][i]), end=',')
+        print()
 
 def __test():
     (train_x, train_y), (test_x, test_y) = load_mnist_data()

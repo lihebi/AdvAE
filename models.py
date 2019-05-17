@@ -211,7 +211,7 @@ class AdvAEModel(cleverhans.model.Model):
                       # validation_data=(val_x, val_y),
                       epochs=100,
                       callbacks=callbacks)
-            model.load_weights('best_model.ckpt')
+            model.load_weights('best_model.hdf5')
 
     def test_attack(self, sess, test_x, test_y, name):
         """Reurn images and titles."""

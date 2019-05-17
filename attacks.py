@@ -45,7 +45,8 @@ def my_FGSM(model, x, params=dict()):
     fgsm_params.update(params)
     fgsm = FastGradientMethod(model)
     adv_x = fgsm.generate(x, **fgsm_params)
-    return adv_x
+    return tf.stop_gradient(adv_x)
+    # return adv_x
 def my_PGD(model, x, params=dict()):
     pgd = ProjectedGradientDescent(model)
     pgd_params = {'eps': 0.3,
@@ -55,7 +56,8 @@ def my_PGD(model, x, params=dict()):
                   'clip_max': CLIP_MAX}
     pgd_params.update(params)
     adv_x = pgd.generate(x, **pgd_params)
-    return adv_x
+    return tf.stop_gradient(adv_x)
+    # return adv_x
 def my_JSMA(model, x, params=dict()):
     jsma = SaliencyMapMethod(model)
     jsma_params = {'theta': 1., 'gamma': 0.1,

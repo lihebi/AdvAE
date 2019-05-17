@@ -3,6 +3,7 @@ Wide ResNet Code from https://github.com/titu1994/Wide-Residual-Networks
 """
 
 import tensorflow as tf
+import keras
 from keras.models import Model
 from keras.layers import Input, Add, Activation, Dropout, Flatten, Dense
 from keras.layers import BatchNormalization

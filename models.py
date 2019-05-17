@@ -27,7 +27,7 @@ from resnet import resnet_v2, lr_schedule
 class AdvAEModel(cleverhans.model.Model):
     """Implement a denoising auto encoder.
     """
-    def __init__(self, cnn_model, ae_model):
+    def __init__(self, cnn_model, ae_model, inputs=None, targets=None):
         # this CNN model is used as victim for attacks
         self.cnn_model = cnn_model
         self.CNN = cnn_model.CNN
@@ -36,15 +36,21 @@ class AdvAEModel(cleverhans.model.Model):
         self.ae_model = ae_model
         self.AE = ae_model.AE
         self.AE1 = ae_model.AE1
-        
-        self.x = keras.layers.Input(shape=self.cnn_model.xshape(), dtype='float32')
-        self.y = keras.layers.Input(shape=self.cnn_model.yshape(), dtype='float32')
+
+        if inputs:
+            self.x = inputs
+        else:
+            self.x = keras.layers.Input(shape=self.cnn_model.xshape(), dtype='float32')
+        if targets:
+            self.y = targets
+        else:
+            self.y = keras.layers.Input(shape=self.cnn_model.yshape(), dtype='float32')
+
+        adv_x = my_PGD(self, self.x, params=self.cnn_model.PGD_params)
+        self.adv_logits = self.FC(self.CNN(self.AE(adv_x)))
 
         self.setup_loss()
-        
         self.setup_trainloss()
-        self.adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
-            self.adv_loss, var_list=self.ae_model.AE_vars)
 
     @staticmethod
     def NAME():
@@ -174,23 +180,38 @@ class AdvAEModel(cleverhans.model.Model):
             'P0_loss', 'P1_loss', 'P2_loss', 'postadv_accuracy',
             'cnn_accuracy', 'B1_loss', 'B2_loss', 'obli_accuracy']
 
-
     def train_Adv(self, sess, train_x, train_y, plot_prefix=''):
         """Adv training."""
-        my_training(sess, self.x, self.y,
-                    self.adv_loss,
-                    self.adv_train_step,
-                    self.metrics, self.metric_names,
-                    train_x, train_y,
-                    plot_prefix=plot_prefix,
-                    # The AE model may contain batch normalization
-                    # layers, thus I need to update them here.
-                    # additional_train_steps=self.ae_model.additional_train_steps,
-                    additional_train_steps=[self.AE.updates],
-                    # 10 to speed it up
-                    num_epochs=20,
-                    # 2 to speed it up
-                    patience=5)
+        # (train_x, train_y), (val_x, val_y) = validation_split(train_x, train_y)
+        outputs = keras.layers.Activation('softmax')(self.FC(self.CNN(self.AE(self.x))))
+        model = keras.models.Model(self.x, outputs)
+        self.CNN.trainable = False
+        self.FC.trainable = False
+        # self.AE.trainable = False
+        def myloss(ytrue, ypred):
+            # return my_softmax_xent(logits=outputs, labels=ytrue)
+            return self.adv_loss
+        def advacc(ytrue, ypred): return self.adv_accuracy
+        def acc(ytrue, ypred): return self.accuracy
+        def cnnacc(ytrue, ypred): return self.CNN_accuracy
+        def obliacc(ytrue, ypred): return self.obli_accuracy
+            
+        with sess.as_default():
+            callbacks = [get_lr_scheduler(),
+                         get_lr_reducer(patience=5),
+                         # DEBUG
+                         get_es(patience=5),
+                         get_mc('best_model.hdf5')]
+            model.compile(loss=myloss,
+                          metrics=[cnnacc, acc, obliacc, advacc],
+                          optimizer=keras.optimizers.Adam(lr=1e-3),
+                          target_tensors=self.y)
+            model.fit(train_x, train_y,
+                      validation_split=0.1,
+                      # validation_data=(val_x, val_y),
+                      epochs=100,
+                      callbacks=callbacks)
+            model.load_weights('best_model.ckpt')
 
     def test_attack(self, sess, test_x, test_y, name):
         """Reurn images and titles."""

@@ -1371,3 +1371,140 @@ monitor the noisy accuracy."""
     def train_AE(self, sess, train_x, train_y):
         print('Dummy training, do nothing.')
         pass
+    def train_CNN_old(self, sess, train_x, train_y, patience=10, num_epoches=200):
+        my_training(sess, self.x, self.y,
+                    self.CNN_loss,
+                    self.CNN_train_step,
+                    [self.CNN_accuracy], ['accuracy'],
+                    train_x, train_y,
+                    additional_train_steps=[self.model.updates],
+                    num_epochs=num_epoches,
+                    patience=patience,
+                    do_plot=False)
+        
+    def setup_trainstep(self):
+        self.CNN_train_step = tf.train.AdamOptimizer(0.001).minimize(
+            self.CNN_loss, var_list=self.CNN_vars+self.FC_vars)
+    # def train_CNN(self, sess, train_x, train_y):
+    #     print('Using data augmentation for training Resnet ..')
+    #     augment = Cifar10Augment()
+    #     my_training(sess, self.x, self.y,
+    #                 self.CNN_loss,
+    #                 self.CNN_train_step,
+    #                 [self.CNN_accuracy, self.global_step], ['accuracy', 'global_step'],
+    #                 train_x, train_y,
+    #                 num_epochs=200,
+    #                 data_augment=augment,
+    #                 # FIXME add this for batchnormalization layer to update
+    #                 # FIXME should I do something for dropout layers?
+    #                 additional_train_steps=[self.model.updates],
+    #                 patience=10,
+    #                 do_plot=False)
+    def setup_trainstep(self):
+        """Resnet needs scheduled training rate decay.
+        
+        values: 1e-3, 1e-1, 1e-2, 1e-3, 0.5e-3
+        boundaries: 0, 80, 120, 160, 180
+        
+        "step_size_schedule": [[0, 0.1], [40000, 0.01], [60000, 0.001]],
+        
+        # schedules = [[0, 0.1], [400, 0.01], [600, 0.001]]
+        # schedules = [[0, 1e-3], [400, 1e-4], [800, 1e-5], [1200, 1e-6]]
+        """
+        global_step = tf.train.get_or_create_global_step()
+        self.global_step = global_step
+        # These numbers are batches
+        schedules = [[0, 1e-3], [400*30, 1e-4], [400*60, 1e-5]]
+        boundaries = [s[0] for s in schedules][1:]
+        values = [s[1] for s in schedules]
+        learning_rate = tf.train.piecewise_constant(
+            tf.cast(global_step, tf.int32),
+            boundaries,
+            values)
+        self.CNN_train_step = tf.train.AdamOptimizer(
+            learning_rate).minimize(
+                self.CNN_loss,
+                global_step=global_step,
+                var_list=self.CNN_vars+self.FC_vars)
+        # self.CNN_train_step = tf.train.AdamOptimizer(0.001).minimize(
+        #     self.CNN_loss, var_list=self.CNN_vars+self.FC_vars)
+def __test():
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    
+    model, sess = load_model(CNNModel, AEModel, A2_Model)
+    model, sess = load_model(CNNModel, AEModel, B2_Model)
+    
+    model, sess = load_model(CNNModel, AEModel, B2_Model, load_adv=False)
+    model.test_all(sess, test_x, test_y, attacks=['FGSM', 'PGD'],
+                   filename='out.pdf')
+    
+    
+def __test():
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    cnn = CNNModel()
+    ae = AEModel(cnn)
+    adv = AdvAEModel(cnn, ae)
+    sess = tf.Session()
+    init = tf.global_variables_initializer()
+    sess.run(init)
+    adv.train_Adv(sess, train_x, train_y)
+    # This snippet demonstrate that even if I give a new
+    # tf.variable_scope or tf.name_scope, keras will add new suffix to
+    # the variables. This is quite annoying when saving and loading
+    # model weights.
+    def conv_block(inputs, filters, kernel_size, strides, scope):
+        '''Create a simple Conv --> BN --> ReLU6 block'''
+
+        with tf.name_scope(scope):
+            x = tf.keras.layers.Conv2D(filters, kernel_size, strides)(inputs)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.Activation(tf.nn.relu6)(x)
+            return x
+    tf.reset_default_graph()
+    inputs = tf.keras.Input(shape=[224, 224, 3], batch_size=1, name='inputs')
+    hidden = conv_block(inputs, 32, 3, 2, scope='block_1')
+    outputs = conv_block(hidden, 64, 3, 2, scope='block_2')
+    
+    # model = tf.keras.Model(inputs, outputs)
+    model.summary()
+
+        # 2. train denoiser
+        # FIXME whether this pretraining is useful or not?
+        # if not os.path.exists(pAE):
+        #     print('Training AE ..')
+        #     ae.train_AE(sess, train_x, train_y)
+        #     print('Saving model to {} ..'.format(pAE))
+        #     ae.save_weights(sess, pAE)
+        # else:
+        #     print('Trained, directly loading {} ..'.format(pAE))
+        #     ae.load_weights(sess, pAE)
+        
+        # 3. train denoiser using adv training, with high level feature guidance
+        # acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
+        # print('Model accuracy on clean data: {}'.format(acc))
+        # model.test_all(sess, val_x, val_y, run_CW=False)
+
+        # overwrite controls only the AdvAE weights. CNN and AE
+        # weights do not need to be retrained because I'm not
+        # experimenting with changing training or loss for that.
+        # print('Testing CNN ..')
+        # model.test_CNN(sess, test_x, test_y)
+   def train_Adv_old(self, sess, train_x, train_y, plot_prefix=''):
+        """Adv training."""
+        my_training_keras(sess, self.x, self.y,
+                    self.adv_loss,
+                    self.adv_train_step,
+                    self.metrics, self.metric_names,
+                    train_x, train_y,
+                    plot_prefix=plot_prefix,
+                    # The AE model may contain batch normalization
+                    # layers, thus I need to update them here.
+                    # additional_train_steps=self.ae_model.additional_train_steps,
+                    additional_train_steps=[self.AE.updates],
+                    # 10 to speed it up
+                    num_epochs=20,
+                    # 2 to speed it up
+                    patience=5)
+         self.adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
+            self.adv_loss, var_list=self.ae_model.AE_vars)
+

@@ -106,6 +106,7 @@ Using this network, train the AE.
 ** Adv train both AE and CNN
 ** Test using all test data
 instead of random 100
+** TODO use data augmentation during adv training
 
 
 

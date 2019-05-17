@@ -11,6 +11,7 @@ import cleverhans.model
 from cleverhans.attacks import FastGradientMethod
 from cleverhans.attacks import ProjectedGradientDescent, SaliencyMapMethod
 from cleverhans.attacks import CarliniWagnerL2
+from cleverhans.attacks_tf import jacobian_graph, jacobian_augmentation
 
 
 from utils import *
@@ -488,3 +489,91 @@ def __test():
             print('{:.3f}'.format(res[k][i]), end=',')
         print()
 
+def train_sub(sess, bbox, sub, holdout_x, holdout_y):
+    """This function will train sub in place.
+
+    Adapted from cleverhans_tutorial/mnist_blackbox.
+
+    bbox: black box model as an oracle
+    sub: substitute model with random initialization
+    holdout_x: initial data
+    holdout_y: initial data
+    """
+    # Define the Jacobian symbolically using TensorFlow.
+    grads = jacobian_graph(sub.predict(sub.x), sub.x, 10)
+    
+    # Train the substitute and augment dataset alternatively.
+    for rho in xrange(data_aug):
+        print("Substitute training epoch #" + str(rho))
+
+        # train the sub model
+        sub.train_CNN(sess, holdout_x, holdout_y)
+        # augment the data by Jacobian
+        if rho < data_aug - 1:
+            print("Augmenting substitute training data.")
+            DATA_AUG = 6
+            LMBDA = .1
+            AUG_BATCH_SIZE = 512
+            LEARNING_RATE = .001
+            HOLDOUT = 150
+
+            BATCH_SIZE = 128
+            NB_EPOCHS = 10
+            NB_EPOCHS_S = 10
+
+            lmbda_coef = 2 * int(int(rho / 3) != 0) - 1
+            # Perform the Jacobian augmentation to generate new synthetic inputs.
+            new_holdout_x = jacobian_augmentation(sess, sub.x, holdout_x, holdout_y, grads,
+                                                  lmbda_coef * LMBDA, AUG_BATCH_SIZE)
+            print("Labeling substitute training data.")
+            # Label the newly generated synthetic points using the black-box.
+            holdout_y = np.hstack([holdout_y, holdout_y])
+            holdout_x_prev = holdout_x[int(len(holdout_x) / 2):]
+            eval_params = {'batch_size': BATCH_SIZE}
+
+            # To initialize the local variables of Defense-GAN.
+            sess.run(tf.local_variables_initializer())
+
+            bbox_val = batch_eval(sess, [bbox.x], [bbox.predict(cnn.x)], [holdout_x_prev],
+                                  args=eval_params)[0]
+            # Note here that we take the argmax because the adversary
+            # only has access to the label (not the probabilities) output
+            # by the black-box model.
+            holdout_y[int(len(X_sub) / 2):] = np.argmax(bbox_val, axis=1)
+
+def __test():
+    # training substitute model for blackbox testing
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+
+    # the initial seed for substitute model
+    holdout_x = test_x[:150]
+    holdout_y = test_y[:150]
+    test_x = test_x[150:]
+    test_y = test_y[150:]
+    
+    sess = tf.Session()
+    
+    cnn = MNISTModel()
+    
+    sub = DefenseGAN_c()
+
+    # this cnn is only used to provide shape
+    ae = AEModel(cnn)
+
+    advae = A2_Model(cnn, ae)
+
+    init = tf.global_variables_initializer()
+    sess.run(init)
+
+    # load cnn and advae weights
+    cnn.load_weights('saved_models/MNIST-mnistcnn-CNN.hdf5')
+    ae.load_weights('saved_models/MNIST-mnistcnn-ae-A2-AdvAE.hdf5')
+    # use that as oracle to train the sub model
+    train_sub(sess, advae, sub, holdout_x, holdout_y)
+    # after getting the sub model, run attack on sub model
+    adv_x = my_PGD(sub, sub.x)
+    # evaluate on model
+    logits = advae.predict(adv_x)
+    acc = my_accuracy_wrapper(logits=logits, labels=sub.y)
+    bbox_acc = sess.run(acc, feed_dict={sub.x: test_x, sub.y: test_y})
+    print('black-box acc: {}'.format(bbox_acc))

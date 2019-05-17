@@ -1,4 +1,5 @@
 import tensorflow as tf
+from attacks import CLIP_MIN, CLIP_MAX
 
 def my_add_noise(x, noise_factor=0.5):
     # noise_factor = 0.5

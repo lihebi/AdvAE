@@ -1090,3 +1090,284 @@ def __test():
     model = MNIST_CNN()
     loss = model.cross_entropy()
     my_adv_training(sess, model, loss)
+    
+def train(sess, model, loss):
+    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
+    
+    train_step = tf.train.AdamOptimizer(0.001).minimize(loss)
+    
+    best_loss = math.inf
+    best_epoch = 0
+    patience = 5
+    print_interval = 500
+
+    init = tf.global_variables_initializer()
+    sess.run(init)
+    
+    saver = tf.train.Saver(max_to_keep=10)
+    for i in range(NUM_EPOCHS):
+        shuffle_idx = np.arange(train_x.shape[0])
+        np.random.shuffle(shuffle_idx)
+        nbatch = train_x.shape[0] // BATCH_SIZE
+        
+        for j in range(nbatch):
+            start = j * BATCH_SIZE
+            end = (j+1) * BATCH_SIZE
+            batch_x = train_x[shuffle_idx[start:end]]
+            batch_y = train_y[shuffle_idx[start:end]]
+            _, l, a = sess.run([train_step, loss, model.accuracy],
+                               feed_dict={model.x: batch_x,
+                                          model.y: batch_y})
+        print('EPOCH ends, calculating total loss')
+        l, a = sess.run([loss, model.accuracy],
+                        feed_dict={model.x: val_x,
+                                   model.y: val_y})
+        print('EPOCH {}: loss: {:.5f}, acc: {:.5f}' .format(i, l, a,))
+        save_path = saver.save(sess, 'tmp/epoch-{}'.format(i))
+        if best_loss < l:
+            patience -= 1
+            if patience <= 0:
+                # restore the best model
+                saver.restore(sess, 'tmp/epoch-{}'.format(best_epoch))
+                print('Early stopping .., best loss: {}'.format(best_loss))
+                # verify if the best model is restored
+                l, a = sess.run([loss, model.accuracy],
+                                feed_dict={model.x: val_x,
+                                           model.y: val_y})
+                assert l == best_loss
+                break
+        else:
+            best_loss = l
+            best_epoch = i
+            patience = 5
+
+        
+def train_double_backprop(path):
+    tf.reset_default_graph()
+    with tf.Session() as sess:
+        model = MNIST_CNN()
+        c=100
+        # TODO verify the results in their paper
+        loss = model.cross_entropy() + c * model.l2_double_backprop()
+        train(sess, model, loss)
+        saver = tf.train.Saver()
+        save_path = saver.save(sess, path)
+        print("Model saved in path: %s" % save_path)
+
+
+def train_group_lasso(path):
+    tf.reset_default_graph()
+    with tf.Session() as sess:
+        model = MNIST_CNN()
+        # group lasso
+        c=100
+        loss = model.cross_entropy() + c * model.gradients_group_lasso()
+        train(sess, model, loss)
+        saver = tf.train.Saver()
+        save_path = saver.save(sess, path)
+        print("Model saved in path: %s" % save_path)
+
+def train_ce(path):
+    tf.reset_default_graph()
+    with tf.Session() as sess:
+        model = MNIST_CNN()
+        loss = model.cross_entropy()
+        train(sess, model, loss)
+        saver = tf.train.Saver()
+        save_path = saver.save(sess, path)
+        print("Model saved in path: %s" % save_path)
+
+    def train_CNN_keras(self, sess, train_x, train_y):
+        """FIXME WRN seems to work on keras preprocessor very well."""
+        # generator = keras.preprocessing.image.ImageDataGenerator(rotation_range=10,
+        #                                                          width_shift_range=5./32,
+        #                                                          height_shift_range=5./32,)
+        # model.summary()
+        # plot_model(model, "WRN-16-8.png", show_shapes=False)
+        (train_x, train_y), (val_x, val_y) = validation_split(train_x, train_y)
+
+        # inputs = keras.layers.Input(shape=self.xshape(), dtype='float32')
+        outputs = keras.layers.Activation('softmax')(self.model(self.x))
+        model = keras.models.Model(self.x, outputs)
+        with sess.as_default():
+            model.compile(loss="categorical_crossentropy", optimizer="adam", metrics=["acc"])
+            batch_size = 100
+            # model.fit_generator(generator.flow(train_x, train_y, batch_size=batch_size),
+            #                     steps_per_epoch=len(train_x) // batch_size, epochs=100,
+            #                    validation_data=(val_x, val_y),
+            #                    validation_steps=val_x.shape[0] // batch_size,)
+            keras.backend.set_learning_phase(1)
+            model.fit(train_x, train_y, validation_data=(val_x, val_y), epochs=2)
+            keras.backend.set_learning_phase(0)
+            print(model.evaluate(val_x, val_y))
+    def train_AE_keras(self, sess, train_x, train_y):
+        noise_factor = 0.1
+        noisy_x = train_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=train_x.shape)
+        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
+
+        inputs = keras.layers.Input(shape=self.shape, dtype='float32')
+        rec = self.AE(inputs)
+        model = keras.models.Model(inputs, rec)
+        
+        optimizer = keras.optimizers.RMSprop(0.001)
+        # 'adadelta'
+        model.compile(optimizer=optimizer,
+                      loss='binary_crossentropy',
+                      # loss=keras.losses.mean_squared_error
+                      # metrics=[self.noisy_accuracy]
+        )
+        with sess.as_default():
+            model.fit(noisy_x, train_x, epochs=100, validation_split=0.1, verbose=2)
+
+        self.x = keras.layers.Input(shape=self.cnn_model.xshape(), dtype='float32')
+        self.y = keras.layers.Input(shape=self.cnn_model.yshape(), dtype='float32')
+
+        noisy_x = my_add_noise(self.x, noise_factor=0.5)
+
+        # print(self.AE1(noisy_x).shape)
+        # print(self.x.shape)
+
+        ##############################
+        ## noisy
+        
+        # noisy, xent, pixel, (0.36)
+        # loss = my_sigmoid_xent(self.AE1(noisy_x), self.x)
+        
+        # noisy, l2, pixel, 0.3
+        # loss = tf.reduce_mean(tf.square(self.AE(noisy_x) - self.x))
+        
+        # noisy, l1, pixel
+        # loss = tf.reduce_mean(tf.abs(self.AE(noisy_x) - self.x))
+
+        # noisy+clean, l1, pixel
+        # testing whether noisy loss can be used as regularizer
+        # 0.42
+        # mu = 0.5
+        # 0.48
+        mu = 0.2
+        loss = (mu * tf.reduce_mean(tf.abs(self.AE(noisy_x) - self.x))
+                + (1 - mu) * tf.reduce_mean(tf.abs(self.AE(self.x) - self.x)))
+        ###############################
+        ## Clean
+
+        # xent, pixel, 0.515 (0.63)
+        # loss = my_sigmoid_xent(self.AE1(self.x), self.x)
+        # self.C0_loss = my_sigmoid_xent(self.AE1(self.x), self.x)
+        # l2, pixel, 0.48
+        # loss = tf.reduce_mean(tf.square(self.AE(self.x) - self.x))
+        # l1, pixel, 0.52
+        # loss = tf.reduce_mean(tf.abs(self.AE(self.x) - self.x))
+
+
+        # L2, logits, .79
+        # loss = tf.reduce_mean(tf.square(self.cnn_model.predict(self.AE(self.x)) -
+        #                                 self.cnn_model.predict(self.x)))
+        # L1, logits, .30
+        # loss = tf.reduce_mean(tf.abs(self.cnn_model.predict(self.AE(self.x)) -
+        #                              self.cnn_model.predict(self.x)))
+        # L2, feature, 0.39
+        # loss = tf.reduce_mean(tf.square(self.cnn_model.CNN(self.AE(self.x)) -
+        #                                 self.cnn_model.CNN(self.x)))
+        # L1, feature, .445
+        # loss = tf.reduce_mean(tf.abs(self.cnn_model.CNN(self.AE(self.x)) -
+        #                              self.cnn_model.CNN(self.x)))
+
+
+        # xent, logits, .30
+        # loss = my_sigmoid_xent(self.cnn_model.predict(self.AE(self.x)),
+        #                        tf.nn.sigmoid(self.cnn_model.predict(self.x)))
+        # xent, label, .38
+        # loss = my_softmax_xent(self.cnn_model.predict(self.AE(self.x)),
+        #                        self.y)
+        
+        # self.C1_loss = my_sigmoid_xent(rec_high, tf.nn.sigmoid(high))
+        # self.C2_loss = my_softmax_xent(rec_logits, self.y)
+        
+        self.AE_loss = loss
+        
+        self.noisy_accuracy = my_accuracy_wrapper(self.cnn_model.predict(self.AE(noisy_x)),
+                                                  self.y)
+
+        self.accuracy = my_accuracy_wrapper(self.cnn_model.predict(self.AE(self.x)),
+                                            self.y)
+
+        self.clean_accuracy = my_accuracy_wrapper(self.cnn_model.predict(self.x),
+                                                  self.y)
+
+        self.setup_trainstep()
+    def setup_trainstep(self):
+        global_step = tf.train.get_or_create_global_step()
+        self.global_step = global_step
+        # These numbers are batches
+        schedules = [[0, 1e-3], [400*20, 1e-4], [400*40, 1e-5], [400*60, 1e-6]]
+        boundaries = [s[0] for s in schedules][1:]
+        values = [s[1] for s in schedules]
+        learning_rate = tf.train.piecewise_constant_decay(
+            tf.cast(global_step, tf.int32),
+            boundaries,
+            values)
+        self.AE_train_step = tf.train.AdamOptimizer(
+            learning_rate).minimize(
+            # 1e-3).minimize(
+                self.AE_loss,
+                global_step=global_step,
+                var_list=self.AE_vars)
+        # self.AE_train_step = tf.train.AdamOptimizer(0.01).minimize(
+        #     self.AE_loss, global_step=global_step, var_list=self.AE_vars)
+    def train_AE(self, sess, train_x, train_y):
+        """DEPRECATED Technically I don't need clean y, but I'm going to
+monitor the noisy accuracy."""
+        raise NotImplementedError()
+        my_training(sess, self.x, self.y,
+                    self.AE_loss, self.AE_train_step,
+                    [self.noisy_accuracy, self.accuracy, self.clean_accuracy, self.global_step],
+                    ['noisy_acc', 'accuracy', 'clean_accuracy', 'global step'],
+                    train_x, train_y,
+                    # Seems that the denoiser converge fast
+                    patience=5,
+                    additional_train_steps=[self.AE.updates],
+                    print_interval=50,
+                    # default: 100
+                    # num_epochs=60,
+                    do_plot=False)
+    def test_AE(self, sess, test_x, test_y):
+        """Test AE models."""
+        # select 10
+        images = []
+        titles = []
+        fringes = []
+
+        test_x = test_x[:100]
+        test_y = test_y[:100]
+
+        to_run = {}
+            
+        # Test AE rec output before and after
+        rec = self.AE(self.x)
+        noisy_x = my_add_noise(self.x)
+        noisy_rec = self.AE(noisy_x)
+
+        to_run['x'] = self.x
+        to_run['y'] = tf.argmax(self.y, 1)
+        to_run['rec'] = rec
+        to_run['noisy_x'] = noisy_x
+        to_run['noisy_rec'] = noisy_rec
+        print('Testing CNN and AE ..')
+        res = sess.run(to_run, feed_dict={self.x: test_x, self.y: test_y})
+
+        
+        images.append(res['x'][:10])
+        titles.append(res['y'][:10])
+        fringes.append('x')
+        
+        for name in ['rec', 'noisy_x', 'noisy_rec']:
+            images.append(res[name][:10])
+            titles.append(['']*10)
+            fringes.append('{}'.format(name))
+
+        print('Plotting result ..')
+        grid_show_image(images, filename='out.pdf', titles=titles, fringes=fringes)
+        print('Done. Saved to {}'.format('out.pdf'))
+    def train_AE(self, sess, train_x, train_y):
+        print('Dummy training, do nothing.')
+        pass

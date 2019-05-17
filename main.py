@@ -14,7 +14,7 @@ from cleverhans.attacks import CarliniWagnerL2
 
 
 from utils import *
-from model import *
+from models import *
 from defensegan_models import *
 from attacks import *
 
@@ -91,6 +91,8 @@ def train_CNN(cnn_cls, train_x, train_y, saved_folder='saved_models', prefix='')
     """This function currently is exclusively training transfer CNN models."""
     if not os.path.exists('images'):
         os.makedirs('images')
+    if not os.path.exists(saved_folder):
+        os.makedirs(saved_folder)
     pCNN, _, _, _ = compute_names(cnn_cls, cnn_cls, cnn_cls, prefix=prefix)
     if os.path.exists(pCNN):
         print('Already trained {}'.format(pCNN))
@@ -110,32 +112,27 @@ def train_model(cnn_cls, ae_cls, advae_cls,
                 train_x, train_y,
                 saved_folder='saved_models',
                 cnnprefix='', aeprefix='', advprefix='',
-                prefix='',
-                run_adv=True, overwrite=False):
+                prefix=''):
     """Train AdvAE.
 
     """
     if not os.path.exists('images'):
         os.makedirs('images')
+    if not os.path.exists(saved_folder):
+        os.makedirs(saved_folder)
     pCNN, pAE, pAdvAE, plot_prefix = compute_names(cnn_cls, ae_cls, advae_cls,
                                                    cnnprefix=cnnprefix, aeprefix=aeprefix, advprefix=advprefix,
                                                    prefix=prefix)
 
     # DEBUG early return here to avoid the big overhead of creating the graph
-    if os.path.exists(pAdvAE):
-        print('Already trained AdvAE model {}, break'.format(pAdvAE))
-        return
-    
     print('====== Denoising training for {} ..'.format(advprefix))
     
     tf.reset_default_graph()
     with tf.Session() as sess:
         cnn = cnn_cls()
-        ae = ae_cls(cnn)
-        adv = advae_cls(cnn, ae)
+        # ae = ae_cls(cnn)
+        # adv = advae_cls(cnn, ae)
 
-        # model = model_cls()
-        
         init = tf.global_variables_initializer()
         sess.run(init)
 
@@ -153,37 +150,37 @@ def train_model(cnn_cls, ae_cls, advae_cls,
 
         # 2. train denoiser
         # FIXME whether this pretraining is useful or not?
-        if not os.path.exists(pAE):
-            print('Training AE ..')
-            ae.train_AE(sess, train_x, train_y)
-            print('Saving model to {} ..'.format(pAE))
-            ae.save_weights(sess, pAE)
-        else:
-            print('Trained, directly loading {} ..'.format(pAE))
-            ae.load_weights(sess, pAE)
+        # if not os.path.exists(pAE):
+        #     print('Training AE ..')
+        #     ae.train_AE(sess, train_x, train_y)
+        #     print('Saving model to {} ..'.format(pAE))
+        #     ae.save_weights(sess, pAE)
+        # else:
+        #     print('Trained, directly loading {} ..'.format(pAE))
+        #     ae.load_weights(sess, pAE)
         
         # 3. train denoiser using adv training, with high level feature guidance
         # acc = sess.run(model.accuracy, feed_dict={model.x: test_x, model.y: test_y})
         # print('Model accuracy on clean data: {}'.format(acc))
         # model.test_all(sess, val_x, val_y, run_CW=False)
 
-        if run_adv:
-            # overwrite controls only the AdvAE weights. CNN and AE
-            # weights do not need to be retrained because I'm not
-            # experimenting with changing training or loss for that.
-            if not os.path.exists(pAdvAE) or overwrite:
-                print('Trainng AdvAE ..')
-                adv.train_Adv(sess, train_x, train_y, plot_prefix=plot_prefix)
-                print('saving to {} ..'.format(pAdvAE))
-                ae.save_weights(sess, pAdvAE)
-            else:
-                print('Already trained {} ..'.format(pAdvAE))
-                # adv.load_AE(sess, pAdvAE)
-            # print('Testing AdvAE ..')
-            # model.test_Adv_Denoiser(sess, test_x[:10], test_y[:10])
+        # overwrite controls only the AdvAE weights. CNN and AE
+        # weights do not need to be retrained because I'm not
+        # experimenting with changing training or loss for that.
+        if not os.path.exists(pAdvAE):
+            ae = ae_cls(cnn)
+            adv = advae_cls(cnn, ae)
 
-    
+            init = tf.global_variables_initializer()
+            sess.run(init)
 
+            cnn.load_weights(sess, pCNN)
+            print('Trainng AdvAE ..')
+            adv.train_Adv(sess, train_x, train_y, plot_prefix=plot_prefix)
+            print('saving to {} ..'.format(pAdvAE))
+            ae.save_weights(sess, pAdvAE)
+        else:
+            print('Already trained {}'.format(pAdvAE))
     
 def __test():
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
@@ -261,30 +258,50 @@ def main_train():
     ##############################
     ## MNIST
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
-    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
-        train_CNN(m, train_x, train_y, prefix='DGANMNIST')
+
+    train_model(CNNModel, AEModel, A2_Model, train_x, train_y)
+    
+    # sess = tf.Session()
+    # cnn = CNNModel()
+    # ae = AEModel(cnn)
+    # adv = A2_Model(cnn, ae)
+
+    # m2 = keras.models.Model(adv.x, ae.AE(adv.x))
+    # m2.updates
+    
+    # init = tf.global_variables_initializer()
+    # sess.run(init)
+    # cnn.load_weights(sess, 'saved_models/mnistcnn-CNN.hdf5')
+    # adv.train_Adv(sess, train_x, train_y)
+    # adv.ae_model.AE.summary()
+    # adv.ae_model.AE1.summary()
+    # train_x.shape
+    
     for m in [A2_Model, B2_Model, C0_A2_Model]:
         train_model(CNNModel, AEModel, m, train_x, train_y)
     train_model(CNNModel, IdentityAEModel, A2_Model, train_x, train_y)
+    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
+        train_CNN(m, train_x, train_y, prefix='DGANMNIST')
 
     ##############################
     ## Fashion MNIST
     (train_x, train_y), (test_x, test_y) = load_fashion_mnist_data()
-    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
-        train_CNN(m, train_x, train_y, prefix='DGANFashion')
     for m in [A2_Model, B2_Model, C0_A2_Model]:
         train_model(FashionCNNModel, AEModel, m, train_x, train_y)
     train_model(FashionCNNModel, IdentityAEModel, A2_Model, train_x, train_y)
+    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
+        train_CNN(m, train_x, train_y, prefix='DGANFashion')
     
     ##############################
     ## CIFAR10
     
     (train_x, train_y), (test_x, test_y) = load_cifar10_data()
     # adv training baseline
-    train_model(MyResNet, IdentityAEModel, A2_Model, train_x, train_y)
-
-    for m in [C0_A2_Model]:
+    for m in [C0_A2_Model, C0_B2_Model]:
         train_model(MyResNet, DunetModel, m, train_x, train_y)
+        train_model(MyWideResNet, DunetModel, m, train_x, train_y)
+        train_model(MyResNet56, DunetModel, m, train_x, train_y)
+    train_model(MyResNet, IdentityAEModel, A2_Model, train_x, train_y)
     
 def main_test():
 
@@ -295,6 +312,7 @@ def main_test():
     # adv training baseline
     for m in [A2_Model, B2_Model, C0_A2_Model]:
         test_model(CNNModel, AEModel, m, test_x, test_y)
+    test_model(CNNModel, IdentityAEModel, A2_Model, test_x, test_y)
     # test whether the model works for other models
     for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
         test_model(m, AEModel, A2_Model,
@@ -302,7 +320,6 @@ def main_test():
                    prefix='DGANMNIST',
                    prefixorig='',
                    cnnorig=CNNModel.NAME())
-    test_model(CNNModel, IdentityAEModel, A2_Model, test_x, test_y)
 
     ##############################
     ## Fashion MNIST
@@ -310,13 +327,13 @@ def main_test():
     # adv training baseline
     for m in [A2_Model, B2_Model, C0_A2_Model]:
         test_model(FashionCNNModel, AEModel, m, test_x, test_y)
+    test_model(FashionCNNModel, IdentityAEModel, A2_Model, test_x, test_y)
     for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
         test_model(m, AEModel, A2_Model,
                    test_x, test_y,
                    prefix='DGANFashion',
                    prefixorig='',
                    cnnorig=FashionCNNModel.NAME())
-    test_model(FashionCNNModel, IdentityAEModel, A2_Model, test_x, test_y)
     
     ##############################
     ## CIFAR10
@@ -325,6 +342,8 @@ def main_test():
 
     for m in [C0_A2_Model, C0_B2_Model]:
         test_model(MyResNet, DunetModel, m, test_x, test_y)
+        test_model(MyWideResNet, DunetModel, m, test_x, test_y)
+        test_model(MyResNet56, DunetModel, m, test_x, test_y)
     
 def main():
     (train_x, train_y), (test_x, test_y) = load_cifar10_data()
@@ -334,14 +353,15 @@ def main():
     cnn = MyResNet()
     # cnn = MyResNet56()
     # cnn = MyResNet110()
+    # cnn = MyWideResNet()
     # cnn = CNNModel()
     # ae = AEModel(cnn)
     # ae = CifarAEModel(cnn)
     # ae = TestCifarAEModel(cnn)
     # ae = DunetModel(cnn)
-    ae = IdentityAEModel(cnn)
+    # ae = IdentityAEModel(cnn)
     
-    adv = A2_Model(cnn, ae)
+    # adv = A2_Model(cnn, ae)
     
     init = tf.global_variables_initializer()
     sess.run(init)
@@ -349,7 +369,12 @@ def main():
     # cnn.train_CNN(sess, train_x, train_y)
     # cnn.train_CNN_keras(sess, train_x, train_y, test_x, test_y)
     # cnn.save_weights(sess, 'saved_models/test-resnet-CNN.hdf5')
-    cnn.load_weights(sess, 'saved_models/resnet-CNN.hdf5')
+    # cnn.load_weights(sess, 'saved_models/resnet-CNN.hdf5')
+
+    # cnn.train_CNN_keras(sess, train_x, train_y)
+    
+    cnn.train_CNN(sess, train_x, train_y)
+    # cnn.save_weights()
     
     # ae.train_AE(sess, train_x, train_y)
     # ae.save_weights(sess, 'saved_models/test-resnet-ae-AE.hdf5')
@@ -357,7 +382,7 @@ def main():
     # test
     # ae.test_AE(sess, test_x, test_y)
     
-    adv.train_Adv(sess, train_x, train_y)
+    # adv.train_Adv(sess, train_x, train_y)
 
 if __name__ == '__main__':
     tf.random.set_random_seed(0)

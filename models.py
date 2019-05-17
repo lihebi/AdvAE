@@ -43,25 +43,8 @@ class AdvAEModel(cleverhans.model.Model):
         self.setup_loss()
         
         self.setup_trainloss()
-        # FIXME add lr decay
         self.adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
             self.adv_loss, var_list=self.ae_model.AE_vars)
-        # DEBUG train the cnn
-        # self.CNNAdv_loss = self.B2_loss
-        # self.CNNAdv_train_step = tf.train.AdadeltaOptimizer(0.001).minimize(
-        #     self.CNNAdv_loss, var_list=self.cnn_model.CNN_vars+self.cnn_model.FC_vars)
-    # def train_CNNAdv(self, sess, train_x, train_y):
-    #     """Adv training."""
-    #     my_training(sess, self.x, self.y,
-    #                 self.CNNAdv_loss,
-    #                 self.CNNAdv_train_step,
-    #                 self.metrics, self.metric_names,
-    #                 train_x, train_y,
-    #                 plot_prefix='CNNADVTEST-'+self.name(),
-    #                 # 10 to speed it up
-    #                 num_epochs=20,
-    #                 # 2 to speed it up
-    #                 patience=5)
 
     @staticmethod
     def NAME():
@@ -76,7 +59,24 @@ class AdvAEModel(cleverhans.model.Model):
         return {self.O_LOGITS: logits,
                 self.O_PROBS: tf.nn.softmax(logits=logits)}
 
+    def setup_trainloss(self):
+        """DEPRECATED Overwrite by subclasses to customize the loss.
+        """
+        raise NotImplementedError()
+        self.adv_loss = self.A2_loss
+        
     def setup_loss(self):
+        """
+        - 0: pixel
+        - 1: high level conv
+        - 2: logits
+
+        The data:
+        - C: Clean
+        - N: Noisy
+        - A: Adv
+        - P: Post
+        """
         print('Seting up loss ..')
         high = self.CNN(self.x)
         # logits = self.FC(high)
@@ -183,6 +183,10 @@ class AdvAEModel(cleverhans.model.Model):
                     self.metrics, self.metric_names,
                     train_x, train_y,
                     plot_prefix=plot_prefix,
+                    # The AE model may contain batch normalization
+                    # layers, thus I need to update them here.
+                    # additional_train_steps=self.ae_model.additional_train_steps,
+                    additional_train_steps=[self.AE.updates],
                     # 10 to speed it up
                     num_epochs=20,
                     # 2 to speed it up
@@ -194,8 +198,7 @@ class AdvAEModel(cleverhans.model.Model):
         # to_run += [adv_x, adv_rec, postadv]
         # TODO add prediction result
         # titles += ['{} adv_x'.format(name), 'adv_rec', 'postadv']
-        
-            
+
         # TODO select 5 correct and incorrect examples
         # indices = random.sample(range(test_x.shape[0]), 10)
         # test_x = test_x[indices]
@@ -422,46 +425,7 @@ class AdvAEModel(cleverhans.model.Model):
         with open(data_filename, 'w') as fp:
             json.dump(all_data, fp, indent=4)
         print('Done. Saved to {}'.format(plot_filename))
-
-    def setup_trainloss(self):
-        """DEPRECATED Overwrite by subclasses to customize the loss.
-
-        - 0: pixel
-        - 1: high level conv
-        - 2: logits
-
-        The data:
-        - C: Clean
-        - N: Noisy
-        - A: Adv
-        - P: Post
-        
-        Available loss terms:
-
-        # clean data
-        self.C0_loss, self.C1_loss, self.C2_loss,
-        
-        # noisy data
-        self.N0_loss, self.N1_loss, self.N2_loss,
-        
-        # adv data
-        self.A0_loss, self.A1_loss, self.A2_loss,
-        
-        # postadv
-        self.P0_loss, self.P1_loss, self.P2_loss,
-        
-        """
-        self.adv_loss = (self.A2_loss)
     
-# one
-class Test_Model(AdvAEModel):
-    """This is a dummy class, exactly same as AdvAEModel except name()."""
-    def NAME():
-        return 'Test'
-    def setup_trainloss(self):
-        # self.adv_loss = self.C0_loss
-        self.adv_loss = self.A2_loss
-        
 class A2_Model(AdvAEModel):
     """This is a dummy class, exactly same as AdvAEModel except name()."""
     def NAME():

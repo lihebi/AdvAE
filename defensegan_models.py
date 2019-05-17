@@ -1,4 +1,4 @@
-from model import CNNModel
+from cnn_models import CNNModel
 import keras
 from keras.layers import Conv2D, Activation, MaxPool2D, Dense, Dropout
 import tensorflow as tf

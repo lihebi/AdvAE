@@ -201,7 +201,9 @@ def run_on_batch(sess, res, x, y, npx, npy, batch_size=BATCH_SIZE):
         end = (i+1) * batch_size
         batch_x = npx[shuffle_idx[start:end]]
         batch_y = npy[shuffle_idx[start:end]]
-        feed_dict = {x: batch_x, y: batch_y}
+        feed_dict = {x: batch_x, y: batch_y,
+                     keras.backend.learning_phase(): 0
+        }
         # actual training
         npres = sess.run(res, feed_dict=feed_dict)
         allres.append(npres)
@@ -212,8 +214,8 @@ def run_on_batch(sess, res, x, y, npx, npy, batch_size=BATCH_SIZE):
 def my_training(sess, model_x, model_y,
                 loss, train_step, metrics, metric_names,
                 train_x, train_y,
+                additional_train_steps=[],
                 data_augment=None,
-                keras_augment=None,
                 do_plot=True,
                 plot_prefix='', patience=2,
                 batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS,
@@ -249,12 +251,7 @@ def my_training(sess, model_x, model_y,
         np.random.shuffle(shuffle_idx)
         nbatch = train_x.shape[0] // batch_size
         t = time.time()
-        # DEBUG trying keras preprocessor
         for j in range(nbatch):
-        # j = 0
-        # for batch_x, batch_y in keras_augment.datagen.flow(train_x, train_y, batch_size=batch_size):
-        #     j += 1
-        #     if j > nbatch: break
             start = j * batch_size
             end = (j+1) * batch_size
             batch_x = train_x[shuffle_idx[start:end]]
@@ -263,16 +260,24 @@ def my_training(sess, model_x, model_y,
             if data_augment is not None:
                 batch_x = data_augment.augment_batch(sess, batch_x)
             
-            feed_dict = {model_x: batch_x, model_y: batch_y}
             # actual training
             # 0.12
-            sess.run([train_step], feed_dict=feed_dict)
+            # feed_dict={model_x: batch_x, model_y: batch_y}
+            sess.run([train_step] + additional_train_steps,
+                     feed_dict={model_x: batch_x, model_y: batch_y,
+                                keras.backend.learning_phase(): 1})
+            # print('1')
+            # sess.run([train_step] + additional_train_steps,
+            #          feed_dict=feed_dict)
+            # print('2')
             # print('training time: {}'.format(time.time() - t))
 
             if j % print_interval == 0:
                 # t = time.time()
                 # 0.46
-                l, m = sess.run([loss, metrics], feed_dict=feed_dict)
+                l, m = sess.run([loss, metrics],
+                                feed_dict={model_x: batch_x, model_y: batch_y,
+                                           keras.backend.learning_phase(): 0})
                 # print('metrics time: {}'.format(time.time() - t))
 
                 # the time for running train step
@@ -362,90 +367,3 @@ def my_training(sess, model_x, model_y,
             # would create new variables. I need to initialize those
             # variables alone. This should not be very difficult.
             break
-    
-def train(sess, model, loss):
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
-    
-    train_step = tf.train.AdamOptimizer(0.001).minimize(loss)
-    
-    best_loss = math.inf
-    best_epoch = 0
-    patience = 5
-    print_interval = 500
-
-    init = tf.global_variables_initializer()
-    sess.run(init)
-    
-    saver = tf.train.Saver(max_to_keep=10)
-    for i in range(NUM_EPOCHS):
-        shuffle_idx = np.arange(train_x.shape[0])
-        np.random.shuffle(shuffle_idx)
-        nbatch = train_x.shape[0] // BATCH_SIZE
-        
-        for j in range(nbatch):
-            start = j * BATCH_SIZE
-            end = (j+1) * BATCH_SIZE
-            batch_x = train_x[shuffle_idx[start:end]]
-            batch_y = train_y[shuffle_idx[start:end]]
-            _, l, a = sess.run([train_step, loss, model.accuracy],
-                               feed_dict={model.x: batch_x,
-                                          model.y: batch_y})
-        print('EPOCH ends, calculating total loss')
-        l, a = sess.run([loss, model.accuracy],
-                        feed_dict={model.x: val_x,
-                                   model.y: val_y})
-        print('EPOCH {}: loss: {:.5f}, acc: {:.5f}' .format(i, l, a,))
-        save_path = saver.save(sess, 'tmp/epoch-{}'.format(i))
-        if best_loss < l:
-            patience -= 1
-            if patience <= 0:
-                # restore the best model
-                saver.restore(sess, 'tmp/epoch-{}'.format(best_epoch))
-                print('Early stopping .., best loss: {}'.format(best_loss))
-                # verify if the best model is restored
-                l, a = sess.run([loss, model.accuracy],
-                                feed_dict={model.x: val_x,
-                                           model.y: val_y})
-                assert l == best_loss
-                break
-        else:
-            best_loss = l
-            best_epoch = i
-            patience = 5
-
-        
-def train_double_backprop(path):
-    tf.reset_default_graph()
-    with tf.Session() as sess:
-        model = MNIST_CNN()
-        c=100
-        # TODO verify the results in their paper
-        loss = model.cross_entropy() + c * model.l2_double_backprop()
-        train(sess, model, loss)
-        saver = tf.train.Saver()
-        save_path = saver.save(sess, path)
-        print("Model saved in path: %s" % save_path)
-
-
-def train_group_lasso(path):
-    tf.reset_default_graph()
-    with tf.Session() as sess:
-        model = MNIST_CNN()
-        # group lasso
-        c=100
-        loss = model.cross_entropy() + c * model.gradients_group_lasso()
-        train(sess, model, loss)
-        saver = tf.train.Saver()
-        save_path = saver.save(sess, path)
-        print("Model saved in path: %s" % save_path)
-
-def train_ce(path):
-    tf.reset_default_graph()
-    with tf.Session() as sess:
-        model = MNIST_CNN()
-        loss = model.cross_entropy()
-        train(sess, model, loss)
-        saver = tf.train.Saver()
-        save_path = saver.save(sess, path)
-        print("Model saved in path: %s" % save_path)
-

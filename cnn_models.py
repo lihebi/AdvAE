@@ -32,7 +32,7 @@ class CNNModel(cleverhans.model.Model):
         
         self.x = keras.layers.Input(shape=self.xshape(), dtype='float32')
         self.y = keras.layers.Input(shape=self.yshape(), dtype='float32')
-        
+
         CNN_logits = self.FC(self.CNN(self.x))
         self.model = keras.models.Model(self.x, CNN_logits)
 
@@ -44,6 +44,10 @@ class CNNModel(cleverhans.model.Model):
         self.setup_trainstep()
 
         self.setup_attack_params()
+    def xshape(self):
+        return (28,28,1)
+    def yshape(self):
+        return (10,)
     def setup_trainstep(self):
         self.CNN_train_step = tf.train.AdamOptimizer(0.001).minimize(
             self.CNN_loss, var_list=self.CNN_vars+self.FC_vars)
@@ -101,8 +105,10 @@ class CNNModel(cleverhans.model.Model):
                     self.CNN_train_step,
                     [self.CNN_accuracy], ['accuracy'],
                     train_x, train_y,
+                    additional_train_steps=[self.model.updates],
                     num_epochs=num_epoches,
-                    patience=patience)
+                    patience=patience,
+                    do_plot=False)
         
     def save_weights(self, sess, path):
         """Save weights using keras API."""
@@ -111,56 +117,15 @@ class CNNModel(cleverhans.model.Model):
     def load_weights(self, sess, path):
         with sess.as_default():
             self.model.load_weights(path)
-    def xshape(self):
-        return (28,28,1)
-    def yshape(self):
-        return (10,)
 
 class FashionCNNModel(CNNModel):
     @staticmethod
     def NAME():
         return "fashion"
 
-class MyResNet(CNNModel):
-    @staticmethod
+class CifarModel(CNNModel):
     def NAME():
-        return 'resnet'
-    # def __init__(self):
-    #     super().__init__()
-    def setup_resnet(self):
-        n = 3 # 29
-        self.depth = n * 9 + 2
-    def setup_CNN(self):
-        self.setup_resnet()
-        print('Creating resnet graph ..')
-        model = resnet_v2(input_shape=self.xshape(), depth=self.depth)
-        print('Resnet graph created.')
-        self.CNN = model
-    def setup_FC(self):
-        # (None, 5, 5, 64)
-        shape = self.CNN.output_shape
-        # (4,4,64,)
-        inputs = keras.layers.Input(batch_shape=shape, dtype='float32')
-        x = keras.layers.Flatten()(inputs)
-
-        # Method 1: Resnet convention: 1 FC layer, he_normal
-        # initializer
-        #
-        # logits = keras.layers.Dense(
-        #     # hard coding 10 for cifar10
-        #     10,
-        #     # removing softmax because I need the presoftmax tensor
-        #     # activation='softmax',
-        #     kernel_initializer='he_normal')(x)
-        #
-        # Method 2: traditional CNN, two FC layers
-        x = keras.layers.Dense(200)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Dropout(rate=0.5)(x)
-        x = keras.layers.Dense(200)(x)
-        x = keras.layers.Activation('relu')(x)
-        logits = keras.layers.Dense(10)(x)
-        self.FC = keras.models.Model(inputs, logits)
+        return "abs_cifar"
     def setup_attack_params(self):
         self.FGSM_params = {'eps': 8./255}
         self.JSMA_params = {}
@@ -172,7 +137,6 @@ class MyResNet(CNNModel):
     def train_CNN(self, sess, train_x, train_y):
         print('Using data augmentation for training Resnet ..')
         augment = Cifar10Augment()
-        # augment = KerasAugment(train_x)
         my_training(sess, self.x, self.y,
                     self.CNN_loss,
                     self.CNN_train_step,
@@ -180,8 +144,11 @@ class MyResNet(CNNModel):
                     train_x, train_y,
                     num_epochs=200,
                     data_augment=augment,
-                    # keras_augment=augment,
-                    patience=10)
+                    # FIXME add this for batchnormalization layer to update
+                    # FIXME should I do something for dropout layers?
+                    additional_train_steps=[self.model.updates],
+                    patience=10,
+                    do_plot=False)
     def setup_trainstep(self):
         """Resnet needs scheduled training rate decay.
         
@@ -214,6 +181,31 @@ class MyResNet(CNNModel):
         return (32,32,3,)
     def yshape(self):
         return (10,)
+    
+
+class MyResNet(CifarModel):
+    @staticmethod
+    def NAME():
+        return 'resnet'
+    # def __init__(self):
+    #     super().__init__()
+    def setup_resnet(self):
+        n = 3 # 29
+        self.depth = n * 9 + 2
+    def setup_CNN(self):
+        self.setup_resnet()
+        print('Creating resnet graph ..')
+        model = resnet_v2(input_shape=self.xshape(), depth=self.depth)
+        print('Resnet graph created.')
+        self.CNN = model
+    def setup_FC(self):
+        # (None, 5, 5, 64)
+        shape = self.CNN.output_shape
+        # (4,4,64,)
+        inputs = keras.layers.Input(batch_shape=shape, dtype='float32')
+        x = keras.layers.Flatten()(inputs)
+        logits = keras.layers.Dense(10, kernel_initializer='he_normal')(x)
+        self.FC = keras.models.Model(inputs, logits)
 class MyResNet56(MyResNet):
     def NAME():
         return 'resnet56'
@@ -231,3 +223,84 @@ class MyResNet110(MyResNet):
         n = 12 # 110
         self.depth = n * 9 + 2
 
+class VGGModel():
+    # TODO
+    pass
+
+
+from wrn import *
+def __test():
+    m = MyWideResNet()
+
+class MyWideResNet(CifarModel):
+    def __init__(self):
+        super().__init__()
+    @staticmethod
+    def NAME():
+        return "WRN"
+    def xshape(self):
+        return (32,32,3,)
+    def yshape(self):
+        return (10,)
+    def setup_CNN(self):
+        # WRN-16-8
+        # input_dim = (32, 32, 3)
+        input_dim = self.xshape()
+        # param N: Depth of the network. Compute N = (n - 4) / 6.
+        #           Example : For a depth of 16, n = 16, N = (16 - 4) / 6 = 2
+        N = 2
+        # param k: Width of the network.
+        k = 8
+        nb_classes=10
+        # param dropout: Adds dropout if value is greater than 0.0
+        dropout=0.00
+
+        channel_axis = -1
+
+        ip = Input(shape=input_dim)
+
+        x = initial_conv(ip)
+        nb_conv = 4
+
+        x = expand_conv(x, 16, k)
+        nb_conv += 2
+
+        for i in range(N - 1):
+            x = conv1_block(x, k, dropout)
+            nb_conv += 2
+
+        x = BatchNormalization(axis=channel_axis, momentum=0.1, epsilon=1e-5, gamma_initializer='uniform')(x)
+        x = Activation('relu')(x)
+
+        x = expand_conv(x, 32, k, strides=(2, 2))
+        nb_conv += 2
+
+        for i in range(N - 1):
+            x = conv2_block(x, k, dropout)
+            nb_conv += 2
+
+        x = BatchNormalization(axis=channel_axis, momentum=0.1, epsilon=1e-5, gamma_initializer='uniform')(x)
+        x = Activation('relu')(x)
+
+        x = expand_conv(x, 64, k, strides=(2, 2))
+        nb_conv += 2
+
+        for i in range(N - 1):
+            x = conv3_block(x, k, dropout)
+            nb_conv += 2
+
+        x = BatchNormalization(axis=channel_axis, momentum=0.1, epsilon=1e-5, gamma_initializer='uniform')(x)
+        x = Activation('relu')(x)
+
+        x = keras.layers.AveragePooling2D((8, 8))(x)
+        
+        # x = Flatten()(x)
+
+        model = Model(ip, x)
+        self.CNN = model
+    def setup_FC(self):
+        shape = self.CNN.output_shape
+        inputs = keras.layers.Input(batch_shape=shape, dtype='float32')
+        x = keras.layers.Flatten()(inputs)
+        x = Dense(10, kernel_regularizer=l2(weight_decay))(x)
+        self.FC = keras.models.Model(inputs, x)

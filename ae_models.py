@@ -54,102 +54,8 @@ class AEModel():
             self.setup_AE()
             
         self.AE_vars = tf.trainable_variables('my_AE')
+        self.additional_train_steps = [self.AE.updates]
 
-        self.x = keras.layers.Input(shape=self.cnn_model.xshape(), dtype='float32')
-        self.y = keras.layers.Input(shape=self.cnn_model.yshape(), dtype='float32')
-
-        noisy_x = my_add_noise(self.x, noise_factor=0.5)
-
-        # print(self.AE1(noisy_x).shape)
-        # print(self.x.shape)
-
-        ##############################
-        ## noisy
-        
-        # noisy, xent, pixel, (0.36)
-        # loss = my_sigmoid_xent(self.AE1(noisy_x), self.x)
-        
-        # noisy, l2, pixel, 0.3
-        # loss = tf.reduce_mean(tf.square(self.AE(noisy_x) - self.x))
-        
-        # noisy, l1, pixel
-        # loss = tf.reduce_mean(tf.abs(self.AE(noisy_x) - self.x))
-
-        # noisy+clean, l1, pixel
-        # testing whether noisy loss can be used as regularizer
-        # 0.42
-        # mu = 0.5
-        # 0.48
-        mu = 0.2
-        loss = (mu * tf.reduce_mean(tf.abs(self.AE(noisy_x) - self.x))
-                + (1 - mu) * tf.reduce_mean(tf.abs(self.AE(self.x) - self.x)))
-        ###############################
-        ## Clean
-
-        # xent, pixel, 0.515 (0.63)
-        # loss = my_sigmoid_xent(self.AE1(self.x), self.x)
-        # self.C0_loss = my_sigmoid_xent(self.AE1(self.x), self.x)
-        # l2, pixel, 0.48
-        # loss = tf.reduce_mean(tf.square(self.AE(self.x) - self.x))
-        # l1, pixel, 0.52
-        # loss = tf.reduce_mean(tf.abs(self.AE(self.x) - self.x))
-
-
-        # L2, logits, .79
-        # loss = tf.reduce_mean(tf.square(self.cnn_model.predict(self.AE(self.x)) -
-        #                                 self.cnn_model.predict(self.x)))
-        # L1, logits, .30
-        # loss = tf.reduce_mean(tf.abs(self.cnn_model.predict(self.AE(self.x)) -
-        #                              self.cnn_model.predict(self.x)))
-        # L2, feature, 0.39
-        # loss = tf.reduce_mean(tf.square(self.cnn_model.CNN(self.AE(self.x)) -
-        #                                 self.cnn_model.CNN(self.x)))
-        # L1, feature, .445
-        # loss = tf.reduce_mean(tf.abs(self.cnn_model.CNN(self.AE(self.x)) -
-        #                              self.cnn_model.CNN(self.x)))
-
-
-        # xent, logits, .30
-        # loss = my_sigmoid_xent(self.cnn_model.predict(self.AE(self.x)),
-        #                        tf.nn.sigmoid(self.cnn_model.predict(self.x)))
-        # xent, label, .38
-        # loss = my_softmax_xent(self.cnn_model.predict(self.AE(self.x)),
-        #                        self.y)
-        
-        # self.C1_loss = my_sigmoid_xent(rec_high, tf.nn.sigmoid(high))
-        # self.C2_loss = my_softmax_xent(rec_logits, self.y)
-        
-        self.AE_loss = loss
-        
-        self.noisy_accuracy = my_accuracy_wrapper(self.cnn_model.predict(self.AE(noisy_x)),
-                                                  self.y)
-
-        self.accuracy = my_accuracy_wrapper(self.cnn_model.predict(self.AE(self.x)),
-                                            self.y)
-
-        self.clean_accuracy = my_accuracy_wrapper(self.cnn_model.predict(self.x),
-                                                  self.y)
-
-        self.setup_trainstep()
-    def setup_trainstep(self):
-        global_step = tf.train.get_or_create_global_step()
-        self.global_step = global_step
-        # These numbers are batches
-        schedules = [[0, 1e-3], [400*20, 1e-4], [400*40, 1e-5], [400*60, 1e-6]]
-        boundaries = [s[0] for s in schedules][1:]
-        values = [s[1] for s in schedules]
-        learning_rate = tf.train.piecewise_constant_decay(
-            tf.cast(global_step, tf.int32),
-            boundaries,
-            values)
-        self.AE_train_step = tf.train.AdamOptimizer(
-            learning_rate).minimize(
-            # 1e-3).minimize(
-                self.AE_loss,
-                global_step=global_step,
-                var_list=self.AE_vars)
-        # self.AE_train_step = tf.train.AdamOptimizer(0.01).minimize(
-        #     self.AE_loss, global_step=global_step, var_list=self.AE_vars)
     def setup_AE(self):
         """From noise_x to x.
 
@@ -182,76 +88,6 @@ class AEModel():
         
         self.AE = keras.models.Model(inputs, keras.layers.Activation('sigmoid')(decoded))
         
-    def train_AE(self, sess, train_x, train_y):
-        """Technically I don't need clean y, but I'm going to monitor the noisy accuracy."""
-        my_training(sess, self.x, self.y,
-                    self.AE_loss, self.AE_train_step,
-                    [self.noisy_accuracy, self.accuracy, self.clean_accuracy, self.global_step],
-                    ['noisy_acc', 'accuracy', 'clean_accuracy', 'global step'],
-                    train_x, train_y,
-                    # Seems that the denoiser converge fast
-                    patience=5,
-                    print_interval=50,
-                    # default: 100
-                    # num_epochs=60,
-                    do_plot=False)
-
-    def train_AE_keras(self, sess, train_x, train_y):
-        noise_factor = 0.1
-        noisy_x = train_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=train_x.shape)
-        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
-
-        inputs = keras.layers.Input(shape=self.shape, dtype='float32')
-        rec = self.AE(inputs)
-        model = keras.models.Model(inputs, rec)
-        
-        optimizer = keras.optimizers.RMSprop(0.001)
-        # 'adadelta'
-        model.compile(optimizer=optimizer,
-                      loss='binary_crossentropy',
-                      # loss=keras.losses.mean_squared_error
-                      # metrics=[self.noisy_accuracy]
-        )
-        with sess.as_default():
-            model.fit(noisy_x, train_x, epochs=100, validation_split=0.1, verbose=2)
-    def test_AE(self, sess, test_x, test_y):
-        """Test AE models."""
-        # select 10
-        images = []
-        titles = []
-        fringes = []
-
-        test_x = test_x[:100]
-        test_y = test_y[:100]
-
-        to_run = {}
-            
-        # Test AE rec output before and after
-        rec = self.AE(self.x)
-        noisy_x = my_add_noise(self.x)
-        noisy_rec = self.AE(noisy_x)
-
-        to_run['x'] = self.x
-        to_run['y'] = tf.argmax(self.y, 1)
-        to_run['rec'] = rec
-        to_run['noisy_x'] = noisy_x
-        to_run['noisy_rec'] = noisy_rec
-        print('Testing CNN and AE ..')
-        res = sess.run(to_run, feed_dict={self.x: test_x, self.y: test_y})
-
-        
-        images.append(res['x'][:10])
-        titles.append(res['y'][:10])
-        fringes.append('x')
-        
-        for name in ['rec', 'noisy_x', 'noisy_rec']:
-            images.append(res[name][:10])
-            titles.append(['']*10)
-            fringes.append('{}'.format(name))
-
-        print('Plotting result ..')
-        grid_show_image(images, filename='out.pdf', titles=titles, fringes=fringes)
-        print('Done. Saved to {}'.format('out.pdf'))
         
     def save_weights(self, sess, path):
         """Save weights using keras API."""
@@ -427,9 +263,14 @@ vars, so that adv training would change those instead.
             
         # self.AE_vars = tf.trainable_variables('my_AE')
         self.AE_vars = self.cnn_model.CNN_vars + self.cnn_model.FC_vars
-    def train_AE(self, sess, train_x, train_y):
-        print('Dummy training, do nothing.')
-        pass
+        # FIXME I need train the CNN batch normalization layers
+        #
+        # FIXME this is only used for adv training in AdvAE
+        # class. This is ugly.
+        #
+        # FIXME I'm removing the training of the AE alone, so this
+        # wouldn't be a problem anymore
+        self.additional_train_steps = [self.cnn_model.model.updates]
     def save_weights(self, sess, path):
         self.cnn_model.save_weights(sess, path)
     def load_weights(self, sess, path):

@@ -13,7 +13,7 @@ def load_mnist_data():
     # convert data
     train_x = train_x.astype('float32') / 255
     test_x = test_x.astype('float32') / 255
-    train_x.shape
+    # train_x.shape
     train_x = np.reshape(train_x, (train_x.shape[0], 28,28,1))
     test_x = np.reshape(test_x, (test_x.shape[0], 28,28,1))
     
@@ -26,7 +26,7 @@ def load_fashion_mnist_data():
     # convert data
     train_x = train_x.astype('float32') / 255
     test_x = test_x.astype('float32') / 255
-    train_x.shape
+    # train_x.shape
     train_x = np.reshape(train_x, (train_x.shape[0], 28,28,1))
     test_x = np.reshape(test_x, (test_x.shape[0], 28,28,1))
     
@@ -51,6 +51,12 @@ def load_cifar10_data():
     # convert data
     train_x = train_x.astype('float32') / 255
     test_x = test_x.astype('float32') / 255
+
+    # train_x = train_x.astype('float32')
+    # train_x = (train_x - train_x.mean(axis=0)) / (train_x.std(axis=0))
+    # test_x = test_x.astype('float32')
+    # test_x = (test_x - test_x.mean(axis=0)) / (test_x.std(axis=0))
+    
     # train_x = np.reshape(train_x, (train_x.shape[0], 32, 32,3))
     # test_x = np.reshape(test_x, (test_x.shape[0], 32, 32,3))
     

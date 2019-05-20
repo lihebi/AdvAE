@@ -231,7 +231,7 @@ class MyResNet(CifarModel):
         self.FC = keras.models.Model(inputs, logits)
 class MyResNet29(MyResNet):
     def NAME():
-        return 'resnet56'
+        return 'resnet29'
     def setup_resnet(self):
         n = 3 # 29
         self.depth = n * 9 + 2

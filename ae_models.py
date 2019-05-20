@@ -262,15 +262,7 @@ vars, so that adv training would change those instead.
             self.setup_AE()
             
         # self.AE_vars = tf.trainable_variables('my_AE')
-        self.AE_vars = self.cnn_model.CNN_vars + self.cnn_model.FC_vars
-        # FIXME I need train the CNN batch normalization layers
-        #
-        # FIXME this is only used for adv training in AdvAE
-        # class. This is ugly.
-        #
-        # FIXME I'm removing the training of the AE alone, so this
-        # wouldn't be a problem anymore
-        self.additional_train_steps = [self.cnn_model.model.updates]
+        # self.AE_vars = self.cnn_model.CNN_vars + self.cnn_model.FC_vars
     def save_weights(self, sess, path):
         self.cnn_model.save_weights(sess, path)
     def load_weights(self, sess, path):

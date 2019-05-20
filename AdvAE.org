@@ -107,7 +107,9 @@ Using this network, train the AE.
 ** Test using all test data
 instead of random 100
 ** TODO use data augmentation during adv training
-
+** DenseNet
+- original torch https://github.com/liuzhuang13/DenseNet
+- keras implementation: https://github.com/tdeboissiere/DeepLearningImplementations/tree/master/DenseNet
 
 
 * Experiment

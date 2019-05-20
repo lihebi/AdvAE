@@ -33,8 +33,8 @@ class CNNModel(cleverhans.model.Model):
         self.x = keras.layers.Input(shape=self.xshape(), dtype='float32')
         self.y = keras.layers.Input(shape=self.yshape(), dtype='float32')
 
-        CNN_logits = self.FC(self.CNN(self.x))
-        self.model = keras.models.Model(self.x, CNN_logits)
+        self.logits = self.FC(self.CNN(self.x))
+        self.model = keras.models.Model(self.x, self.logits)
 
         self.setup_attack_params()
     def xshape(self):

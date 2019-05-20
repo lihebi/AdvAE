@@ -37,17 +37,17 @@ class AdvAEModel(cleverhans.model.Model):
         self.AE = ae_model.AE
         self.AE1 = ae_model.AE1
 
-        if inputs:
+        if inputs is not None:
             self.x = inputs
         else:
             self.x = keras.layers.Input(shape=self.cnn_model.xshape(), dtype='float32')
-        if targets:
+        if targets is not None:
             self.y = targets
         else:
             self.y = keras.layers.Input(shape=self.cnn_model.yshape(), dtype='float32')
 
-        adv_x = my_PGD(self, self.x, params=self.cnn_model.PGD_params)
-        self.adv_logits = self.FC(self.CNN(self.AE(adv_x)))
+        # adv_x = my_PGD(self, self.x, params=self.cnn_model.PGD_params)
+        self.logits = self.FC(self.CNN(self.AE(self.x)))
 
         self.setup_loss()
         self.setup_trainloss()
@@ -56,6 +56,14 @@ class AdvAEModel(cleverhans.model.Model):
     def NAME():
         "Override by children models."
         return "AdvAE"
+    def metric_funcs(self):
+        def advloss(ytrue, ypred): return self.adv_loss
+        def advacc(ytrue, ypred): return self.adv_accuracy
+        def acc(ytrue, ypred): return self.accuracy
+        def cnnacc(ytrue, ypred): return self.CNN_accuracy
+        def obliacc(ytrue, ypred): return self.obli_accuracy
+        return [advloss, advacc, acc, cnnacc, obliacc]
+
     # cleverhans
     def predict(self, x):
         return self.FC(self.CNN(self.AE(x)))
@@ -185,8 +193,9 @@ class AdvAEModel(cleverhans.model.Model):
         # (train_x, train_y), (val_x, val_y) = validation_split(train_x, train_y)
         outputs = keras.layers.Activation('softmax')(self.FC(self.CNN(self.AE(self.x))))
         model = keras.models.Model(self.x, outputs)
-        self.CNN.trainable = False
-        self.FC.trainable = False
+        if self.ae_model.NAME() != 'identityAE':
+            self.CNN.trainable = False
+            self.FC.trainable = False
         # self.AE.trainable = False
         def myloss(ytrue, ypred):
             # return my_softmax_xent(logits=outputs, labels=ytrue)

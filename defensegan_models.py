@@ -1,4 +1,4 @@
-from cnn_models import CNNModel
+from cnn_models import MNISTModel
 import keras
 from keras.layers import Conv2D, Activation, MaxPool2D, Dense, Dropout
 import tensorflow as tf
@@ -6,7 +6,7 @@ import numpy as np
 import sys
 import math
             
-class DefenseGAN_a(CNNModel):
+class DefenseGAN_a(MNISTModel):
     @staticmethod
     def NAME():
         return "DefenseGAN_a"
@@ -30,7 +30,7 @@ class DefenseGAN_a(CNNModel):
         logits = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, logits)
 
-class DefenseGAN_b(CNNModel):
+class DefenseGAN_b(MNISTModel):
     @staticmethod
     def NAME():
         return "DefenseGAN_b"
@@ -54,7 +54,7 @@ class DefenseGAN_b(CNNModel):
         logits = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, logits)
 
-class DefenseGAN_c(CNNModel):
+class DefenseGAN_c(MNISTModel):
     @staticmethod
     def NAME():
         return "DefenseGAN_c"
@@ -78,7 +78,7 @@ class DefenseGAN_c(CNNModel):
         logits = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, logits)
 
-class DefenseGAN_d(CNNModel):
+class DefenseGAN_d(MNISTModel):
     @staticmethod
     def NAME():
         return "DefenseGAN_d"
@@ -100,7 +100,7 @@ class DefenseGAN_d(CNNModel):
         x = keras.layers.Dropout(rate=0.5)(x)
         logits = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, logits)
-class DefenseGAN_e(CNNModel):
+class DefenseGAN_e(MNISTModel):
     @staticmethod
     def NAME():
         return "DefenseGAN_e"
@@ -120,7 +120,7 @@ class DefenseGAN_e(CNNModel):
         logits = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, logits)
 
-class DefenseGAN_f(CNNModel):
+class DefenseGAN_f(MNISTModel):
     @staticmethod
     def NAME():
         return "DefenseGAN_f"
@@ -143,7 +143,7 @@ class DefenseGAN_f(CNNModel):
         self.FC = keras.models.Model(inputs, logits)
 
 
-class DefenseGAN_y(CNNModel):
+class DefenseGAN_y(MNISTModel):
     @staticmethod
     def NAME():
         return "DefenseGAN_y"
@@ -173,7 +173,7 @@ class DefenseGAN_y(CNNModel):
         logits = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, logits)
     
-class DefenseGAN_q(CNNModel):
+class DefenseGAN_q(MNISTModel):
     @staticmethod
     def NAME():
         return "DefenseGAN_q"
@@ -203,7 +203,7 @@ class DefenseGAN_q(CNNModel):
         logits = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, logits)
 
-class DefenseGAN_z(CNNModel):
+class DefenseGAN_z(MNISTModel):
     @staticmethod
     def NAME():
         return "DefenseGAN_z"

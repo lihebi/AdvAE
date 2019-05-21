@@ -1637,3 +1637,170 @@ def __test():
     sess.run(dy)
     
     log1pexp()
+def my_training_keras(sess, model_x, model_y,
+                loss, train_step, metrics, metric_names,
+                train_x, train_y,
+                additional_train_steps=[],
+                data_augment=None,
+                do_plot=True,
+                plot_prefix='', patience=2,
+                batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS,
+                print_interval=20):
+    """Using keras for training the model.
+
+    To avoid batch normalization problemsl. Which also means I need to
+    set the layer trainable instead of using trainstep variable list.
+
+    """
+    (train_x, train_y), (val_x, val_y) = validation_split(train_x, train_y)
+
+    with sess.as_default():
+        model = keras.models.Model(model_x, model_y)
+
+        def myloss(ypred, ytrue):
+            return loss
+        def mymetrics(ypred, ytrue):
+            return metrics
+        model.compile(loss=myloss, optimizer='adam', metrics=mymetrics)
+
+        model.fit(train_x, train_y,
+                  validation_data=(val_x, val_y),
+                  epochs=100, callbacks=callbacks)
+def train_ensemble_old():
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    sess = create_tf_session()
+    
+    cnn = MNISTModel()
+    cnn_a = DefenseGAN_a()
+    cnn_b = DefenseGAN_b()
+    cnn_c = DefenseGAN_c()
+
+    
+    # this cnn is only used to provide shape
+    ae = AEModel(cnn)
+
+    advae = A2_Model(cnn, ae)
+    advae_a = A2_Model(cnn_a, ae, inputs=advae.x, targets=advae.y)
+    # advae_b = A2_Model(cnn_b, ae, inputs=advae.x, targets=advae.y)
+    # advae_c = A2_Model(cnn_c, ae, inputs=advae.x, targets=advae.y)
+
+    # keras.models.Model(advae.x, advae.logits)
+
+    tf_init_uninitialized(sess)
+    
+    cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
+    cnn_a.load_weights(sess, 'saved_models/MNIST-DefenseGAN_a-CNN.hdf5')
+    # cnn_b.load_weights(sess, 'saved_models/MNIST-DefenseGAN_b-CNN.hdf5')
+    # cnn_c.load_weights(sess, 'saved_models/MNIST-DefenseGAN_c-CNN.hdf5')
+
+    # tf.gradients(cnn.logits, cnn.x)
+    # tf.gradients(advae.adv_logits, advae.adv_x)
+    # tf.gradients(advae.adv_x, advae.x)
+    
+    
+    # ensemble training all of them
+    ensemble_training(sess, [advae, advae_a], train_x, train_y)
+    # ensemble_training(sess, [advae, advae_a, advae_b, advae_c], train_x, train_y)
+
+    # TODO I'll test the ensemble on these trained models as well as
+    # the untrained models. And compare the results with directly
+    # transfer.
+
+    # advae_models = [advae, advae_a, advae_b, advae_c]
+
+class MyWideResNet_old(CifarModel):
+    @staticmethod
+    def NAME():
+        return "WRN"
+    def setup_CNN(self):
+        # WRN-16-8
+        # input_dim = (32, 32, 3)
+        input_dim = self.xshape()
+        # param N: Depth of the network. Compute N = (n - 4) / 6.
+        #           Example : For a depth of 16, n = 16, N = (16 - 4) / 6 = 2
+        N = 2
+        # param k: Width of the network.
+        k = 8
+        nb_classes=10
+        # param dropout: Adds dropout if value is greater than 0.0
+        dropout=0.00
+
+        channel_axis = -1
+
+        ip = Input(shape=input_dim)
+
+        x = initial_conv(ip)
+        nb_conv = 4
+
+        x = expand_conv(x, 16, k)
+        nb_conv += 2
+
+        for i in range(N - 1):
+            x = conv1_block(x, k, dropout)
+            nb_conv += 2
+
+        x = BatchNormalization(axis=channel_axis, momentum=0.1, epsilon=1e-5, gamma_initializer='uniform')(x)
+        x = Activation('relu')(x)
+
+        x = expand_conv(x, 32, k, strides=(2, 2))
+        nb_conv += 2
+
+        for i in range(N - 1):
+            x = conv2_block(x, k, dropout)
+            nb_conv += 2
+
+        x = BatchNormalization(axis=channel_axis, momentum=0.1, epsilon=1e-5, gamma_initializer='uniform')(x)
+        x = Activation('relu')(x)
+
+        x = expand_conv(x, 64, k, strides=(2, 2))
+        nb_conv += 2
+
+        for i in range(N - 1):
+            x = conv3_block(x, k, dropout)
+            nb_conv += 2
+
+        x = BatchNormalization(axis=channel_axis, momentum=0.1, epsilon=1e-5, gamma_initializer='uniform')(x)
+        x = Activation('relu')(x)
+
+        x = keras.layers.AveragePooling2D((8, 8))(x)
+        
+        # x = Flatten()(x)
+
+        model = Model(ip, x)
+        self.CNN = model
+    def setup_FC(self):
+        shape = self.CNN.output_shape
+        inputs = keras.layers.Input(batch_shape=shape, dtype='float32')
+        x = keras.layers.Flatten()(inputs)
+        x = Dense(10, kernel_regularizer=l2(weight_decay))(x)
+        self.FC = keras.models.Model(inputs, x)
+
+    def __test():
+        c = tf.constant([1,2,3,4])
+        i = tf.constant([1,2])
+        ii = tf.constant([1,0,0,1])
+
+        v = tf.constant([[[1,2,3],
+                          [4,5,200]],
+                         [[4,5,6],
+                          [1,2,3]]], dtype=tf.float32)
+        vv = tf.constant([[1,2,3], [4,5,6]], dtype=tf.float32)
+        keras.backend.eval(tf.norm(v, ord=2, axis=(1,2)))
+        keras.backend.eval(tf.norm(vv))
+
+        x = keras.backend.eval(tf.constant(1, tf.float32))
+        type(x)
+        type(float(x))
+
+        
+        iii = tf.cast(ii, tf.bool)
+        x = tf.gather(c, i)
+        xx = tf.gather(c, tf.where(ii))
+        xxx = tf.where(iii, c, tf.zeros_like(c))
+        xxxx = tf.boolean_mask(c, ii)
+        # x = tf.gather_nd(c, i)
+        keras.backend.eval(xxxx)
+        keras.backend.eval(tf.zeros_like(c))
+        keras.backend.eval(tf.where(ii))
+        c[iii]
+        tf.slice(c, iii)

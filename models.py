@@ -62,7 +62,8 @@ class AdvAEModel(cleverhans.model.Model):
         def acc(ytrue, ypred): return self.accuracy
         def cnnacc(ytrue, ypred): return self.CNN_accuracy
         def obliacc(ytrue, ypred): return self.obli_accuracy
-        return [advloss, advacc, acc, cnnacc, obliacc]
+        # return [advloss, advacc, acc, cnnacc, obliacc]
+        return [advacc]
 
     # cleverhans
     def predict(self, x):
@@ -190,7 +191,6 @@ class AdvAEModel(cleverhans.model.Model):
 
     def train_Adv(self, sess, train_x, train_y, plot_prefix=''):
         """Adv training."""
-        # (train_x, train_y), (val_x, val_y) = validation_split(train_x, train_y)
         outputs = keras.layers.Activation('softmax')(self.FC(self.CNN(self.AE(self.x))))
         model = keras.models.Model(self.x, outputs)
         if self.ae_model.NAME() != 'identityAE':
@@ -206,23 +206,19 @@ class AdvAEModel(cleverhans.model.Model):
         def obliacc(ytrue, ypred): return self.obli_accuracy
             
         with sess.as_default():
-            callbacks = [get_lr_scheduler(),
-                         # get_lr_reducer(patience=5),
-                         # DEBUG
-                         get_es(patience=5),
-                         get_mc('best_model.hdf5')]
+            callbacks = [get_lr_reducer(),
+                         get_es()]
             model.compile(loss=myloss,
                           metrics=[cnnacc, acc, obliacc, advacc],
                           optimizer=keras.optimizers.Adam(lr=1e-3),
                           target_tensors=self.y)
             model.fit(train_x, train_y,
                       validation_split=0.1,
-                      # validation_data=(val_x, val_y),
                       epochs=100,
                       callbacks=callbacks)
-            model.load_weights('best_model.hdf5')
 
-    def test_attack(self, sess, test_x, test_y, name):
+    def test_attack(self, sess, test_x, test_y, name,
+                    num_sample=100, batch_size=100):
         """Reurn images and titles."""
         # TODO mark the correct and incorrect predictions
         # to_run += [adv_x, adv_rec, postadv]
@@ -234,9 +230,7 @@ class AdvAEModel(cleverhans.model.Model):
         # test_x = test_x[indices]
         # test_y = test_y[indices]
         # feed_dict = {self.x: test_x, self.y: test_y}
-        images = []
-        titles = []
-        fringes = []
+
         # JSMA is pretty slow ..
         # attack_funcs = [my_FGSM, my_PGD, my_JSMA]
         # attack_names = ['FGSM', 'PGD', 'JSMA']
@@ -274,22 +268,22 @@ class AdvAEModel(cleverhans.model.Model):
         baseline_acc = my_accuracy_wrapper(baseline_logits, self.y)
         obliadv_logits = self.FC(self.CNN(self.AE(obliadv)))
         obliadv_acc = my_accuracy_wrapper(obliadv_logits, self.y)
-        obliadv_l2 = myl2dist(obliadv, self.x, obliadv_logits, self.y)
-        # obliadv_l2 = tf.constant(1, tf.float32)
+        # obliadv_l2 = myl2dist(obliadv, self.x, obliadv_logits, self.y)
+        obliadv_l2 = tf.constant(1, tf.float32)
         
         whiteadv = attack(self, self.x)
         whiteadv_rec = self.AE(whiteadv)
         whiteadv_logits = self.FC(self.CNN(self.AE(whiteadv)))
         whiteadv_acc = my_accuracy_wrapper(whiteadv_logits, self.y)
-        whiteadv_l2 = myl2dist(whiteadv, self.x, whiteadv_logits, self.y)
-        # whiteadv_l2 = tf.constant(1, tf.float32)
+        # whiteadv_l2 = myl2dist(whiteadv, self.x, whiteadv_logits, self.y)
+        whiteadv_l2 = tf.constant(1, tf.float32)
 
         # remember to compare visually postadv with rec (i.e. AE(x))
         postadv = attack(self.cnn_model, self.AE(self.x))
         postadv_logits = self.FC(self.CNN(postadv))
         postadv_acc = my_accuracy_wrapper(postadv_logits, self.y)
-        postadv_l2 = myl2dist(postadv, self.x, postadv_logits, self.y)
-        # postadv_l2 = tf.constant(1, tf.float32)
+        # postadv_l2 = myl2dist(postadv, self.x, postadv_logits, self.y)
+        postadv_l2 = tf.constant(1, tf.float32)
         
         to_run = {}
 
@@ -305,68 +299,54 @@ class AdvAEModel(cleverhans.model.Model):
             'whiteadv_rec': whiteadv_acc,
             'whiteadv_l2': whiteadv_l2,
         }
-        
+
+
+        # TODO use batch
         print('Testing attack {} ..'.format(name))
-        t = time.time()
-        res, data = sess.run([to_run, data_torun], feed_dict={self.x: test_x, self.y: test_y})
-        print('Attack done. Time: {:.3f}'.format(time.time()-t))
 
-        tmp = {}
-        for key in data:
-            tmp[key] = float(data[key])
-        data = tmp
-
-        for key in res:
-            tmp_images, tmp_titles, acc, l2 = res[key]
-            images.append(tmp_images[:10])
-            if acc == -1:
-                titles.append(['']*10)
-                fringe = '{}\n{}'.format(name, key)
-            else:
-                titles.append(tmp_titles[:10])
-                fringe = '{}\n{}\n{:.3f}\nL2: {:.3f}'.format(name, key, acc, l2)
-            fringes.append(fringe)
-            print(fringe.replace('\n', ' '))
-        return images, titles, fringes, data
-
-    def __test():
-        c = tf.constant([1,2,3,4])
-        i = tf.constant([1,2])
-        ii = tf.constant([1,0,0,1])
-
-        v = tf.constant([[[1,2,3],
-                          [4,5,200]],
-                         [[4,5,6],
-                          [1,2,3]]], dtype=tf.float32)
-        vv = tf.constant([[1,2,3], [4,5,6]], dtype=tf.float32)
-        keras.backend.eval(tf.norm(v, ord=2, axis=(1,2)))
-        keras.backend.eval(tf.norm(vv))
-
-        x = keras.backend.eval(tf.constant(1, tf.float32))
-        type(x)
-        type(float(x))
-
-        
-        iii = tf.cast(ii, tf.bool)
-        x = tf.gather(c, i)
-        xx = tf.gather(c, tf.where(ii))
-        xxx = tf.where(iii, c, tf.zeros_like(c))
-        xxxx = tf.boolean_mask(c, ii)
-        # x = tf.gather_nd(c, i)
-        keras.backend.eval(xxxx)
-        keras.backend.eval(tf.zeros_like(c))
-        keras.backend.eval(tf.where(ii))
-        c[iii]
-        tf.slice(c, iii)
-        
-
-    def test_Model(self, sess, test_x, test_y):
-        """Test CNN and AE models."""
-        # select 10
+        data = {}
         images = []
         titles = []
         fringes = []
+        
+        nbatch = num_sample // batch_size
+        for i in range(nbatch):
+            start = i * batch_size
+            end = (i+1) * batch_size
+            batch_x = test_x[start:end]
+            batch_y = test_y[start:end]
+            
+            t = time.time()
+            print('Batch {} / {}'.format(i, nbatch))
+            res, tmpdata = sess.run([to_run, data_torun], feed_dict={self.x: batch_x, self.y: batch_y})
+            print('Attack done. Time: {:.3f}'.format(time.time()-t))
 
+            for key in tmpdata:
+                if key not in data:
+                    data[key] = 0.
+                data[key] += float(tmpdata[key])
+
+            if i == 0:
+                # FIXME the image visualization only uses the first batch
+                for key in res:
+                    tmp_images, tmp_titles, acc, l2 = res[key]
+                    images.append(tmp_images[:10])
+                    if acc == -1:
+                        titles.append(['']*10)
+                        fringe = '{}\n{}'.format(name, key)
+                    else:
+                        titles.append(tmp_titles[:10])
+                        fringe = '{}\n{}\n{:.3f}\nL2: {:.3f}'.format(name, key, acc, l2)
+                    fringes.append(fringe)
+                    print(fringe.replace('\n', ' '))
+        for key in data:
+            data[key] /= nbatch
+        return images, titles, fringes, data
+
+    def test_Model(self, sess, test_x, test_y,
+                   num_sample=100, batch_size=100):
+        """Test CNN and AE models."""
+        # select 10
         to_run = {}
             
         # Test AE rec output before and after
@@ -379,29 +359,50 @@ class AdvAEModel(cleverhans.model.Model):
         to_run['rec'] = rec
         to_run['noisy_x'] = noisy_x
         to_run['noisy_rec'] = noisy_rec
-        print('Testing CNN and AE ..')
-        res = sess.run(to_run, feed_dict={self.x: test_x, self.y: test_y})
-
-        accs = sess.run([self.CNN_accuracy, self.accuracy, self.noisy_accuracy],
-                        feed_dict={self.x: test_x, self.y: test_y})
-        print('raw accuracies (raw CNN, AE clean, AE noisy): {}'.format(accs))
-        data = {
-            'CNN clean': float(accs[0]),
-            'AE clean': float(accs[1]),
-            'AE noisy': float(accs[2])
-        }
-        images.append(res['x'][:10])
-        titles.append(res['y'][:10])
-        fringes.append('x\n{:.3f}'.format(accs[0]))
         
-        for name, acc in zip(['rec', 'noisy_x', 'noisy_rec'], [accs[1], accs[2], accs[2]]):
-            images.append(res[name][:10])
-            titles.append(['']*10)
-            fringes.append('{}\n{:.3f}'.format(name, acc))
+        images = []
+        titles = []
+        fringes = []
+        data = {}
 
+        nbatch = num_sample // batch_size
+        for i in range(nbatch):
+            start = i * batch_size
+            end = (i+1) * batch_size
+            batch_x = test_x[start:end]
+            batch_y = test_y[start:end]
+            
+            print('Batch {} / {}: testing CNN and AE ..'.format(i, nbatch))
+            res = sess.run(to_run, feed_dict={self.x: batch_x, self.y: batch_y})
+
+            accs = sess.run([self.CNN_accuracy, self.accuracy, self.noisy_accuracy],
+                            feed_dict={self.x: batch_x, self.y: batch_y})
+            print('raw accuracies (raw CNN, AE clean, AE noisy): {}'.format(accs))
+            
+            tmpdata = {
+                'CNN clean': float(accs[0]),
+                'AE clean': float(accs[1]),
+                'AE noisy': float(accs[2])
+            }
+            
+            for key in tmpdata:
+                if key not in data:
+                    data[key] = 0.
+                data[key] += float(tmpdata[key])
+
+            if i == 0:
+                images.append(res['x'][:10])
+                titles.append(res['y'][:10])
+                fringes.append('x\n{:.3f}'.format(accs[0]))
+
+                for name, acc in zip(['rec', 'noisy_x', 'noisy_rec'], [accs[1], accs[2], accs[2]]):
+                    images.append(res[name][:10])
+                    titles.append(['']*10)
+                    fringes.append('{}\n{:.3f}'.format(name, acc))
+
+        for key in data:
+            data[key] /= nbatch
         return images, titles, fringes, data
-        
-        
 
     def test_all(self, sess, test_x, test_y, attacks=[],
                  # filename='out.pdf',
@@ -427,21 +428,16 @@ class AdvAEModel(cleverhans.model.Model):
         all_titles = []
         all_fringes = []
         all_data = []
-        
-        # nbatch = num_sample // batch_size
-        # for i in range(nbatch):
-        #     start = i * batch_size
-        #     end = (i+1) * batch_size
-        #     batch_x = test_x[indices[start:end]]
-        #     batch_y = test_y[indices[start:end]]
 
-        images, titles, fringes, data = self.test_Model(sess, test_x, test_y)
+        images, titles, fringes, data = self.test_Model(sess, test_x, test_y,
+                                                        num_sample=num_sample, batch_size=batch_size)
         all_images.extend(images)
         all_titles.extend(titles)
         all_fringes.extend(fringes)
         all_data.append(data)
         for name in attacks:
-            images, titles, fringes, data = self.test_attack(sess, test_x, test_y, name)
+            images, titles, fringes, data = self.test_attack(sess, test_x, test_y, name,
+                                                             num_sample=num_sample, batch_size=batch_size)
             all_images.extend(images)
             all_titles.extend(titles)
             all_fringes.extend(fringes)

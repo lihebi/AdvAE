@@ -79,6 +79,7 @@ only if the dunet is not giving promising results.
 - CW by using CW loss function but PGD iterations
 
 ** investigate not only accuracy, but also confidence
+** save keras training history
 
 
 * Other Ideas                                                      :noexport:
@@ -97,20 +98,24 @@ test/validation data, but can be 100% at training data.
 Using this network, train the AE.
 
 * Additional Experiments
-** Black box substitute model accuracy
+** DONE Black box substitute model accuracy
+   CLOSED: [2019-05-21 Tue 11:33]
 ** Model transfer
 *** DONE Simple CNNs for MNIST
     CLOSED: [2019-05-16 Thu 00:28]
-*** VGG for CIFAR
-** DefenseGAN break
-** Adv train both AE and CNN
-** Test using all test data
-instead of random 100
-** TODO use data augmentation during adv training
-** DenseNet
+*** CANCELED VGG for CIFAR
+    CLOSED: [2019-05-21 Tue 01:12]
+*** DONE DenseNet
+    CLOSED: [2019-05-21 Tue 11:33]
 - original torch https://github.com/liuzhuang13/DenseNet
 - keras implementation: https://github.com/tdeboissiere/DeepLearningImplementations/tree/master/DenseNet
-
+** DONE DefenseGAN break
+   CLOSED: [2019-05-21 Tue 01:12]
+** Adv train both AE and CNN
+** DONE Test using all test data
+   CLOSED: [2019-05-21 Tue 11:33]
+instead of random 100
+** TODO use data augmentation during adv training
 
 * Experiment
 

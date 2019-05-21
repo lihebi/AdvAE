@@ -11,8 +11,6 @@ from models import *
 
 from tf_utils import *
 
-from cleverhans.attacks import CarliniWagnerL2_BPDA
-
 
 sys.path.append('/home/hebi/github/reading/')
 
@@ -225,25 +223,6 @@ def __test():
     grid_show_image([test_x[:10], adv_x[:10]])
 
     my_bpda_defgan()
-
-
-    
-def my_CW_BPDA(pre_model, post_model, sess, x, y, targeted=False, params=dict()):
-    cw = CarliniWagnerL2_BPDA(pre_model, post_model, sess=sess)
-    yname = 'y_target' if targeted else 'y'
-    cw_params = {'binary_search_steps': 1,
-                 yname: y,
-                 # 3 sec per iteration
-                 'max_iterations': 10,
-                 'learning_rate': 0.2,
-                 # to match the defgan model
-                 'batch_size': 50,
-                 'initial_const': 10,
-                 'clip_min': CLIP_MIN,
-                 'clip_max': CLIP_MAX}
-    cw_params.update(params)
-    adv_x = cw.generate(x, **cw_params)
-    return adv_x
 
 
 def __test():

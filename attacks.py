@@ -10,6 +10,8 @@ import cleverhans.model
 from cleverhans.attacks import FastGradientMethod
 from cleverhans.attacks import ProjectedGradientDescent, SaliencyMapMethod
 from cleverhans.attacks import CarliniWagnerL2
+from cleverhans.attacks import CarliniWagnerL2_BPDA
+
 
 CLIP_MIN = 0.
 CLIP_MAX = 1.
@@ -72,7 +74,7 @@ def my_CW(model, sess, x, y, targeted=False, params=dict()):
     yname = 'y_target' if targeted else 'y'
     cw_params = {'binary_search_steps': 1,
                  yname: y,
-                 'max_iterations': 10000,
+                 'max_iterations': 1000,
                  'learning_rate': 0.2,
                  # setting to 100 instead of 128, because the test_x
                  # has 10000, and the last 16 left over will cause
@@ -84,4 +86,21 @@ def my_CW(model, sess, x, y, targeted=False, params=dict()):
     cw_params.update(params)
     adv_x = cw.generate(x, **cw_params)
     return adv_x
+def my_CW_BPDA(pre_model, post_model, sess, x, y, targeted=False, params=dict()):
+    cw = CarliniWagnerL2_BPDA(pre_model, post_model, sess=sess)
+    yname = 'y_target' if targeted else 'y'
+    cw_params = {'binary_search_steps': 1,
+                 yname: y,
+                 # 3 sec per iteration
+                 'max_iterations': 10,
+                 'learning_rate': 0.2,
+                 # to match the defgan model
+                 'batch_size': 50,
+                 'initial_const': 10,
+                 'clip_min': CLIP_MIN,
+                 'clip_max': CLIP_MAX}
+    cw_params.update(params)
+    adv_x = cw.generate(x, **cw_params)
+    return tf.stop_gradient(adv_x)
+
 

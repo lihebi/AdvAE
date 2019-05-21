@@ -16,6 +16,12 @@ from attacks import CLIP_MIN, CLIP_MAX
 from attacks import *
 from train import *
 from resnet import resnet_v2, lr_schedule
+from densenet import DenseNet
+
+# sys.path.append('/home/hebi/github/reading/')
+# pip3 install --user git+https://www.github.com/keras-team/keras-contrib.git
+# from keras_contrib.keras_contrib.applications.wide_resnet import WideResidualNetwork
+from keras_contrib.applications.wide_resnet import WideResidualNetwork
 
 class CNNModel(cleverhans.model.Model):
     """This model is used inside AdvAEModel."""
@@ -59,8 +65,6 @@ class CNNModel(cleverhans.model.Model):
         raise NotImplementedError()
     
     def train_CNN(self, sess, train_x, train_y, patience=10, num_epoches=200):
-        # (train_x, train_y), (val_x, val_y) = validation_split(train_x, train_y)
-        
         # outputs = keras.layers.Activation('softmax')(self.FC(self.CNN(self.x)))
         # model = keras.models.Model(self.x, outputs)
         model = self.model
@@ -75,10 +79,7 @@ class CNNModel(cleverhans.model.Model):
         def acc(ytrue, ypred): return accuracy
             
         with sess.as_default():
-            callbacks = [get_lr_scheduler(),
-                         get_lr_reducer(patience=5),
-                         get_es(patience=10),
-                         get_mc('best_model.hdf5')]
+            callbacks = [get_lr_reducer(), get_es()]
             model.compile(loss=myloss,
                           metrics=[acc],
                           optimizer=keras.optimizers.Adam(lr=1e-3),
@@ -89,7 +90,6 @@ class CNNModel(cleverhans.model.Model):
                       validation_split=0.1,
                       epochs=100,
                       callbacks=callbacks)
-            model.load_weights('best_model.hdf5')
         
     def save_weights(self, sess, path):
         """Save weights using keras API."""
@@ -184,17 +184,59 @@ class CifarModel(CNNModel):
         def acc(ytrue, ypred): return accuracy
 
         datagen = keras.preprocessing.image.ImageDataGenerator(
-            rotation_range=10,
+            # set input mean to 0 over the dataset
+            featurewise_center=False,
+            # set each sample mean to 0
+            samplewise_center=False,
+            # divide inputs by std of dataset
+            featurewise_std_normalization=False,
+            # divide each input by its std
+            samplewise_std_normalization=False,
+            # apply ZCA whitening
+            zca_whitening=False,
+            # epsilon for ZCA whitening
+            zca_epsilon=1e-06,
+            # randomly rotate images in the range (deg 0 to 180)
+            rotation_range=0,
+            # randomly shift images horizontally
             width_shift_range=0.1,
+            # randomly shift images vertically
             height_shift_range=0.1,
-            horizontal_flip=True,)
+            # set range for random shear
+            shear_range=0.,
+            # set range for random zoom
+            zoom_range=0.,
+            # set range for random channel shifts
+            channel_shift_range=0.,
+            # set mode for filling points outside the input boundaries
+            fill_mode='nearest',
+            # value used for fill_mode = "constant"
+            cval=0.,
+            # randomly flip images
+            horizontal_flip=True,
+            # randomly flip images
+            vertical_flip=False,
+            # set rescaling factor (applied before any other transformation)
+            rescale=None,
+            # set function that will be applied on each input
+            preprocessing_function=None,
+            # image data format, either "channels_first" or "channels_last"
+            data_format=None,
+            # fraction of images reserved for validation (strictly between 0 and 1)
+            validation_split=0.0)
+        # datagen = keras.preprocessing.image.ImageDataGenerator(
+        #     rotation_range=10,
+        #     width_shift_range=0.1,
+        #     height_shift_range=0.1,
+        #     horizontal_flip=True,)
         datagen.fit(train_x)
             
         with sess.as_default():
-            callbacks = [get_lr_scheduler(),
-                         get_lr_reducer(patience=5),
-                         get_es(patience=10),
-                         get_mc('best_model.hdf5')]
+            # DEBUG resnet training broken again
+            callbacks = [get_es(),
+                         get_lr_reducer(),
+                         # get_lr_scheduler()
+            ]
             model.compile(loss=myloss,
                           metrics=[acc],
                           optimizer=keras.optimizers.Adam(lr=1e-3),
@@ -204,11 +246,8 @@ class CifarModel(CNNModel):
                                 verbose=1,
                                 workers=4,
                                 steps_per_epoch=math.ceil(train_x.shape[0] / BATCH_SIZE),
-                                # batch_size=BATCH_SIZE,
-                                # validation_split=0.1,
                                 epochs=100,
                                 callbacks=callbacks)
-            model.load_weights('best_model.hdf5')
 
 class MyResNet(CifarModel):
     @staticmethod
@@ -249,80 +288,85 @@ class MyResNet110(MyResNet):
         n = 12 # 110
         self.depth = n * 9 + 2
 
-class VGGModel():
-    # TODO
-    pass
 
-
-from wrn import *
-def __test():
-    m = MyWideResNet()
-
-class MyWideResNet(CifarModel):
-    def __init__(self):
-        super().__init__()
+class MyWideResNet2(CifarModel):
     @staticmethod
     def NAME():
-        return "WRN"
+        return "WRN2"
     def setup_CNN(self):
-        # WRN-16-8
-        # input_dim = (32, 32, 3)
-        input_dim = self.xshape()
-        # param N: Depth of the network. Compute N = (n - 4) / 6.
-        #           Example : For a depth of 16, n = 16, N = (16 - 4) / 6 = 2
-        N = 2
-        # param k: Width of the network.
-        k = 8
-        nb_classes=10
-        # param dropout: Adds dropout if value is greater than 0.0
-        dropout=0.00
-
-        channel_axis = -1
-
-        ip = Input(shape=input_dim)
-
-        x = initial_conv(ip)
-        nb_conv = 4
-
-        x = expand_conv(x, 16, k)
-        nb_conv += 2
-
-        for i in range(N - 1):
-            x = conv1_block(x, k, dropout)
-            nb_conv += 2
-
-        x = BatchNormalization(axis=channel_axis, momentum=0.1, epsilon=1e-5, gamma_initializer='uniform')(x)
-        x = Activation('relu')(x)
-
-        x = expand_conv(x, 32, k, strides=(2, 2))
-        nb_conv += 2
-
-        for i in range(N - 1):
-            x = conv2_block(x, k, dropout)
-            nb_conv += 2
-
-        x = BatchNormalization(axis=channel_axis, momentum=0.1, epsilon=1e-5, gamma_initializer='uniform')(x)
-        x = Activation('relu')(x)
-
-        x = expand_conv(x, 64, k, strides=(2, 2))
-        nb_conv += 2
-
-        for i in range(N - 1):
-            x = conv3_block(x, k, dropout)
-            nb_conv += 2
-
-        x = BatchNormalization(axis=channel_axis, momentum=0.1, epsilon=1e-5, gamma_initializer='uniform')(x)
-        x = Activation('relu')(x)
-
-        x = keras.layers.AveragePooling2D((8, 8))(x)
-        
-        # x = Flatten()(x)
-
-        model = Model(ip, x)
+        model = WideResidualNetwork(include_top=False, weights=None)
         self.CNN = model
     def setup_FC(self):
         shape = self.CNN.output_shape
         inputs = keras.layers.Input(batch_shape=shape, dtype='float32')
-        x = keras.layers.Flatten()(inputs)
-        x = Dense(10, kernel_regularizer=l2(weight_decay))(x)
+        x = keras.layers.GlobalAveragePooling2D()(inputs)
+        x = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, x)
+
+class MyDenseNet(CifarModel):
+    def __init__(self):
+        super().__init__()
+    @staticmethod
+    def NAME():
+        return "densenet"
+    def setup_CNN(self):
+        depth = 7
+        nb_dense_block = 1
+        growth_rate = 12
+        nb_filter = 16
+        dropout_rate = 0.2
+        self.weight_decay = 1e-4
+        learning_rate = 1e-3
+        model = DenseNet(10,
+                         self.xshape(),
+                         depth,
+                         nb_dense_block,
+                         growth_rate,
+                         nb_filter,
+                         dropout_rate=dropout_rate,
+                         weight_decay=self.weight_decay)
+        self.CNN = model
+
+    def setup_FC(self):
+        shape = self.CNN.output_shape
+        inputs = keras.layers.Input(batch_shape=shape, dtype='float32')
+        x = keras.layers.GlobalAveragePooling2D(data_format=keras.backend.image_data_format())(inputs)
+        x = keras.layers.Dense(10,
+                               # activation='softmax',
+                               kernel_regularizer=keras.regularizers.l2(self.weight_decay),
+                               bias_regularizer=keras.regularizers.l2(self.weight_decay))(x)
+        self.FC = keras.models.Model(inputs, x)
+
+
+def __test():
+    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
+    depth = 7
+    nb_dense_block = 1
+    growth_rate = 12
+    nb_filter = 16
+    dropout_rate = 0.2
+    weight_decay = 1e-4
+    learning_rate = 1e-3
+    
+    model = DenseNet(10,
+                     train_x.shape[1:],
+                     depth,
+                     nb_dense_block,
+                     growth_rate,
+                     nb_filter,
+                     dropout_rate=dropout_rate,
+                     weight_decay=weight_decay)
+    # Model output
+    model.summary()
+
+    # Build optimizer
+    opt = keras.optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
+
+    model.compile(loss='categorical_crossentropy',
+                  optimizer=opt,
+                  metrics=["accuracy"])
+    callbacks = [get_es(), get_lr_reducer()]
+    model.fit(train_x, train_y,
+              batch_size=64, validation_split=0.1,
+              epochs=100,
+              callbacks=callbacks)

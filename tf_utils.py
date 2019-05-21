@@ -30,7 +30,7 @@ def my_compute_accuracy(sess, x, y, preds, x_test, y_test):
         dtype=tf.float32))
     return sess.run(acc, feed_dict={x: x_test, y: y_test})
 
-def tf_init_uninitialized(sess, choice=['global', 'local']):
+def tf_init_uninitialized(sess, choice=['global', 'local'], verbose=False):
     """
     global_vars = tf.global_variables()
     local_vars = tf.local_variables()
@@ -46,8 +46,9 @@ def tf_init_uninitialized(sess, choice=['global', 'local']):
         # List all variables that were not previously initialized.
         not_initialized_vars = [var for (var, init) in
                                 zip(allvars, is_initialized) if not init]
-        for v in not_initialized_vars:
-            print('[!] not init: {}'.format(v.name))
+        if verbose:
+            for v in not_initialized_vars:
+                print('[!] not init: {}'.format(v.name))
         # Initialize all uninitialized variables found, if any.
         if not_initialized_vars:
             sess.run(tf.variables_initializer(not_initialized_vars))
@@ -60,6 +61,10 @@ def tf_init_uninitialized(sess, choice=['global', 'local']):
         init(tf.local_variables())
     
 def create_tf_session():
+    # I'm resetting the graph because there will be many experiments
+    # in my script, and I don't want to accumulate the graph and
+    # sessions. Garbage collector might do this when session goes out
+    # of scope, but I'm not counting on that now.
     tf.reset_default_graph()
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True

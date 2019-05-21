@@ -29,25 +29,44 @@ def my_lr_schedule(epoch):
         lr *= 1e-2
     elif epoch > 30:
         lr *= 1e-1
-    print('Learning rate: ', lr)
     return lr
 
 def get_lr_scheduler():
-    return keras.callbacks.LearningRateScheduler(my_lr_schedule)
-def get_lr_reducer(patience=5):
-    return keras.callbacks.ReduceLROnPlateau(factor=np.sqrt(0.1),
+    # DEPRECATED
+    # TODO add parameter to adjust the schedule
+    # FIXME this conflicts with lr reducer
+    return keras.callbacks.LearningRateScheduler(my_lr_schedule, verbose=1)
+
+def get_lr_reducer(patience=4):
+    # FIXME if this is working, I prefer to use it instead of lr scheduler
+    return keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
+                                             factor=0.5,
                                              cooldown=0,
                                              patience=patience,
-                                             min_lr=0.5e-6)
-def get_es(patience=5):
+                                             # DEBUG
+                                             verbose=1,
+                                             min_lr=0.5e-4)
+def get_es(patience=10):
+    # FIXME should I directly use accuracy for early stopping?
     return keras.callbacks.EarlyStopping(monitor='val_loss',
+                                         # TODO adjust this to make ensemble training faster
                                          min_delta=0,
                                          patience=patience,
-                                         verbose=0,
+                                         # DEBUG
+                                         verbose=1,
+                                         # NEW I'm resoringg the weights from keras
+                                         restore_best_weights=True,
                                          mode='auto')
 def get_mc(filename='best_model.hdf5'):
+    # DEPRECATED
+    # TODO I'm adding filename patterns, and will enable training from
+    # where we left last time
+    # FIXME this will conflict with early stopping
+    #
+    # filename = 'weights.{epoch:02d}-{val_loss:.2f}.hdf5'
     return keras.callbacks.ModelCheckpoint(filename,
-                                           monitor='val_loss', mode='auto', verbose=0,
+                                           monitor='val_loss', mode='auto',
+                                           verbose=1,
                                            save_weights_only=True,
                                            save_best_only=True)
 
@@ -244,35 +263,6 @@ def run_on_batch(sess, res, x, y, npx, npy, batch_size=BATCH_SIZE):
     print('')
     return allres
 
-def my_training_keras(sess, model_x, model_y,
-                loss, train_step, metrics, metric_names,
-                train_x, train_y,
-                additional_train_steps=[],
-                data_augment=None,
-                do_plot=True,
-                plot_prefix='', patience=2,
-                batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS,
-                print_interval=20):
-    """Using keras for training the model.
-
-    To avoid batch normalization problemsl. Which also means I need to
-    set the layer trainable instead of using trainstep variable list.
-
-    """
-    (train_x, train_y), (val_x, val_y) = validation_split(train_x, train_y)
-
-    with sess.as_default():
-        model = keras.models.Model(model_x, model_y)
-
-        def myloss(ypred, ytrue):
-            return loss
-        def mymetrics(ypred, ytrue):
-            return metrics
-        model.compile(loss=myloss, optimizer='adam', metrics=mymetrics)
-
-        model.fit(train_x, train_y,
-                  validation_data=(val_x, val_y),
-                  epochs=100, callbacks=callbacks)
 
 def my_training(sess, model_x, model_y,
                 loss, train_step, metrics, metric_names,
@@ -292,6 +282,8 @@ def my_training(sess, model_x, model_y,
     improve.
 
     FIXME metrics and metric_names are not coming from the same source.
+
+    DEPRECATED
 
     """
     (train_x, train_y), (val_x, val_y) = validation_split(train_x, train_y)

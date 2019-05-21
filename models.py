@@ -274,22 +274,22 @@ class AdvAEModel(cleverhans.model.Model):
         baseline_acc = my_accuracy_wrapper(baseline_logits, self.y)
         obliadv_logits = self.FC(self.CNN(self.AE(obliadv)))
         obliadv_acc = my_accuracy_wrapper(obliadv_logits, self.y)
-        # obliadv_l2 = myl2dist(obliadv, self.x, obliadv_logits, self.y)
-        obliadv_l2 = tf.constant(1, tf.float32)
+        obliadv_l2 = myl2dist(obliadv, self.x, obliadv_logits, self.y)
+        # obliadv_l2 = tf.constant(1, tf.float32)
         
         whiteadv = attack(self, self.x)
         whiteadv_rec = self.AE(whiteadv)
         whiteadv_logits = self.FC(self.CNN(self.AE(whiteadv)))
         whiteadv_acc = my_accuracy_wrapper(whiteadv_logits, self.y)
-        # whiteadv_l2 = myl2dist(whiteadv, self.x, whiteadv_logits, self.y)
-        whiteadv_l2 = tf.constant(1, tf.float32)
+        whiteadv_l2 = myl2dist(whiteadv, self.x, whiteadv_logits, self.y)
+        # whiteadv_l2 = tf.constant(1, tf.float32)
 
         # remember to compare visually postadv with rec (i.e. AE(x))
         postadv = attack(self.cnn_model, self.AE(self.x))
         postadv_logits = self.FC(self.CNN(postadv))
         postadv_acc = my_accuracy_wrapper(postadv_logits, self.y)
-        # postadv_l2 = myl2dist(postadv, self.x, postadv_logits, self.y)
-        postadv_l2 = tf.constant(1, tf.float32)
+        postadv_l2 = myl2dist(postadv, self.x, postadv_logits, self.y)
+        # postadv_l2 = tf.constant(1, tf.float32)
         
         to_run = {}
 

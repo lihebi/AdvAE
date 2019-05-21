@@ -1507,4 +1507,133 @@ def __test():
                     patience=5)
          self.adv_train_step = tf.train.AdamOptimizer(0.001).minimize(
             self.adv_loss, var_list=self.ae_model.AE_vars)
+class DefGanAE():
+    """Defense GAN as an auto encoder."""
+    def NAME():
+        "DefGanAE"
+    def __init__(self, gan):
+        # this gan is expected to be trained
+        self.gan = gan
+        self.shape=(28,28,1)
+        self.setup_AE()
+        
+    def setup_AE(self):
+        def foo(x):
+            return self.gan.reconstruct(x)
+        layer = keras.layers.Lambda(foo, output_shape=self.shape)
+        self.x = keras.layers.Input(shape=self.shape, dtype='float32')
+        xprime = layer(self.x)
+        self.AE = keras.models.Model(self.x, xprime)
+        # FIXME Dummy. Should never use AE1 for this AE. The advtrain
+        # is never run for it. We are only interested in the attack tests.
+        self.AE1 = self.AE
 
+# cfg = {
+#     'DATASET_NAME': 'mnist',
+#     'ARCH_TYPE': 'mnist',
+#     'MODE': 'wgan-gp',
+#     'CRITIC_ITERS': 5,
+#     'REC_ITERS': 200,
+#     'REC_LR': 10.0,
+#     'REC_RR': 10,
+#     'IMAGE_DIM': [28,28,1],
+#     'INPUR_TRANSFORM_TYPE': 1,
+#     'cfg_path': '/home/hebi/github/reading/defensegan/experiments/cfgs/gans/mnist.yml',
+#     # 'cfg_path': '/home/hebi/tmp/defensegan_tmp/experiments/cfgs/gans/mnist.yml',
+#     # addiditional
+#     'OUTPUT_DIR': 'output',
+#     'BATCH_SIZE': 50,
+#     'USE_BN': False,
+#     'LATENT_DIM': 128,
+#     'GRADIENT_PENALTY_LAMBDA': 10.0,
+#     'NET_DIM': 64,
+#     'TRAIN_ITERS': 200000,
+#     'DISC_LAMBDA': 0.0,
+#     'TV_LAMBDA': 0.0,
+#     # 'ATTRIBUTE':
+#     'TEST_BATCH_SIZE': 20,
+#     'NUM_GPUS': 1,
+#     'ENC_TRAIN_ITERS': 100000,
+#     'INPUT_TRANSFORM_TYPE': 0
+# }
+class MyBPDADefGan(cleverhans.model.Model):
+    """This does not work. When the tf.custom_gradient wraps a function
+that uses variables, the framework internally iterate through some
+tensor and thus requiring eager execution. This is stupid.
+
+    """
+    def __init__(self, defgan, cnn):
+        self.defgan = defgan
+        self.cnn = cnn
+        self.sess = defgan.sess
+        self.x = keras.layers.Input(shape=(28,28,1), dtype='float32')
+        
+        @tf.custom_gradient
+        def my_bpda_defgan(x):
+            def grad(dy, variables=None):
+                return tf.constant(1.)
+            rec = self.defgan.reconstruct(x, batch_size=50)
+            return rec, grad
+        
+        self.rec_func = my_bpda_defgan
+        # self.batch_size = 50
+        # self.rec = self.defgan.reconstruct(self.x, batch_size=self.batch_size)
+        # self.rec = my_bpda_defgan(self.x, defgan)
+        # tf_init_uninitialized(self.sess)
+    # cleverhans
+    def predict(self, x):
+        rec = self.rec_func(x)
+        # tf_init_uninitialized(self.sess)
+        return self.cnn.predict(rec)
+    # cleverhans
+    def fprop(self, x, **kwargs):
+        logits = self.predict(x)
+        return {self.O_LOGITS: logits,
+                self.O_PROBS: tf.nn.softmax(logits=logits)}
+
+def __test():
+    tf.enable_resource_variables()
+    # tf.enable_eager_execution()
+        
+    sess = create_tf_session()
+    defgan = load_defgan(sess)
+
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+
+    cnn = MNISTModel()
+
+    cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
+    model = MyBPDADefGan(defgan, cnn)
+    adv_x = my_PGD(model, model.x)
+    # adv_x = my_PGD(cnn, cnn.x)
+    pred = model.predict(adv_x)
+    
+    nppred = sess.run(pred, feed_dict={cnn.x: test_x[:50]})
+
+    yy = np.argmax(nppred, 1)
+    yyy = np.argmax(test_y[:50], 1)
+    (yy != yyy).astype(int).sum()
+    
+
+@tf.custom_gradient
+def log1pexp(x):
+    e = tf.exp(x)
+    def grad(dy):
+        return dy * (1 - 1 / (1 + e))
+    return tf.log(1 + e), grad
+
+@tf.custom_gradient
+def my_super_custom_function(x):
+    def grad(dy):
+        return tf.constant(1.414)
+    return tf.log(tf.exp(x)+1), grad
+
+def __test():
+    x = tf.constant(100.)
+    # y = log1pexp(x)
+    y = my_super_custom_function(x)
+    dy = tf.gradients(y, x)
+    
+    sess.run(dy)
+    
+    log1pexp()

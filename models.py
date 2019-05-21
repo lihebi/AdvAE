@@ -207,7 +207,7 @@ class AdvAEModel(cleverhans.model.Model):
             
         with sess.as_default():
             callbacks = [get_lr_scheduler(),
-                         get_lr_reducer(patience=5),
+                         # get_lr_reducer(patience=5),
                          # DEBUG
                          get_es(patience=5),
                          get_mc('best_model.hdf5')]

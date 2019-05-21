@@ -15,15 +15,10 @@ from cleverhans.attacks_tf import jacobian_graph, jacobian_augmentation
 
 
 from utils import *
+from tf_utils import *
 from models import *
 from defensegan_models import *
 from attacks import *
-
-def create_tf_session():
-    tf.reset_default_graph()
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    return tf.Session(config=config)
 
 
 def compute_names(cnn_cls, ae_cls, advae_cls,
@@ -322,7 +317,7 @@ def main_test():
     ##############################
     ## MNIST
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
-    # test_model(MNISTModel, AEModel, A2_Model, test_x, test_y, force=True)
+    # test_model(MNISTModel, AEModel, A2_Model, test_x, test_y, dataset_name='MNIST', force=True)
     # adv training baseline
     for m in [A2_Model, B2_Model, C0_A2_Model, C0_B2_Model]:
         test_model(MNISTModel, AEModel, m, test_x, test_y, dataset_name='MNIST')

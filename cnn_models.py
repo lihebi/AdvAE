@@ -34,6 +34,7 @@ class CNNModel(cleverhans.model.Model):
         self.y = keras.layers.Input(shape=self.yshape(), dtype='float32')
 
         self.logits = self.FC(self.CNN(self.x))
+
         self.model = keras.models.Model(self.x, self.logits)
 
         self.setup_attack_params()

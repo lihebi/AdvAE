@@ -29,3 +29,39 @@ def my_compute_accuracy(sess, x, y, preds, x_test, y_test):
         tf.equal(tf.argmax(y, 1), tf.argmax(preds, 1)),
         dtype=tf.float32))
     return sess.run(acc, feed_dict={x: x_test, y: y_test})
+
+def tf_init_uninitialized(sess, choice=['global', 'local']):
+    """
+    global_vars = tf.global_variables()
+    local_vars = tf.local_variables()
+
+    choice: global, local
+    """
+    allvars=tf.global_variables()
+    def init(allvars):
+        # Find initialized status for all variables.
+        is_var_init = [tf.is_variable_initialized(var) for var in allvars]
+        is_initialized = sess.run(is_var_init)
+
+        # List all variables that were not previously initialized.
+        not_initialized_vars = [var for (var, init) in
+                                zip(allvars, is_initialized) if not init]
+        for v in not_initialized_vars:
+            print('[!] not init: {}'.format(v.name))
+        # Initialize all uninitialized variables found, if any.
+        if not_initialized_vars:
+            sess.run(tf.variables_initializer(not_initialized_vars))
+            print('Initialized')
+    if 'global' in choice:
+        print('Initializing global variables ..')
+        init(tf.global_variables())
+    if 'local' in choice:
+        print('Initializing local variables ..')
+        init(tf.local_variables())
+    
+def create_tf_session():
+    tf.reset_default_graph()
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    return tf.Session(config=config)
+

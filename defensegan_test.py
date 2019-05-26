@@ -135,98 +135,205 @@ class MyDefGan():
         self.rec = self.defgan.reconstruct(self.x, batch_size=self.batch_size)
         tf_init_uninitialized(self.sess)
     def purify_np(self, npx):
-        return self.sess.run(self.rec, feed_dict={self.x: npx, K.learning_phase(): 0})
+        return self.sess.run(self.rec, feed_dict={self.x: npx})
     def __call__(self, x):
         rec = self.defgan.reconstruct(x, batch_size=self.batch_size)
         tf_init_uninitialized(self.sess)
         return rec
     
-def my_PGD_BPDA(sess, defgan, cnn, npx, npy,
-                epsilon=0.3, max_steps=40, step_size=0.01, loss='xent'):
-    """BPDA attack.
+# def my_PGD_BPDA_np(sess, mydefgan, cnn, logits, grads,
+#                    npx, npy,
+#                    epsilon=0.3, max_steps=40, step_size=0.01, loss='xent', rand=True):
 
-    From test_x, mutate and obtain adversarial examples.
-    We assume model has two methods:
-    - defgan.purify_np()
-    - cnn.prediction
+class MyPgdBpdaAttack():
+    def __init__(self, sess, mydefgan, cnn, x, y,
+                 epsilon=0.3, max_steps=40, step_size=0.01, loss_func='xent', rand=True):
+        self.mydefgan = mydefgan
+        self.cnn = cnn
+        self.x = x
+        self.y = y
+        self.sess = sess
+        self.epsilon = epsilon
+        self.max_steps = max_steps
+        self.step_size = step_size
+        self.rand = rand
+        
+        # calculating grads
+        self.logits = cnn.predict(x)
+        if loss_func == 'xent':
+            loss = my_softmax_xent(self.logits, y)
+        elif loss_func == 'cw':
+            # label_mask = tf.one_hot(cnn.y, 10, on_value=1.0, off_value=0.0, dtype=tf.float32)
+            label_mask = cnn.y
+            correct_logit = tf.reduce_sum(label_mask * self.logits, axis=1)
+            wrong_logit = tf.reduce_max((1-label_mask) * self.logits, axis=1)
+            loss = -tf.nn.relu(correct_logit - wrong_logit + 50)
+        else:
+            raise NotImplementedError()
+        self.grads = tf.gradients(loss, x)[0]
+    def attack(self, npx, npy):
+        """BPDA attack.
 
-    Then we can do PGD attack like this:
-    - purify: npx' = purify(npx)
-    - compute gradient: p, g = run([cnn.pred(x), grad(cnn.logits, x)], feed={x: npx'})
-    - update *npx*: npx += lr * np.sign(g), and clip
+        From test_x, mutate and obtain adversarial examples.
+        We assume model has two methods:
+        - defgan.purify_np()
+        - cnn.prediction
 
-    Do this until the prediction is different or reach a maximum steps.
+        Then we can do PGD attack like this:
+        - purify: npx' = purify(npx)
+        - compute gradient: p, g = run([cnn.pred(x), grad(cnn.logits, x)], feed={x: npx'})
+        - update *npx*: npx += lr * np.sign(g), and clip
 
-    How about CW (TODO)
+        Do this until the prediction is different or reach a maximum steps.
 
-    """
-    mydefgan = MyDefGan(defgan)
+        How about CW (TODO)
+
+        """
+        # mydefgan = MyDefGan(defgan)
+
+        lower = np.clip(npx - self.epsilon, 0., 1.)
+        upper = np.clip(npx + self.epsilon, 0., 1.)
+
+        if self.rand:
+            npx = npx + np.random.uniform(self.epsilon, self.epsilon, npx.shape)
+        else:
+            npx = np.copy(npx)
+
+        for i in range(self.max_steps):
+            npx_prime = self.mydefgan.purify_np(npx)
+            # baseline
+            # npx_prime = npx
+            p, g = self.sess.run([self.logits, self.grads],
+                            {self.x: npx_prime, self.y: npy})
+            # FIXME all different?? I should stop each one individually
+            ypred = np.argmax(p, axis=1)
+            # print('ypred: {}'.format(ypred))
+            ytrue = np.argmax(npy, axis=1)
+            # print('ytrue: {}'.format(ytrue))
+            wrong = (ypred != ytrue).astype(int).sum()
+            total = npy.shape[0]
+            print('Step {} / {}, number of wrong {} / {}'.format(i, self.max_steps, wrong, total))
+            if wrong == total:
+                print('done')
+                break
+            # print(g.shape)
+            npx += self.step_size * np.sign(g)
+            npx = np.clip(npx, lower, upper)
+        return npx
+        
+def my_PGD_BPDA(sess, mydefgan, cnn, x, y,
+                epsilon=0.3, max_steps=40, step_size=0.01, loss_func='xent', rand=True):
+    attack = MyPgdBpdaAttack(sess, mydefgan, cnn, x, y,
+                             epsilon=epsilon, max_steps=max_steps, step_size=step_size,
+                             loss_func=loss_func, rand=rand)
     
-    lower = np.clip(npx - epsilon, 0., 1.)
-    upper = np.clip(npx + epsilon, 0., 1.)
-    
-    npx = npx + np.random.uniform(epsilon, epsilon, npx.shape)
-    # npx = np.copy(npx)
+    def my_wrap(npx, npy):
+        res = attack.attack(npx, npy)
+        return np.array(res, dtype=np.float32)
 
-    # calculating grads
-    logits = cnn.predict(cnn.x)
-    if loss == 'xent':
-        loss = my_softmax_xent(logits, cnn.y)
-    elif loss == 'cw':
-        # label_mask = tf.one_hot(cnn.y, 10, on_value=1.0, off_value=0.0, dtype=tf.float32)
-        label_mask = cnn.y
-        correct_logit = tf.reduce_sum(label_mask * logits, axis=1)
-        wrong_logit = tf.reduce_max((1-label_mask) * logits, axis=1)
-        loss = -tf.nn.relu(correct_logit - wrong_logit + 50)
-    else:
-        raise NotImplementedError()
-    grads = tf.gradients(loss, cnn.x)[0]
-    
-    for i in range(max_steps):
-        npx_prime = mydefgan.purify_np(npx)
-        # baseline
-        # npx_prime = npx
-        p, g = sess.run([logits, grads],
-                        {cnn.x: npx_prime, cnn.y: npy})
-        # FIXME all different?? I should stop each one individually
-        ypred = np.argmax(p, axis=1)
-        # print('ypred: {}'.format(ypred))
-        ytrue = np.argmax(npy, axis=1)
-        # print('ytrue: {}'.format(ytrue))
-        wrong = (ypred != ytrue).astype(int).sum()
-        total = npy.shape[0]
-        print('Step {} / {}, number of wrong {} / {}'.format(i, max_steps, wrong, total))
-        if wrong == total:
-            print('done')
-            break
-        # print(g.shape)
-        npx += step_size * np.sign(g)
-        npx = np.clip(npx, lower, upper)
-    return npx
+    wrap = tf.py_func(my_wrap, [x, y], tf.float32)
+    wrap.set_shape(x.get_shape())
+    return wrap
 
 def __test():
     """Testing the PGD BPDA attack."""
     sess = create_tf_session()
-    defgan = load_defgan(sess)
+    with sess.as_default():
+        defgan = load_defgan(sess)
 
-    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+        (train_x, train_y), (test_x, test_y) = load_mnist_data()
 
-    cnn = MNISTModel()
-    # cnn = DefenseGAN_f()
+        cnn = MNISTModel()
+        # cnn = DefenseGAN_f()
 
-    cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
-    # cnn.load_weights(sess, 'saved_models/MNIST-DefenseGAN_f-CNN.hdf5')
+        cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
+        # cnn.load_weights(sess, 'saved_models/MNIST-DefenseGAN_f-CNN.hdf5')
+
+        # PGD
+        adv_x = my_PGD_BPDA(sess, defgan, cnn, test_x[:50], test_y[:50], loss_func='xent')
+        # FGSM
+        adv_x = my_PGD_BPDA(sess, defgan, cnn, test_x[:50], test_y[:50], loss_func='xent',
+                            epsilon=0.3, max_steps=1, step_size=0.3, rand=False)
+        # PGD with CW loss (i.e. CW L_inf)
+        # adv_x = my_PGD_BPDA(sess, defgan, cnn, test_x[:50], test_y[:50], loss='cw')
+
+        grid_show_image([test_x[:10], adv_x[:10]])
+
+def eval_defgan(sess, mydefgan, cnn, x, y, adv_x, test_x, test_y, batch_size=50):
+    """Evaluate the accuracy using batch_size=50.
+
+    - test_x/y: 1000-sampled from original test set
+    - adv_x: the adv example tensor built upon x
+    """
+    num_samples = test_x.shape[0]
+    nbatch = num_samples // batch_size
     
-    adv_x = my_PGD_BPDA(sess, defgan, cnn, test_x[:50], test_y[:50], loss='xent')
-    adv_x = my_PGD_BPDA(sess, defgan, cnn, test_x[:50], test_y[:50], loss='cw')
+    preds = cnn.predict(mydefgan(adv_x))
+    acc = my_accuracy_wrapper(logits=preds, labels=cnn.y)
 
-    grid_show_image([test_x[:10], adv_x[:10]])
+    res = 0.
+    
+    for i in range(nbatch):
+        start = i * batch_size
+        end = (i+1) * batch_size
+        batch_x = test_x[start:end]
+        batch_y = test_y[start:end]
 
-    my_bpda_defgan()
+        t = time.time()
+        print('Batch {} / {}'.format(i, nbatch))
+        tmp = sess.run(acc, feed_dict={cnn.x: batch_x, cnn.y: batch_y})
+        print('Attack done. Accuracy: {}, time: {:.3f}'.format(tmp, time.time()-t))
+        res += tmp
+    res /= nbatch
+    print('Total accuracy: {:.3f}'.format(res))
+    return res
 
+def test_defgan(filename):
+    """Test clean and three attacks on defgan models."""
+    if os.path.exists(filename):
+        print('Already exists {}'.format(filename))
+        return
+    sess = create_tf_session()
+    _defgan = load_defgan(sess)
+    mydefgan = MyDefGan(_defgan)
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    cnn = MNISTModel()
+    cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
+
+    # random sample test
+    # FIXME use 1000 during production
+    indices = random.sample(range(test_x.shape[0]), 1000)
+    test_x = test_x[indices]
+    test_y = test_y[indices]
+
+    res = {}
+    # clean
+    print('Testing clean data ..')
+    adv_x = cnn.x
+    res['CNN clean'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
+    
+    # FGSM
+    print('Testing FGSM ..')
+    adv_x = my_PGD_BPDA(sess, mydefgan, cnn, cnn.x, cnn.y,
+                        loss_func='xent', epsilon=0.3, max_steps=1, step_size=0.3, rand=False)
+    res['FGSM'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
+    print('Testing PGD ..')
+    # PGD
+    adv_x = my_PGD_BPDA(sess, mydefgan, cnn, cnn.x, cnn.y, loss_func='xent')
+    res['PGD'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
+    print('Testing CW l2 ..')
+    # CW l2
+    adv_x = my_CW_BPDA(sess, mydefgan, cnn, cnn.x, cnn.y, params={'max_iterations': 30})
+    res['CW'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
+
+    with open(filename, 'w') as fp:
+        json.dump(res, fp, indent=4)
+    
 
 def __test():
     """Test CW L2 BPDA attack."""
+    test_defgan('images/defgan.json')
+    
     sess = create_tf_session()
     defgan = load_defgan(sess)
     mydefgan = MyDefGan(defgan)
@@ -259,5 +366,6 @@ def __test():
     
 if __name__ == '__main__':
     # train_defgan()
+    test_defgan('images/defgan.json')
     pass
 

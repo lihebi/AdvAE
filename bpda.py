@@ -1,3 +1,6 @@
+"""Adapted from CW attack in Cleverhans.
+"""
+
 import logging
 
 import numpy as np

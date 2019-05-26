@@ -1,3 +1,11 @@
 #+TITLE: Adversarially trained auto-encoders
 
-This code is not release-ready, can be a bit messy. See AdvAE.org for more detailed notes about this paper.
+This code is not release-ready, can be a bit messy. See AdvAE.org for
+more detailed notes about this paper.
+
+The major python files are:
+
+- main.py
+- models.py
+- ae_models.py
+- cnn_models.py

@@ -100,7 +100,8 @@ Using this network, train the AE.
 * Additional Experiments
 ** DONE Black box substitute model accuracy
    CLOSED: [2019-05-21 Tue 11:33]
-** Model transfer
+** DONE Model transfer
+   CLOSED: [2019-05-21 Tue 12:15]
 *** DONE Simple CNNs for MNIST
     CLOSED: [2019-05-16 Thu 00:28]
 *** CANCELED VGG for CIFAR
@@ -111,10 +112,15 @@ Using this network, train the AE.
 - keras implementation: https://github.com/tdeboissiere/DeepLearningImplementations/tree/master/DenseNet
 ** DONE DefenseGAN break
    CLOSED: [2019-05-21 Tue 01:12]
-** Adv train both AE and CNN
 ** DONE Test using all test data
    CLOSED: [2019-05-21 Tue 11:33]
 instead of random 100
+
+** TODO try other auto encoders other than dunet
+
+* Nice-to-have experiments
+
+** TODO Adv train both AE and CNN
 ** TODO use data augmentation during adv training
 
 * Experiment

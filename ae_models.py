@@ -231,6 +231,22 @@ class DunetModel(AEModel):
         self.AE1 = keras.models.Model(inputs, decoded)
         
         self.AE = keras.models.Model(inputs, keras.layers.Activation('sigmoid')(decoded))
+class IdentityDunetModel(DunetModel):
+    """When using this model, the CNN will be trained, due that 'identity'
+is in the NAME()."""
+    @staticmethod
+    def NAME():
+        return "identitydunet"
+    def save_weights(self, sess, path):
+        # ok I'm augmenting the path name here
+        self.cnn_model.save_weights(sess, path.replace('.hdf5', '-hackCNN.hdf5'))
+        with sess.as_default():
+            self.AE.save_weights(path.replace('.hdf5', '-hackAE.hdf5'))
+            
+    def load_weights(self, sess, path):
+        self.cnn_model.load_weights(sess, path.replace('.hdf5', '-hackCNN.hdf5'))
+        with sess.as_default():
+            self.AE.load_weights(path.replace('.hdf5', '-hackAE.hdf5'))
 
 class IdentityAEModel(AEModel):
     """This model implementation is a HACK. The AE model does not have any

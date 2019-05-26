@@ -10,7 +10,7 @@ import cleverhans.model
 from cleverhans.attacks import FastGradientMethod
 from cleverhans.attacks import ProjectedGradientDescent, SaliencyMapMethod
 from cleverhans.attacks import CarliniWagnerL2
-from cleverhans.attacks import CarliniWagnerL2_BPDA
+from bpda import CarliniWagnerL2_BPDA
 
 
 CLIP_MIN = 0.
@@ -67,7 +67,7 @@ def my_JSMA(model, x, params=dict()):
                    'y_target': None}
     jsma_params.update(params)
     return jsma.generate(x, **jsma_params)
-def my_CW(model, sess, x, y, targeted=False, params=dict()):
+def my_CW(sess, model, x, y, targeted=False, params=dict()):
     """When targeted=True, remember to put target as y."""
     # CW attack
     cw = CarliniWagnerL2(model, sess=sess)
@@ -76,17 +76,14 @@ def my_CW(model, sess, x, y, targeted=False, params=dict()):
                  yname: y,
                  'max_iterations': 1000,
                  'learning_rate': 0.2,
-                 # setting to 100 instead of 128, because the test_x
-                 # has 10000, and the last 16 left over will cause
-                 # exception
-                 'batch_size': 100,
+                 'batch_size': 50,
                  'initial_const': 10,
                  'clip_min': CLIP_MIN,
                  'clip_max': CLIP_MAX}
     cw_params.update(params)
     adv_x = cw.generate(x, **cw_params)
     return adv_x
-def my_CW_BPDA(pre_model, post_model, sess, x, y, targeted=False, params=dict()):
+def my_CW_BPDA(sess, pre_model, post_model, x, y, targeted=False, params=dict()):
     cw = CarliniWagnerL2_BPDA(pre_model, post_model, sess=sess)
     yname = 'y_target' if targeted else 'y'
     cw_params = {'binary_search_steps': 1,

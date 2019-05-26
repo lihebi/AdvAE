@@ -1804,3 +1804,7 @@ class MyWideResNet_old(CifarModel):
         keras.backend.eval(tf.where(ii))
         c[iii]
         tf.slice(c, iii)
+    # logger = cleverhans.utils.create_logger("cleverhans.attacks.XXX")
+    # logger.setLevel(logging.INFO)
+    # with cleverhans.utils.TemporaryLogLevel(logging.INFO, "cleverhans.attacks.XXX"):
+    #     logger.info('hello')

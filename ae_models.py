@@ -223,7 +223,7 @@ class DunetModel(AEModel):
         # channel = self.shape[2]
         # decoded = keras.layers.Conv2D(channel, (3, 3), padding='same')(x)
 
-        # DEBUG XXX TODO HEBI NOW use add?
+        # DEBUG XXX TODO NOW use add?
         decoded = keras.layers.Add()([inputs, conv10])
         # decoded = keras.layers.Subtract()([inputs, conv10])
         # DEBUG what if I just use this as output?

@@ -979,14 +979,14 @@ will fit on these data first."""
         return self.datagen.flow(batch_x, batch_size=1)
 
 def __test():
-    sys.path.append('/home/hebi/github/reading/')
+    sys.path.append('/home/XXX/github/reading/')
     from cifar10_challenge import model as madry_resnet
     madrynet = madry_resnet.Model(mode='train')
     
     madrynet.x_input
     keras.layers.Lambda()
 
-    sys.path.append('/home/hebi/github/reading/tensorflow-models')
+    sys.path.append('/home/XXX/github/reading/tensorflow-models')
     from official.resnet.keras.resnet_cifar_model import resnet56
     # the problem of using this model is that, the softmax is
     # applied. I have to modify the function to get a pre-softmax
@@ -1538,8 +1538,8 @@ class DefGanAE():
 #     'REC_RR': 10,
 #     'IMAGE_DIM': [28,28,1],
 #     'INPUR_TRANSFORM_TYPE': 1,
-#     'cfg_path': '/home/hebi/github/reading/defensegan/experiments/cfgs/gans/mnist.yml',
-#     # 'cfg_path': '/home/hebi/tmp/defensegan_tmp/experiments/cfgs/gans/mnist.yml',
+#     'cfg_path': '/home/XXX/github/reading/defensegan/experiments/cfgs/gans/mnist.yml',
+#     # 'cfg_path': '/home/XXX/tmp/defensegan_tmp/experiments/cfgs/gans/mnist.yml',
 #     # addiditional
 #     'OUTPUT_DIR': 'output',
 #     'BATCH_SIZE': 50,

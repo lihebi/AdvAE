@@ -143,7 +143,7 @@ class VisualCNNModel():
                                        self.label: test_y})
         print('testing loss: {}, acc: {}, vi_loss: {}'.format(l, a, vl))
 
-sys.path.append('/home/hebi/github/reading/nn_robust_attacks')
+sys.path.append('/home/XXX/github/reading/nn_robust_attacks')
 import l2_attack
 import l0_attack
 

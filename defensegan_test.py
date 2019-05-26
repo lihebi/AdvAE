@@ -12,7 +12,7 @@ from models import *
 from tf_utils import *
 
 
-sys.path.append('/home/hebi/github/reading/')
+sys.path.append('/home/XXX/github/reading/')
 
 import defensegan
 from defensegan.utils import config
@@ -59,14 +59,14 @@ def setup_flags():
                          "Train the classifier on the reconstructed samples "
                          "using Defense-GAN.")
 
-def load_defgan(sess, cfgpath='/home/hebi/github/reading/defensegan/gans/mnist/'):
+def load_defgan(sess, cfgpath='/home/XXX/github/reading/defensegan/gans/mnist/'):
     # setup_flags()
-    # cfg = config.load_config('/home/hebi/tmp/defensegan_tmp/output/gans/mnist/')
+    # cfg = config.load_config('/home/XXX/tmp/defensegan_tmp/output/gans/mnist/')
     cfg = config.load_config(cfgpath)
     gan = defensegan.models.gan.MnistDefenseGAN(cfg=cfg, test_mode=True)
     # gan.purify = lambda npx: gan.sess.run(gan.reconstruct(x))
     gan.set_session(sess)
-    # gan.load_generator('/home/hebi/tmp/defensegan_tmp/output/gans/mnist/')
+    # gan.load_generator('/home/XXX/tmp/defensegan_tmp/output/gans/mnist/')
     gan.load_generator()
     return gan
 
@@ -90,7 +90,7 @@ def __test():
     # (train_x, train_y), (test_x, test_y) = load_mnist_data_nocat()
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
     data = train_x, train_y, test_x, test_y
-    whitebox.whitebox(gan, online_training=True, hebi_data=data)
+    whitebox.whitebox(gan, online_training=True, XXX_data=data)
     whitebox.whitebox(gan)
     whitebox.main(cfg)
     
@@ -106,7 +106,7 @@ def __test():
         # num_tests=FLAGS.num_tests,
         # attack_type=FLAGS.attack_type,
         # num_train=FLAGS.num_train,
-        hebi_data=data
+        XXX_data=data
     )
 
 def __test():
@@ -237,18 +237,12 @@ def __test():
 
     cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
 
-    adv_x = my_CW_BPDA(mydefgan, cnn, sess, cnn.x, cnn.y, params={'max_iterations': 30})
+    adv_x = my_CW_BPDA(sess, mydefgan, cnn, cnn.x, cnn.y, params={'max_iterations': 30})
     # tf_init_uninitialized(sess)
     with cleverhans.utils.TemporaryLogLevel(logging.INFO, "cleverhans.attacks.bpda"):
         adv_x_concrete = sess.run(adv_x, feed_dict={cnn.x: test_x[:50], cnn.y: test_y[:50]})
 
     adv_x_concrete = sess.run(adv_x, feed_dict={cnn.x: test_x[:50], cnn.y: test_y[:50]})
-
-    # logger = cleverhans.utils.create_logger("cleverhans.attacks.hebi")
-    # logger.setLevel(logging.INFO)
-    # with cleverhans.utils.TemporaryLogLevel(logging.INFO, "cleverhans.attacks.hebi"):
-    #     logger.info('hello')
-
 
     preds = cnn.predict(mydefgan(cnn.x))
     

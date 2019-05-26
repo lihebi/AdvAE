@@ -18,10 +18,11 @@ from train import *
 from resnet import resnet_v2, lr_schedule
 from densenet import DenseNet
 
-# sys.path.append('/home/hebi/github/reading/')
+# sys.path.append('/home/XXX/github/reading/')
 # pip3 install --user git+https://www.github.com/keras-team/keras-contrib.git
 # from keras_contrib.keras_contrib.applications.wide_resnet import WideResidualNetwork
 from keras_contrib.applications.wide_resnet import WideResidualNetwork
+from keras_contrib.applications.densenet import DenseNetFCN
 
 class CNNModel(cleverhans.model.Model):
     """This model is used inside AdvAEModel."""

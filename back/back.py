@@ -1808,3 +1808,72 @@ class MyWideResNet_old(CifarModel):
     # logger.setLevel(logging.INFO)
     # with cleverhans.utils.TemporaryLogLevel(logging.INFO, "cleverhans.attacks.XXX"):
     #     logger.info('hello')
+class AdvAEModel_Var0(AdvAEModel):
+    "This is the same as AdvAEModel. I'm not using it, just use as a reference."
+    def setup_CNN(self):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        # FIXME this also assigns self.conv_layers
+        x = keras.layers.Reshape([28, 28, 1])(inputs)
+        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+
+        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+        self.CNN = keras.models.Model(inputs, x)
+class AdvAEModel_Var1(AdvAEModel):
+    def setup_CNN(self):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        x = keras.layers.Reshape([28, 28, 1])(inputs)
+        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        # x = keras.layers.Conv2D(32, 3)(x)
+        # x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+
+        # x = keras.layers.Conv2D(64, 3)(x)
+        # x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+        self.CNN = keras.models.Model(inputs, x)
+class AdvAEModel_Var2(AdvAEModel):
+    def setup_CNN(self):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        x = keras.layers.Reshape([28, 28, 1])(inputs)
+        x = keras.layers.Conv2D(32, 5)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(32, 5)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+
+        x = keras.layers.Conv2D(64, 5)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Conv2D(64, 5)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.MaxPool2D((2,2))(x)
+        self.CNN = keras.models.Model(inputs, x)
+
+class FCAdvAEModel(AdvAEModel):
+    """Instead of an auto encoder, uses just an FC.
+
+    FIXME This does not work.
+    """
+    def setup_AE(self):
+        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
+        """From noise_x to x."""
+        x = keras.layers.Flatten()(inputs)
+        x = keras.layers.Dense(200)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Dropout(rate=0.5)(x)
+        x = keras.layers.Dense(200)(x)
+        x = keras.layers.Activation('relu')(x)
+        x = keras.layers.Dense(28*28)(x)
+        decoded = keras.layers.Reshape([28,28,1])(x)
+        self.AE = keras.models.Model(inputs, decoded)
+

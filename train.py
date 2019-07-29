@@ -46,11 +46,11 @@ def get_lr_reducer(patience=4):
                                              # DEBUG
                                              verbose=1,
                                              min_lr=0.5e-4)
-def get_es(patience=10):
+def get_es(patience=10, min_delta=0):
     # FIXME should I directly use accuracy for early stopping?
     return keras.callbacks.EarlyStopping(monitor='val_loss',
                                          # TODO adjust this to make ensemble training faster
-                                         min_delta=0,
+                                         min_delta=min_delta,
                                          patience=patience,
                                          # DEBUG
                                          verbose=1,

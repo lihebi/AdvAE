@@ -15,6 +15,7 @@ import numpy as np
 import os
 
 def resnet_layer(inputs,
+                 training,
                  num_filters=16,
                  kernel_size=3,
                  strides=1,
@@ -47,19 +48,19 @@ def resnet_layer(inputs,
     if conv_first:
         x = conv(x)
         if batch_normalization:
-            x = BatchNormalization()(x)
+            x = BatchNormalization()(x, training=training)
         if activation is not None:
             x = Activation(activation)(x)
     else:
         if batch_normalization:
-            x = BatchNormalization()(x)
+            x = BatchNormalization()(x, training=training)
         if activation is not None:
             x = Activation(activation)(x)
         x = conv(x)
     return x
 
 
-def resnet_v2(input_shape, depth, num_classes=10):
+def resnet_v2(input_shape, depth, num_classes=10, training=True):
     """ResNet Version 2 Model builder [b]
 
     Stacks of (1 x 1)-(3 x 3)-(1 x 1) BN-ReLU-Conv2D or also known as
@@ -92,7 +93,7 @@ def resnet_v2(input_shape, depth, num_classes=10):
 
     inputs = Input(shape=input_shape)
     # v2 performs Conv2D with BN-ReLU on input before splitting into 2 paths
-    x = resnet_layer(inputs=inputs,
+    x = resnet_layer(inputs=inputs, training=training,
                      num_filters=num_filters_in,
                      conv_first=True)
 
@@ -113,24 +114,24 @@ def resnet_v2(input_shape, depth, num_classes=10):
                     strides = 2    # downsample
 
             # bottleneck residual unit
-            y = resnet_layer(inputs=x,
+            y = resnet_layer(inputs=x, training=training,
                              num_filters=num_filters_in,
                              kernel_size=1,
                              strides=strides,
                              activation=activation,
                              batch_normalization=batch_normalization,
                              conv_first=False)
-            y = resnet_layer(inputs=y,
+            y = resnet_layer(inputs=y, training=training,
                              num_filters=num_filters_in,
                              conv_first=False)
-            y = resnet_layer(inputs=y,
+            y = resnet_layer(inputs=y, training=training,
                              num_filters=num_filters_out,
                              kernel_size=1,
                              conv_first=False)
             if res_block == 0:
                 # linear projection residual shortcut connection to match
                 # changed dims
-                x = resnet_layer(inputs=x,
+                x = resnet_layer(inputs=x, training=training,
                                  num_filters=num_filters_out,
                                  kernel_size=1,
                                  strides=strides,
@@ -142,7 +143,7 @@ def resnet_v2(input_shape, depth, num_classes=10):
 
     # Add classifier on top.
     # v2 has BN-ReLU before Pooling
-    x = BatchNormalization()(x)
+    x = BatchNormalization()(x, training=training)
     x = Activation('relu')(x)
     x = AveragePooling2D(pool_size=8)(x)
     

@@ -24,6 +24,64 @@ from attacks import *
 from train import *
 from resnet import resnet_v2, lr_schedule
 
+# DEBUG
+NUM_SAMPLES = 1000
+
+class MyCallback(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        # I'll use these two fields
+        # evaluate this on th validation data
+        # self.validation_data = None
+        # self.model = None
+
+        accs = self.model.extrainfo['accs']
+        
+        advacc = accs['advacc']
+        acc = accs['acc']
+        cnnacc = accs['cnnacc']
+        obliacc = accs['obliacc']
+        
+        inputs = self.model.extrainfo['input']
+        outputs = self.model.extrainfo['output']
+        val_x = self.validation_data[0]
+        val_y = self.validation_data[1]
+        # print(len(self.validation_data)) # 4!!
+        print('evaluating ..')
+        sess = keras.backend.get_session()
+        # I need to apply batch here
+        batch_size = 32
+        # FIXME this will remove the last few data
+        nbatch = val_x.shape[0] // batch_size
+        aa,bb,cc,dd = 0,0,0,0
+        shuffle_idx = np.arange(val_x.shape[0])
+        for i in range(nbatch):
+            start = i * batch_size
+            end = (i+1) * batch_size
+            batch_x = val_x[shuffle_idx[start:end]]
+            batch_y = val_y[shuffle_idx[start:end]]
+            feed_dict = {inputs: batch_x, outputs: batch_y,
+                         keras.backend.learning_phase(): 0}
+            a,b,c,d = sess.run([advacc, acc, cnnacc, obliacc], feed_dict=feed_dict)
+            aa += a
+            bb += b
+            cc += c
+            dd += d
+        aa /= nbatch
+        bb /= nbatch
+        cc /= nbatch
+        dd /= nbatch
+
+        print({'advacc': aa, 'acc': bb, 'cnnacc': cc, 'obliacc': dd})
+            
+        # accs_val = sess.run(accs, feed_dict={inputs: val_x,
+        #                                      outputs: val_y,
+        #                                      # FIXME
+        #                                      keras.backend.learning_phase(): 0
+        # })
+        # print('accs: {}'.format(accs_val))
+
+        
+
 class AdvAEModel(cleverhans.model.Model):
     """Implement a denoising auto encoder.
     """
@@ -189,13 +247,37 @@ class AdvAEModel(cleverhans.model.Model):
             'P0_loss', 'P1_loss', 'P2_loss', 'postadv_accuracy',
             'cnn_accuracy', 'B1_loss', 'B2_loss', 'obli_accuracy']
 
-    def train_Adv(self, sess, train_x, train_y, plot_prefix=''):
-        """Adv training."""
+    def train_or_load_AE(self, sess, train_x):
+        pass
+
+    def train_Adv(self, sess, train_x, train_y, plot_prefix='', light=True):
+        """Adv training.
+
+        TODO the training with metrics slow down by 2X. But I want to
+        have the metrics score at the end of each epoch.
+
+        """
+        self.train_or_load_AE(sess, train_x)
         outputs = keras.layers.Activation('softmax')(self.FC(self.CNN(self.AE(self.x))))
         model = keras.models.Model(self.x, outputs)
-        if self.ae_model.NAME() != 'identityAE':
+        model.extrainfo = {
+            'accs': {
+                'advacc': self.adv_accuracy,
+                'acc': self.accuracy,
+                'cnnacc': self.CNN_accuracy,
+                'obliacc': self.obli_accuracy
+            },
+            'input': self.x,
+            'output': self.y,
+        }
+        if 'identity' in self.ae_model.NAME():
+            print('!!!!!!! Training identityAE, setting CNN trainable')
+            self.CNN.trainable = True
+            self.FC.trainable = True
+        else:
             self.CNN.trainable = False
             self.FC.trainable = False
+
         # self.AE.trainable = False
         def myloss(ytrue, ypred):
             # return my_softmax_xent(logits=outputs, labels=ytrue)
@@ -204,21 +286,28 @@ class AdvAEModel(cleverhans.model.Model):
         def acc(ytrue, ypred): return self.accuracy
         def cnnacc(ytrue, ypred): return self.CNN_accuracy
         def obliacc(ytrue, ypred): return self.obli_accuracy
+
+        if light:
+            metrics = None
+        else:
+            metrics = [cnnacc, acc, obliacc, advacc]
             
         with sess.as_default():
-            callbacks = [get_lr_reducer(),
-                         get_es()]
+            callbacks = [get_lr_reducer(patience=4),
+                         MyCallback(),
+                         get_es(patience=10)]
             model.compile(loss=myloss,
-                          metrics=[cnnacc, acc, obliacc, advacc],
+                          metrics=metrics,
                           optimizer=keras.optimizers.Adam(lr=1e-3),
                           target_tensors=self.y)
             model.fit(train_x, train_y,
                       validation_split=0.1,
+                      # DEBUG 10 for testing, 100 for production
                       epochs=100,
                       callbacks=callbacks)
 
     def test_attack(self, sess, test_x, test_y, name,
-                    num_sample=100, batch_size=100):
+                    num_samples=NUM_SAMPLES, batch_size=50):
         """Reurn images and titles."""
         # TODO mark the correct and incorrect predictions
         # to_run += [adv_x, adv_rec, postadv]
@@ -241,7 +330,7 @@ class AdvAEModel(cleverhans.model.Model):
         elif name is 'JSMA':
             attack = lambda m, x: my_JSMA(m, x, params=self.cnn_model.JSMA_params)
         elif name is 'CW':
-            attack = lambda m, x: my_CW(m, sess, x, self.y, params=self.cnn_model.CW_params)
+            attack = lambda m, x: my_CW(sess, m, x, self.y, params=self.cnn_model.CW_params)
         else:
             assert False
 
@@ -309,7 +398,7 @@ class AdvAEModel(cleverhans.model.Model):
         titles = []
         fringes = []
         
-        nbatch = num_sample // batch_size
+        nbatch = num_samples // batch_size
         for i in range(nbatch):
             start = i * batch_size
             end = (i+1) * batch_size
@@ -344,7 +433,7 @@ class AdvAEModel(cleverhans.model.Model):
         return images, titles, fringes, data
 
     def test_Model(self, sess, test_x, test_y,
-                   num_sample=100, batch_size=100):
+                   num_samples=NUM_SAMPLES, batch_size=50):
         """Test CNN and AE models."""
         # select 10
         to_run = {}
@@ -365,7 +454,7 @@ class AdvAEModel(cleverhans.model.Model):
         fringes = []
         data = {}
 
-        nbatch = num_sample // batch_size
+        nbatch = num_samples // batch_size
         for i in range(nbatch):
             start = i * batch_size
             end = (i+1) * batch_size
@@ -407,7 +496,7 @@ class AdvAEModel(cleverhans.model.Model):
     def test_all(self, sess, test_x, test_y, attacks=[],
                  # filename='out.pdf',
                  save_prefix='test',
-                 num_sample=100, batch_size=100):
+                 num_samples=NUM_SAMPLES, batch_size=50):
         """Test clean data x and y.
 
         - Use only CNN, to test whether CNN is functioning
@@ -420,7 +509,7 @@ class AdvAEModel(cleverhans.model.Model):
         """
         # FIXME when the num_sample is large, I need to batch them
         # random 100 images for testing
-        indices = random.sample(range(test_x.shape[0]), num_sample)
+        indices = random.sample(range(test_x.shape[0]), num_samples)
         test_x = test_x[indices]
         test_y = test_y[indices]
 
@@ -430,14 +519,14 @@ class AdvAEModel(cleverhans.model.Model):
         all_data = []
 
         images, titles, fringes, data = self.test_Model(sess, test_x, test_y,
-                                                        num_sample=num_sample, batch_size=batch_size)
+                                                        num_samples=num_samples, batch_size=batch_size)
         all_images.extend(images)
         all_titles.extend(titles)
         all_fringes.extend(fringes)
         all_data.append(data)
         for name in attacks:
             images, titles, fringes, data = self.test_attack(sess, test_x, test_y, name,
-                                                             num_sample=num_sample, batch_size=batch_size)
+                                                             num_samples=num_samples, batch_size=batch_size)
             all_images.extend(images)
             all_titles.extend(titles)
             all_fringes.extend(fringes)
@@ -469,6 +558,11 @@ class C0_B2_Model(AdvAEModel):
         self.adv_loss = self.B2_loss
     def NAME():
         return 'C0_B2'
+class C2_B2_Model(AdvAEModel):
+    def NAME():
+        return 'C2_B2'
+    def setup_trainloss(self):
+        self.adv_loss = (self.B2_loss + self.C2_loss)
 class A2_B2_C2_Model(AdvAEModel):
     def NAME():
         return 'A2_B2_C2'
@@ -494,9 +588,51 @@ class C0_A2_Model(AdvAEModel):
     def NAME():
         return 'C0_A2'
     def setup_trainloss(self):
-        # FIXME DEBUG add mu for all models
-        # mu = 0.5
         self.adv_loss = self.A2_loss + self.C0_loss
+
+
+class Pretrained_C0_A2_Model(AdvAEModel):
+    """A model with pretrained AE"""
+    def NAME():
+        return 'Pretrained_C0_A2'
+    def setup_trainloss(self):
+        self.adv_loss = self.A2_loss + self.C0_loss
+    def train_or_load_AE(self, sess, train_x):
+        """TODO"""
+        print('!!!!! pre-training AE model ..')
+        # TODO which filename to save?
+        # FIXME hardcoded for CIFAR10 dataset
+        pAE = os.path.join('saved_models', '{}-{}-AE.hdf5'.format('CIFAR10', self.ae_model.NAME()))
+        # if already there, just load
+        if os.path.exists(pAE):
+            print('AE model already trained. Loading {} ..'.format(pAE))
+            self.ae_model.load_weights(sess, pAE)
+        else:
+            # otherwise, train and save weights
+            print('Training AE ..')
+            self.ae_model.train_AE(sess, train_x)
+            print('Saving weights to {} ..'.format(pAE))
+            self.ae_model.save_weights(sess, pAE)
+
+def get_lambda_model(lam):
+    # assuming lam is 0-10
+    class C0_A2_lambda_Model(AdvAEModel):
+        def NAME():
+            return 'C0_A2_{}'.format(lam)
+        def setup_trainloss(self):
+            self.adv_loss = self.A2_loss + lam * self.C0_loss
+    return C0_A2_lambda_Model
+
+def test():
+    c = get_lambda_model(0.5)
+    c2 = get_lambda_model(5)
+    
+
+# class C2_Model(AdvAEModel):
+#     def NAME():
+#         return 'C2'
+#     def setup_trainloss(self):
+#         self.adv_loss = self.C2_loss
         
 class C2_A2_Model(AdvAEModel):
     def NAME():
@@ -567,73 +703,3 @@ class A2_P1_Model(AdvAEModel):
         return 'A2_P1'
     def setup_trainloss(self):
         self.adv_loss = (self.A2_loss + self.P1_loss)
-        
-class AdvAEModel_Var0(AdvAEModel):
-    "This is the same as AdvAEModel. I'm not using it, just use as a reference."
-    def setup_CNN(self):
-        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        # FIXME this also assigns self.conv_layers
-        x = keras.layers.Reshape([28, 28, 1])(inputs)
-        x = keras.layers.Conv2D(32, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Conv2D(32, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.MaxPool2D((2,2))(x)
-
-        x = keras.layers.Conv2D(64, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Conv2D(64, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.MaxPool2D((2,2))(x)
-        self.CNN = keras.models.Model(inputs, x)
-class AdvAEModel_Var1(AdvAEModel):
-    def setup_CNN(self):
-        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        x = keras.layers.Reshape([28, 28, 1])(inputs)
-        x = keras.layers.Conv2D(32, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        # x = keras.layers.Conv2D(32, 3)(x)
-        # x = keras.layers.Activation('relu')(x)
-        x = keras.layers.MaxPool2D((2,2))(x)
-
-        # x = keras.layers.Conv2D(64, 3)(x)
-        # x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Conv2D(64, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.MaxPool2D((2,2))(x)
-        self.CNN = keras.models.Model(inputs, x)
-class AdvAEModel_Var2(AdvAEModel):
-    def setup_CNN(self):
-        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        x = keras.layers.Reshape([28, 28, 1])(inputs)
-        x = keras.layers.Conv2D(32, 5)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Conv2D(32, 5)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.MaxPool2D((2,2))(x)
-
-        x = keras.layers.Conv2D(64, 5)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Conv2D(64, 5)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.MaxPool2D((2,2))(x)
-        self.CNN = keras.models.Model(inputs, x)
-
-class FCAdvAEModel(AdvAEModel):
-    """Instead of an auto encoder, uses just an FC.
-
-    FIXME This does not work.
-    """
-    def setup_AE(self):
-        inputs = keras.layers.Input(shape=(28,28,1,), dtype='float32')
-        """From noise_x to x."""
-        x = keras.layers.Flatten()(inputs)
-        x = keras.layers.Dense(200)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Dropout(rate=0.5)(x)
-        x = keras.layers.Dense(200)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Dense(28*28)(x)
-        decoded = keras.layers.Reshape([28,28,1])(x)
-        self.AE = keras.models.Model(inputs, decoded)
-

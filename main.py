@@ -115,8 +115,8 @@ def train_CNN(cnn_cls, train_x, train_y, saved_folder='saved_models', dataset_na
 
             tf_init_uninitialized(sess)
 
-            print('Trianing CNN ..')
-            cnn.train_CNN(sess, train_x, train_y, patience=5)
+            print('Training CNN ..')
+            cnn.train_CNN(sess, train_x, train_y)
             print('Saving model to {} ..'.format(pCNN))
             cnn.save_weights(sess, pCNN)
     
@@ -139,32 +139,37 @@ def train_model(cnn_cls, ae_cls, advae_cls,
     if os.path.exists(pCNN) and os.path.exists(pAdvAE):
         print('Already trained {}'.format(pAdvAE))
         return
-    
-    with create_tf_session() as sess:
-        cnn = cnn_cls()
-        tf_init_uninitialized(sess)
 
-        # 1. train CNN
-        if not os.path.exists(pCNN):
-            print('Trianing CNN ..')
+    
+    # 1. train CNN
+    if not os.path.exists(pCNN):
+        with create_tf_session() as sess:
+            cnn = cnn_cls()
+            tf_init_uninitialized(sess)
+            print('Training CNN ..')
             cnn.train_CNN(sess, train_x, train_y)
             print('Saving model to {} ..'.format(pCNN))
             cnn.save_weights(sess, pCNN)
-        else:
-            print('Trained, directly loading {} ..'.format(pCNN))
-            cnn.load_weights(sess, pCNN)
-
-        if not os.path.exists(pAdvAE):
+    else:
+        print('Already trained {} ..'.format(pCNN))
+    
+    if not os.path.exists(pAdvAE):
+        with create_tf_session() as sess:
+            # FIXME not the case for It-adv-train baseline
+            cnn = cnn_cls(training=False)
             ae = ae_cls(cnn)
             adv = advae_cls(cnn, ae)
             tf_init_uninitialized(sess)
-
+            
+            print('Loading {} ..'.format(pCNN))
+            cnn.load_weights(sess, pCNN)
             print('Trainng AdvAE ..')
             adv.train_Adv(sess, train_x, train_y)
             print('saving to {} ..'.format(pAdvAE))
             ae.save_weights(sess, pAdvAE)
-        else:
-            print('Already trained {}'.format(pAdvAE))
+    else:
+        print('Already trained {}'.format(pAdvAE))
+
     
 def __test():
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
@@ -217,7 +222,6 @@ def test_model(cnn_cls, ae_cls, advae_cls,
         print('testing {} ..'.format(plot_prefix))
         model.test_all(sess, test_x, test_y,
                        attacks=['CW', 'FGSM', 'PGD'],
-                       num_sample=1000,
                        save_prefix=save_prefix)
     else:
         print('Already tested, see {}'.format(filename))
@@ -243,7 +247,6 @@ def test_model_transfer(cnn_cls, ae_cls, advae_cls, test_x, test_y,
         print('testing {} ..'.format(plot_prefix))
         model.test_all(sess, test_x, test_y,
                        attacks=['CW', 'FGSM', 'PGD'],
-                       num_sample=1000,
                        save_prefix=save_prefix)
     else:
         print('Already tested, see {}'.format(filename))
@@ -345,7 +348,6 @@ def test_ensemble(cnn_clses, ae_cls, advae_cls,
         print('testing {} ..'.format(plot_prefix))
         model.test_all(sess, test_x, test_y,
                        attacks=['CW', 'FGSM', 'PGD'],
-                       num_sample=1000,
                        save_prefix=save_prefix)
     else:
         print('Already tested, see {}'.format(filename))
@@ -389,187 +391,296 @@ def ensemble_training_impl(sess, advae_models, train_x, train_y):
                   validation_split=0.1,
                   epochs=100,
                   callbacks=callbacks)
+def load_dataset(dataset_name):
+    if dataset_name == 'MNIST':
+        return load_mnist_data()
+    elif dataset_name == 'Fashion':
+        return load_fashion_mnist_data()
+    elif dataset_name == 'CIFAR10':
+        return load_cifar10_data()
+    else:
+        raise Exception()
 
+def run_exp_model(cnn_cls, ae_cls, advae_cls,
+                  saved_folder='saved_models',
+                  dataset_name='', run_test=True):
+    """Both training and testing."""
+    # reset seed here
+    tf.random.set_random_seed(0)
+    np.random.seed(0)
+    random.seed(0)
     
+    (train_x, train_y), (test_x, test_y) = load_dataset(dataset_name)
+    train_model(cnn_cls, ae_cls, advae_cls, train_x, train_y, dataset_name=dataset_name)
+    if run_test:
+        test_model(cnn_cls, ae_cls, advae_cls, test_x, test_y, dataset_name=dataset_name)
 
-def main_train():
+def run_exp_ensemble(cnn_clses, ae_cls, advae_cls,
+                     to_cnn_clses=None,
+                     saved_folder='saved_models',
+                     dataset_name='',
+                     run_test=True):
+    (train_x, train_y), (test_x, test_y) = load_dataset(dataset_name)
+    train_ensemble(cnn_clses, ae_cls, advae_cls, train_x, train_y, dataset_name='MNIST')
+    if run_test:
+        for m in to_cnn_clses:
+            test_ensemble(cnn_clses, ae_cls, advae_cls,
+                          test_x, test_y,
+                          to_cnn_cls=m,
+                          dataset_name='MNIST')
+
+def main_train_cnn():
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    for m in [MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
+        train_CNN(m, train_x, train_y, dataset_name='MNIST')
+        
+    (train_x, train_y), (test_x, test_y) = load_fashion_mnist_data()
+    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
+        train_CNN(m, train_x, train_y, dataset_name='Fashion')
+
+def main_exp(run_test=True):
     ##############################
     ## MNIST
-    (train_x, train_y), (test_x, test_y) = load_mnist_data()
-
     for m in [A2_Model, B2_Model, C0_A2_Model, C0_B2_Model]:
-        train_model(MNISTModel, AEModel, m, train_x, train_y, dataset_name='MNIST')
-    train_model(MNISTModel, IdentityAEModel, A2_Model, train_x, train_y, dataset_name='MNIST')
-    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
-        train_CNN(m, train_x, train_y, dataset_name='MNIST')
+        run_exp_model(MNISTModel, AEModel, m, dataset_name='MNIST', run_test=run_test)
+    run_exp_model(MNISTModel, IdentityAEModel, A2_Model, dataset_name='MNIST', run_test=run_test)
 
-    train_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b],
-                   AEModel, A2_Model, train_x, train_y, dataset_name='MNIST')
-    train_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
-                   AEModel, A2_Model, train_x, train_y, dataset_name='MNIST')
-    train_ensemble([DefenseGAN_c, DefenseGAN_d],
-                   AEModel, A2_Model, train_x, train_y, dataset_name='MNIST')
+    run_exp_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b],
+                     AEModel, A2_Model,
+                     to_cnn_clses=[MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
+                     dataset_name='MNIST',
+                     run_test=run_test)
+    run_exp_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
+                     AEModel, A2_Model,
+                     to_cnn_clses=[MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
+                     dataset_name='MNIST',
+                     run_test=run_test)
+    run_exp_ensemble([DefenseGAN_c, DefenseGAN_d],
+                     AEModel, A2_Model,
+                     to_cnn_clses=[MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
+                     dataset_name='MNIST',
+                     run_test=run_test)
 
     ##############################
     ## Fashion MNIST
-    (train_x, train_y), (test_x, test_y) = load_fashion_mnist_data()
+
     for m in [A2_Model, B2_Model, C0_A2_Model, C0_B2_Model]:
-        train_model(MNISTModel, AEModel, m, train_x, train_y, dataset_name='Fashion')
-    train_model(MNISTModel, IdentityAEModel, A2_Model, train_x, train_y, dataset_name='Fashion')
-    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
-        train_CNN(m, train_x, train_y, dataset_name='Fashion')
-        
-    # train_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b],
-    #                AEModel, A2_Model, train_x, train_y, dataset_name='Fashion')
-    # train_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
-    #                AEModel, A2_Model, train_x, train_y, dataset_name='Fashion')
-    # train_ensemble([DefenseGAN_c, DefenseGAN_d],
-    #                AEModel, A2_Model, train_x, train_y, dataset_name='Fashion')
+        run_exp_model(MNISTModel, AEModel, m,
+                      dataset_name='Fashion', run_test=run_test)
+    run_exp_model(MNISTModel, IdentityAEModel, A2_Model,
+                  dataset_name='Fashion', run_test=run_test)
+    
+    # run_exp_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b],
+    #                  AEModel, A2_Model,
+    #                  to_cnn_clses=[MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
+    #                  dataset_name='Fashion',
+    #                  run_test=run_test)
     
     ##############################
     ## CIFAR10
     
-    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
-    # adv training baseline
-    for m in [A2_Model, C0_A2_Model, C0_B2_Model]:
-        train_model(MyResNet29, DunetModel, m, train_x, train_y, dataset_name='CIFAR10')
-        train_model(MyWideResNet2, DunetModel, m, train_x, train_y, dataset_name='CIFAR10')
-        train_model(MyResNet56, DunetModel, m, train_x, train_y, dataset_name='CIFAR10')
-        train_model(MyDenseNet, DunetModel, m, train_x, train_y, dataset_name='CIFAR10')
-    train_model(MyResNet29, IdentityAEModel, A2_Model, train_x, train_y, dataset_name='CIFAR10')
-    train_ensemble([MyResNet29, MyWideResNet2],
-                   DunetModel, C0_A2_Model, train_x, train_y, dataset_name='CIFAR10')
-    train_ensemble([MyResNet29, MyWideResNet2, MyDenseNet],
-                   DunetModel, C0_A2_Model, train_x, train_y, dataset_name='CIFAR10')
+    run_exp_model(MyResNet29, IdentityAEModel, A2_Model,
+                  dataset_name='CIFAR10', run_test=run_test)
+
+    # I'll probably just use ResNet and some vanila CNN
+    for m in [C2_A2_Model, C1_A2_Model, C0_A2_Model, C2_B2_Model]:
+        for e in [AEModel, DunetModel]:
+            run_exp_model(MyResNet29, e, m,
+                          dataset_name='CIFAR10',
+                          run_test=run_test)
+    run_exp_model(MyResNet29, IdentityAEModel, A2_Model,
+                  dataset_name='CIFAR10', run_test=run_test)
+    run_exp_model(MyResNet29, IdentityAEModel, C2_A2_Model,
+                  dataset_name='CIFAR10', run_test=run_test)
+
+    return
+            
+    # I have no idea which would work, or wouldn't
+    for m in [C2_A2_Model,
+              C1_A2_Model,
+              C0_A2_Model,
+              # C2_B2_Model
+    ]:
+        for e in [AEModel, DunetModel]:
+            run_exp_model(MyResNet29, e, m,
+                          dataset_name='CIFAR10',
+                          run_test=run_test)
+            # DenseNet is so 3X slower than ResNet
+            # run_exp_model(MyDenseNetFCN, e, m,
+            #               dataset_name='CIFAR10',
+            #               run_test=run_test)
+            
+            # This is not working
+            # run_exp_model(MyDenseNet, DunetModel, m,
+            #               dataset_name='CIFAR10',
+            #               run_test=run_test)
+            
+            # WRN seems not working for weired reasons, the AE seems
+            # not working under it.
+            # WRN has even higher overhead. I'm abandening it as well
+            run_exp_model(MyWideResNet2, e, m,
+                          dataset_name='CIFAR10',
+                          run_test=run_test)
+    run_exp_model(MyResNet29, IdentityAEModel, C2_A2_Model,
+                  dataset_name='CIFAR10', run_test=run_test)
+
+    # These two will be very slow
+    # run_exp_ensemble([MyResNet29, MyWideResNet2],
+    #                  DunetModel, C0_A2_Model,
+    #                  to_cnn_clses=[MyResNet29, MyWideResNet2, MyDenseNetFCN],
+    #                  dataset_name='CIFAR10',
+    #                  run_test=run_test)
+    # run_exp_ensemble([MyResNet29, MyWideResNet2, MyDenseNetFCN],
+    #                  DunetModel, C0_A2_Model,
+    #                  to_cnn_clses=[MyResNet29, MyWideResNet2, MyDenseNetFCN],
+    #                  dataset_name='CIFAR10',
+    #                  run_test=run_test)
     
 def main_test():
-    ##############################
-    # Experimental
-    
-    # _, (test_x, test_y) = load_mnist_data()
-
-    # test_model(MNISTModel, AEModel, A2_Model, test_x, test_y, dataset_name='MNIST', force=True)
-    # test_model_bbox(MNISTModel, AEModel, A2_Model, test_x, test_y,
-    #                 to_cnn_cls=MNISTModel,
-    #                 dataset_name='MNIST',
-    #                 save_prefix='out',
-    #                 force=True)
-    # test_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b],
-    #               AEModel, A2_Model,
-    #               test_x, test_y,
-    #               to_cnn_cls=MNISTModel,
-    #               dataset_name='MNIST', force=True)
-
+    """Additional tests."""
     ##############################
     ## MNIST
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
     
-    # adv training baseline
-    test_model(MNISTModel, IdentityAEModel, A2_Model, test_x, test_y, dataset_name='MNIST')
-    # white box testing
-    for m in [A2_Model, B2_Model, C0_A2_Model, C0_B2_Model]:
-        test_model(MNISTModel, AEModel, m, test_x, test_y, dataset_name='MNIST')
-    # blackbox testing
-    for m in [MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c]:
-        test_model_bbox(MNISTModel, AEModel, A2_Model, test_x, test_y,
-                        to_cnn_cls=m,
-                        dataset_name='MNIST')
     # model transfer testing
     for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
         test_model_transfer(MNISTModel, AEModel, A2_Model,
                             test_x, test_y,
                             to_cnn_cls=m,
                             dataset_name='MNIST')
-    # ensemble testing
-    for m in [MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d]:
-        test_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b],
-                      AEModel, A2_Model,
-                      test_x, test_y,
-                      to_cnn_cls=m,
-                      dataset_name='MNIST')
+    # blackbox testing
+    # test_model_bbox(MNISTModel, AEModel, A2_Model, test_x, test_y,
+    #                 to_cnn_cls=MNISTModel,
+    #                 dataset_name='MNIST', force=True)
+    
+    for m in [MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c]:
+        test_model_bbox(MNISTModel, AEModel, A2_Model, test_x, test_y,
+                        to_cnn_cls=m,
+                        dataset_name='MNIST')
 
     ##############################
     ## Fashion MNIST
+    # model transfer testing
     (train_x, train_y), (test_x, test_y) = load_fashion_mnist_data()
-    # adv training baseline
-    for m in [A2_Model, B2_Model, C0_A2_Model, C0_B2_Model]:
-        test_model(MNISTModel, AEModel, m, test_x, test_y, dataset_name='Fashion')
-    test_model(MNISTModel, IdentityAEModel, A2_Model, test_x, test_y, dataset_name='Fashion')
     for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
         test_model_transfer(MNISTModel, AEModel, A2_Model,
                             test_x, test_y,
                             to_cnn_cls=m,
                             dataset_name='Fashion')
+    # blackbox testing
+    for m in [MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c]:
+        test_model_bbox(MNISTModel, AEModel, A2_Model, test_x, test_y,
+                        to_cnn_cls=m,
+                        dataset_name='Fashion')
     
     ##############################
     ## CIFAR10
     (train_x, train_y), (test_x, test_y) = load_cifar10_data()
-    test_model(MyResNet29, IdentityAEModel, A2_Model, test_x, test_y, dataset_name='CIFAR10')
-    for m in [C0_A2_Model, C0_B2_Model]:
-        test_model(MyResNet29, DunetModel, m, test_x, test_y, dataset_name='CIFAR10')
-        test_model(MyWideResNet2, DunetModel, m, test_x, test_y, dataset_name='CIFAR10')
-        test_model(MyResNet56, DunetModel, m, test_x, test_y, dataset_name='CIFAR10')
-    for m in [MyResNet56, MyWideResNet2]:
+    # model transfer testing
+    for m in [MyResNet56, MyWideResNet2, MyDenseNetFCN]:
         test_model_transfer(MyResNet29, DunetModel, C0_A2_Model,
                             test_x, test_y,
                             to_cnn_cls=m,
                             dataset_name='CIFAR10')
+    # blackbox testing
+    for m in [MyResNet29, MyWideResNet2, MyDenseNetFCN]:
+        test_model_bbox(MyResNet29, DunetModel, C0_A2_Model,
+                        to_cnn_cls=m,
+                        dataset_name='CIFAR10')
 
-def main():
+def train_them_all():
+    """Train both the CNN and the AE. I'm doing it on CIFAR data, as the
+MNIST data already showed near 100% accuracy."""
     sess = create_tf_session()
-    
-    # (train_x, train_y), (test_x, test_y) = load_mnist_data()
-    # cnn = MNISTModel()
-    
-    # ae = AEModel(cnn)
-    # ae = IdentityAEModel(cnn)
-
-
     (train_x, train_y), (test_x, test_y) = load_cifar10_data()
-    # cnn = MyResNet29()
-    # cnn = MyResNet56()
-    # cnn = MyResNet110()
-    # cnn = MyWideResNet2()
-    cnn = MyDenseNet()
-
-    # ae = DunetModel(cnn)
-    
-    # adv = A2_Model(cnn, ae)
+    cnn = MyResNet29()
+    ae = DunetModel(cnn)
+    adv = C0_A2_Model(cnn, ae)
     tf_init_uninitialized(sess)
+    adv.train_Adv(sess, train_x, train_y, train_all=True)
 
-    # cnn.train_CNN(sess, train_x, train_y)
-    # cnn.train_CNN_keras(sess, train_x, train_y, test_x, test_y)
-    # cnn.save_weights(sess, 'saved_models/test-resnet-CNN.hdf5')
-    # cnn.load_weights(sess, 'saved_models/resnet-CNN.hdf5')
+    print('============================== restore-0517-AdvAE')
+    cnn.load_weights(sess, 'back/saved_models-0517/resnet-CNN.hdf5')
+    ae.load_weights(sess, 'back/saved_models-0517/resnet-dunet-C0_A2-AdvAE.hdf5')
+    adv.test_all(sess, test_x, test_y, attacks=['CW', 'FGSM', 'PGD'], save_prefix='restore-0517-AdvAE')
+    pass
 
-    # cnn.train_CNN_keras(sess, train_x, train_y)
     
-    cnn.train_CNN(sess, train_x, train_y)
-    # cnn.save_weights()
+def mnist_exp():
+    # run_exp_model(MNISTModel, AEModel, A2_Model, dataset_name='MNIST', run_test=True)
+
+    # Testing different hyperparameter lambdas
+    # this is the same as A2_Model
+    run_exp_model(MNISTModel, AEModel, get_lambda_model(0), dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, AEModel, get_lambda_model(0.2), dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, AEModel, get_lambda_model(0.5), dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, AEModel, get_lambda_model(1), dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, AEModel, get_lambda_model(1.5), dataset_name='MNIST', run_test=True)
+    # run_exp_model(MNISTModel, AEModel, get_lambda_model(2), dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, AEModel, get_lambda_model(5), dataset_name='MNIST', run_test=True)
+
+def cifar10_exp():
+    # I probably need to pre-train the AE part
+    # run_exp_model(MyResNet29, DunetModel, Pretrained_C0_A2_Model, dataset_name='CIFAR10', run_test=True)
+    # run_exp_model(MyResNet29, DunetModel, C0_A2_Model, dataset_name='CIFAR10', run_test=True)
     
-    # ae.train_AE(sess, train_x, train_y)
-    # ae.save_weights(sess, 'saved_models/test-resnet-ae-AE.hdf5')
-    # ae.load_weights(sess, 'saved_models/resnet-dunet-AE.hdf5')
-    # test
-    # ae.test_AE(sess, test_x, test_y)
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(0), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(0.2), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(0.5), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(1), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(1.5), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(5), dataset_name='CIFAR10', run_test=True)
+
+def transfer_exp():
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    print('training CNNs for transfer models')
+    for m in [MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d]:
+        train_CNN(m, train_x, train_y, dataset_name='MNIST')
+    print('Testing ..')
+    for m in [
+            DefenseGAN_a,
+            DefenseGAN_b,
+            DefenseGAN_c,
+            DefenseGAN_d]:
+        for l in [0, 0.2, 0.5, 1, 1.5, 5]:
+            test_model_transfer(MNISTModel, AEModel, get_lambda_model(l),
+                                test_x, test_y,
+                                to_cnn_cls=m,
+                                dataset_name='MNIST')
     
-    # adv.train_Adv(sess, train_x, train_y)
 
 if __name__ == '__main__':
-    tf.random.set_random_seed(0)
-    np.random.seed(0)
-    random.seed(0)
+
+    # run_exp_model(MNISTModel, AEModel, A2_Model, dataset_name='MNIST', run_test=True)
+
+    # mnist_exp()
+    # cifar10_exp()
+    transfer_exp()
     
-    main_train()
-    main_test()
+    # run_exp_model(MNISTModel, AEModel, C0_A2_Model, dataset_name='MNIST', run_test=True)
+
+    # Debugging the Cifar10 exps
+    # run_exp_model(MyResNet29, DunetModel, A2_Model, dataset_name='CIFAR10', run_test=True)
+    # run_exp_model(MyResNet29, DunetModel, C0_A2_Model, dataset_name='CIFAR10', run_test=True)
+    # run_exp_model(MNISTModel, IdentityAEModel, A2_Model, dataset_name='MNIST', run_test=True)
+    # run_exp_model(MNISTModel, IdentityAEModel, C0_A2_Model, dataset_name='MNIST', run_test=True)
+    # rm saved_models/MNIST-mnistcnn-identityAE-A2-AdvAE.hdf5
+    # rm images/test-result-MNIST-mnistcnn-identityAE-A2.*
+    
+    # run_exp_model(MyResNet29, IdentityDunetModel, C0_A2_Model,
+    #               dataset_name='CIFAR10', run_test=True)
     # main()
+    # main_train_cnn()
+    # main_exp(run_test=True)
+    # main_test()
+
 
 def parse_single_whitebox(json_file):
     with open(json_file, 'r') as fp:
         j = json.load(fp)
         return [j[0]['AE clean'],
-                j[3]['PGD']['whiteadv_rec'],
                 j[2]['FGSM']['whiteadv_rec'],
+                j[3]['PGD']['whiteadv_rec'],
                 j[1]['CW']['whiteadv_rec']]
     
 
@@ -592,13 +703,160 @@ def parse_result(advae_json, advtrain_json, hgd_json):
     res['hgd whitebox'] = parse_single_whitebox(hgd_json)
     res['advtrain whitebox'] = parse_single_whitebox(advtrain_json)
     return res
+
+
+def parse_mnist_table(advae_json, advtrain_json, hgd_json, bbox_json, defgan_json):
+    """Parse result for MNIST table.
+
+    Rows (attacks)
+    - no attack
+    - FGSM
+    - PGD
+    - CW L2
+
+    Columns (defences):
+    - no defence
+    - AdvAE oblivious
+    - AdvAE blackbox
+    - AdvAE whitebox
+    - HGD whitebox
+    - DefenseGAN whitebox
+    - adv training
+
+    """
+    with open(advae_json, 'r') as fp:
+        advae = json.load(fp)
+    with open(bbox_json, 'r') as fp:
+        bbox = json.load(fp)
+    with open(defgan_json, 'r') as fp:
+        defgan = json.load(fp)
+    res = {}
+    res['nodef'] = [advae[0]['CNN clean'],
+                    advae[2]['FGSM']['obliadv'],
+                    advae[3]['PGD']['obliadv'],
+                    advae[1]['CW']['obliadv']]
+    
+    res['advae obli'] = [0,
+                         # FIXME adjust json format to remove this
+                         # indices
+                         advae[2]['FGSM']['obliadv_rec'],
+                         advae[3]['PGD']['obliadv_rec'],
+                         advae[1]['CW']['obliadv_rec']]
+    res['advae bbox'] = [0,
+                         bbox['FGSM'],
+                         bbox['PGD'],
+                         bbox['CW']]
+    
+    res['advae whitebox'] = parse_single_whitebox(advae_json)
+    res['hgd whitebox'] = parse_single_whitebox(hgd_json)
+    res['defgan whitebox'] = [defgan['CNN clean'],
+                              defgan['FGSM'],
+                              defgan['PGD'],
+                              defgan['CW']]
+    res['advtrain whitebox'] = parse_single_whitebox(advtrain_json)
+    # print out the table in latex format
+
+    for i, name in enumerate(['No attack', 'FGSM', 'PGD', 'CW $\ell_2$']):
+        print('{} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f}\\\\'
+              .format(name, *[res[key][i]*100 for key in res]))
+    return
+
+
+def parse_mnist_transfer_table(trans_jsons, ensemble_jsons):
+    """Table for transfer and ensemble models.
+
+    We only evaluate whitebox here.
+
+    Rows (attacks)
+    - no attack
+    - FGSM
+    - PGD
+    - CW L2
+
+    Columns (defences setting):
+    - X/A
+    - X/B
+    - X/C
+    - X,A,B/A
+    - X,A,B/B
+    - X,A,B/C
+    - X,A,B/D
+    """
+    trans = []
+    ensemble = []
+    for tj in trans_jsons:
+        trans.append(parse_single_whitebox(tj))
+    # for ej in ensemble_jsons:
+    #     ensemble.append(parse_single_whitebox(ej))
+    for i, name in enumerate(['No attack', 'FGSM', 'PGD', 'CW $\ell_2$']):
+        print('{} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & '
+              .format(name, *[r[i]*100 for r in trans]), end=' ')
+        # print('{:.1f} & {:.1f} & {:.1f} & {:.1f}\\\\'
+        #       .format(*[r[i]*100 for r in ensemble]))
+        print('')
+
+def parse_lambda_table():
+    fmt = 'images/test-result-MNIST-mnistcnn-ae-C0_A2_{}.json'
+    fmt2 = 'images/test-result-MNIST-mnistcnn-ae-C0_A2_{}-TO-DefenseGAN_d.json'
+    # fmt = 'images/test-result-CIFAR10-resnet29-dunet-C0_A2_{}.json'
+    lambdas = [0, 0.2, 0.5, 1, 1.5, 5]
+    res = {}
+    res['FGSM'] = []
+    res['PGD'] = []
+    res['PGD X/D'] = []
+    res['no'] = []
+    res['CW'] = []
+    for l in lambdas:
+        with open(fmt.format(l), 'r') as fp:
+            j = json.load(fp)
+            res['no'].append(j[0]['AE clean'])
+            res['PGD'].append(j[3]['PGD']['whiteadv_rec'])
+            res['FGSM'].append(j[2]['FGSM']['whiteadv_rec'])
+            res['CW'].append(j[1]['CW']['whiteadv_rec'])
+        with open(fmt2.format(l), 'r') as fp:
+            j = json.load(fp)
+            res['PGD X/D'].append(j[3]['PGD']['whiteadv_rec'])
+    print('{} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f}'
+          .format('No attack', *[r*100 for r in res['no']]), end=' ')
+    print('')
+    print('{} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f}'
+          .format('PGD', *[r*100 for r in res['PGD']]), end=' ')
+    print('')
+    print('{} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f}'
+          .format('FGSM', *[r*100 for r in res['FGSM']]), end=' ')
+    print('')
+    print('{} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f}'
+          .format('CW', *[r*100 for r in res['CW']]), end=' ')
+    print('')
+    print('{} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f} & {:.1f}'
+          .format('PGD X/D', *[r*100 for r in res['PGD X/D']]), end=' ')
+    # return res
+
 def __test():
     # extracting experiment results
 
+    parse_lambda_table()
+    parse_single_whitebox('images/test-result-MNIST-mnistcnn-ae-C0_A2_1.json')
+
     # MNIST
-    res = parse_result('images/test-result-MNIST-mnistcnn-ae-A2.json',
-                       'images/test-result-MNIST-mnistcnn-identityAE-A2.json',
-                       'images/test-result-MNIST-mnistcnn-ae-B2.json')
+    parse_mnist_table(
+        'images/test-result-MNIST-mnistcnn-ae-A2.json',
+        'images/test-result-MNIST-mnistcnn-identityAE-A2.json',
+        'images/test-result-MNIST-mnistcnn-ae-B2.json',
+        'images/test-result-MNIST-mnistcnn-ae-A2-BBOX-mnistcnn.json',
+        'images/defgan.json')
+
+    parse_mnist_transfer_table(
+        ['images/test-result-MNIST-mnistcnn-ae-C0_A2_0-TO-DefenseGAN_a.json',
+         'images/test-result-MNIST-mnistcnn-ae-C0_A2_0-TO-DefenseGAN_b.json',
+         'images/test-result-MNIST-mnistcnn-ae-C0_A2_0-TO-DefenseGAN_c.json',
+         'images/test-result-MNIST-mnistcnn-ae-C0_A2_0-TO-DefenseGAN_d.json'],
+        ['images/test-result-MNIST-[mnistcnn-DefenseGAN_a-DefenseGAN_b]-ae-A2-ENSEMBLE-DefenseGAN_a.json',
+         'images/test-result-MNIST-[mnistcnn-DefenseGAN_a-DefenseGAN_b]-ae-A2-ENSEMBLE-DefenseGAN_b.json',
+         'images/test-result-MNIST-[mnistcnn-DefenseGAN_a-DefenseGAN_b]-ae-A2-ENSEMBLE-DefenseGAN_c.json',
+         'images/test-result-MNIST-[mnistcnn-DefenseGAN_a-DefenseGAN_b]-ae-A2-ENSEMBLE-DefenseGAN_d.json'
+        ])
+
     # fashion
     res = parse_result('images/test-result-Fashion-mnistcnn-ae-A2.json',
                        'images/test-result-Fashion-mnistcnn-identityAE-A2.json',

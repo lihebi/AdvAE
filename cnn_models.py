@@ -29,7 +29,13 @@ class CNNModel(cleverhans.model.Model):
     @staticmethod
     def NAME():
         raise NotImplementedError()
-    def __init__(self):
+    def __init__(self, training=True):
+        # CAUTION This mode indicates test mode or train mode. CIFAR
+        # resnet models must inspect this value and set the
+        # batch_normalization layer trainable to False when training
+        # for the auto encoder
+        self.training = training
+        
         with tf.variable_scope('my_CNN'):
             self.setup_CNN()
         with tf.variable_scope('my_FC'):
@@ -259,7 +265,7 @@ class MyResNet(CifarModel):
     def setup_CNN(self):
         self.setup_resnet()
         print('Creating resnet graph ..')
-        model = resnet_v2(input_shape=self.xshape(), depth=self.depth)
+        model = resnet_v2(input_shape=self.xshape(), depth=self.depth, training=self.training)
         print('Resnet graph created.')
         self.CNN = model
     def setup_FC(self):
@@ -304,38 +310,54 @@ class MyWideResNet2(CifarModel):
         x = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, x)
 
-class MyDenseNet(CifarModel):
-    def __init__(self):
-        super().__init__()
+# class MyDenseNet(CifarModel):
+#     def __init__(self):
+#         super().__init__()
+#     @staticmethod
+#     def NAME():
+#         return "densenet"
+#     def setup_CNN(self):
+#         depth = 7
+#         nb_dense_block = 1
+#         growth_rate = 12
+#         nb_filter = 16
+#         dropout_rate = 0.2
+#         self.weight_decay = 1e-4
+#         learning_rate = 1e-3
+#         model = DenseNet(10,
+#                          self.xshape(),
+#                          depth,
+#                          nb_dense_block,
+#                          growth_rate,
+#                          nb_filter,
+#                          dropout_rate=dropout_rate,
+#                          weight_decay=self.weight_decay)
+#         self.CNN = model
+
+#     def setup_FC(self):
+#         shape = self.CNN.output_shape
+#         inputs = keras.layers.Input(batch_shape=shape, dtype='float32')
+#         x = keras.layers.GlobalAveragePooling2D(data_format=keras.backend.image_data_format())(inputs)
+#         x = keras.layers.Dense(10,
+#                                # activation='softmax',
+#                                # kernel_regularizer=keras.regularizers.l2(self.weight_decay),
+#                                # bias_regularizer=keras.regularizers.l2(self.weight_decay)
+#         )(x)
+#         self.FC = keras.models.Model(inputs, x)
+
+class MyDenseNetFCN(CifarModel):
     @staticmethod
     def NAME():
-        return "densenet"
+        return "densenetFCN"
     def setup_CNN(self):
-        depth = 7
-        nb_dense_block = 1
-        growth_rate = 12
-        nb_filter = 16
-        dropout_rate = 0.2
-        self.weight_decay = 1e-4
-        learning_rate = 1e-3
-        model = DenseNet(10,
-                         self.xshape(),
-                         depth,
-                         nb_dense_block,
-                         growth_rate,
-                         nb_filter,
-                         dropout_rate=dropout_rate,
-                         weight_decay=self.weight_decay)
+        model = DenseNetFCN(self.xshape(), include_top=False)
         self.CNN = model
 
     def setup_FC(self):
         shape = self.CNN.output_shape
         inputs = keras.layers.Input(batch_shape=shape, dtype='float32')
-        x = keras.layers.GlobalAveragePooling2D(data_format=keras.backend.image_data_format())(inputs)
-        x = keras.layers.Dense(10,
-                               # activation='softmax',
-                               kernel_regularizer=keras.regularizers.l2(self.weight_decay),
-                               bias_regularizer=keras.regularizers.l2(self.weight_decay))(x)
+        x = keras.layers.GlobalAveragePooling2D()(inputs)
+        x = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, x)
 
 

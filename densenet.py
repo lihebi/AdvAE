@@ -192,7 +192,8 @@ def DenseNet(nb_classes, img_dim, depth, nb_dense_block, growth_rate,
     #           kernel_regularizer=l2(weight_decay),
     #           bias_regularizer=l2(weight_decay))(x)
 
-    densenet = Model(inputs=[model_input], outputs=[x], name="DenseNet")
+    # densenet = Model(inputs=[model_input], outputs=[x], name="DenseNet")
+    densenet = Model(inputs=model_input, outputs=x, name="DenseNet")
 
     return densenet
 

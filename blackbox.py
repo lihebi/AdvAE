@@ -20,11 +20,18 @@ from models import *
 from defensegan_models import *
 from attacks import *
 
-DATA_AUG = 6
+# DATA_AUG = 6
+DATA_AUG = 5
 LMBDA = .1
-AUG_BATCH_SIZE = 512
+# AUG_BATCH_SIZE = 512
+
+# For CIFAR data, the 256 aug batch size would take 9.5G memory. I'm
+# usinng HOLDOUT=1000 and 4 aug epochs, and the val acc reaches 92% on
+# 4th epoch. Before 4th epoch, the val acc is only around 30%
+AUG_BATCH_SIZE = 256
 LEARNING_RATE = .001
-HOLDOUT = 150
+# HOLDOUT = 150
+HOLDOUT = 1000
 
 BATCH_SIZE = 128
 NB_EPOCHS = 10
@@ -40,6 +47,7 @@ def train_sub(sess, bbox, sub, holdout_x, holdout_y):
     holdout_x: initial data
     holdout_y: initial data, [int], not categorical
     """
+    # print('Training substitute model using {}'.format(holdout_x.shape))
     # Define the Jacobian symbolically using TensorFlow.
     grads = jacobian_graph(sub.predict(sub.x), sub.x, 10)
     
@@ -70,6 +78,7 @@ def train_sub(sess, bbox, sub, holdout_x, holdout_y):
             bbox_val = cleverhans.utils_tf.batch_eval(sess, [bbox.x],
                                                       [bbox.predict(bbox.x)],
                                                       [holdout_x_prev],
+                                                      # batch_size=BATCH_SIZE,
                                                       args=eval_params)[0]
             # Note here that we take the argmax because the adversary
             # only has access to the label (not the probabilities) output
@@ -93,15 +102,15 @@ def test_sub(sess, bbox, sub, test_x, test_y):
     # np.random.shuffle(test_x)
     # np.random.shuffle(test_y)
     
-    holdout_x = test_x[:150]
-    holdout_y = test_y[:150]
-    test_x = test_x[150:]
-    test_y = test_y[150:]
+    holdout_x = test_x[:HOLDOUT]
+    holdout_y = test_y[:HOLDOUT]
+    test_x = test_x[HOLDOUT:]
+    test_y = test_y[HOLDOUT:]
 
     # FIXME this is no longer necessary as I shuffled the array
-    num_sample = 1000
+    num_samples = 1000
     batch_size = 100
-    indices = random.sample(range(test_x.shape[0]), num_sample)
+    indices = random.sample(range(test_x.shape[0]), num_samples)
     test_x = test_x[indices]
     test_y = test_y[indices]
     
@@ -119,7 +128,7 @@ def test_sub(sess, bbox, sub, test_x, test_y):
         elif name is 'JSMA':
             attack = lambda m, x: my_JSMA(m, x, params=sub.JSMA_params)
         elif name is 'CW':
-            attack = lambda m, x: my_CW(m, sess, x, sub.y, params=sub.CW_params)
+            attack = lambda m, x: my_CW(sess, m, x, sub.y, params=sub.CW_params)
         else:
             assert False
         adv_x = attack(sub, sub.x)
@@ -128,7 +137,7 @@ def test_sub(sess, bbox, sub, test_x, test_y):
         acc = my_accuracy_wrapper(logits=logits, labels=sub.y)
 
         # batch
-        nbatch = num_sample // batch_size
+        nbatch = num_samples // batch_size
         for i in range(nbatch):
             start = i * batch_size
             end = (i+1) * batch_size

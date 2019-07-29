@@ -55,6 +55,31 @@ class AEModel():
             
         self.AE_vars = tf.trainable_variables('my_AE')
         self.additional_train_steps = [self.AE.updates]
+        
+    def train_AE(self, sess, clean_x):
+        noise_factor = 0.1
+        noisy_x = clean_x + noise_factor * np.random.normal(loc=0.0, scale=1.0, size=clean_x.shape)
+        noisy_x = np.clip(noisy_x, CLIP_MIN, CLIP_MAX)
+        
+        # self.AE.compile('adam', 'binary_crossentropy')
+        # with sess.as_default():
+        #     self.AE.fit(noisy_x, clean_x, verbose=2)
+
+        inputs = keras.layers.Input(shape=self.shape, dtype='float32')
+        rec = self.AE(inputs)
+        model = keras.models.Model(inputs, rec)
+        optimizer = keras.optimizers.RMSprop(0.001)
+        # 'adadelta'
+        model.compile(optimizer=optimizer,
+                      # loss='binary_crossentropy'
+                      loss=keras.losses.mean_squared_error
+        )
+        with sess.as_default():
+            callbacks = [get_lr_reducer(), get_es(min_delta=0.0001)]
+            model.fit(noisy_x, clean_x, epochs=100,
+                      validation_split=0.1,
+                      # verbose=2,
+                      callbacks=callbacks)
 
     def setup_AE(self):
         """From noise_x to x.

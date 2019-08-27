@@ -145,95 +145,6 @@ class MyDefGan():
 #                    npx, npy,
 #                    epsilon=0.3, max_steps=40, step_size=0.01, loss='xent', rand=True):
 
-class MyPgdBpdaAttack():
-    def __init__(self, sess, mydefgan, cnn, x, y,
-                 epsilon=0.3, max_steps=40, step_size=0.01, loss_func='xent', rand=True):
-        self.mydefgan = mydefgan
-        self.cnn = cnn
-        self.x = x
-        self.y = y
-        self.sess = sess
-        self.epsilon = epsilon
-        self.max_steps = max_steps
-        self.step_size = step_size
-        self.rand = rand
-        
-        # calculating grads
-        self.logits = cnn.predict(x)
-        if loss_func == 'xent':
-            loss = my_softmax_xent(self.logits, y)
-        elif loss_func == 'cw':
-            # label_mask = tf.one_hot(cnn.y, 10, on_value=1.0, off_value=0.0, dtype=tf.float32)
-            label_mask = cnn.y
-            correct_logit = tf.reduce_sum(label_mask * self.logits, axis=1)
-            wrong_logit = tf.reduce_max((1-label_mask) * self.logits, axis=1)
-            loss = -tf.nn.relu(correct_logit - wrong_logit + 50)
-        else:
-            raise NotImplementedError()
-        self.grads = tf.gradients(loss, x)[0]
-    def attack(self, npx, npy):
-        """BPDA attack.
-
-        From test_x, mutate and obtain adversarial examples.
-        We assume model has two methods:
-        - defgan.purify_np()
-        - cnn.prediction
-
-        Then we can do PGD attack like this:
-        - purify: npx' = purify(npx)
-        - compute gradient: p, g = run([cnn.pred(x), grad(cnn.logits, x)], feed={x: npx'})
-        - update *npx*: npx += lr * np.sign(g), and clip
-
-        Do this until the prediction is different or reach a maximum steps.
-
-        How about CW (TODO)
-
-        """
-        # mydefgan = MyDefGan(defgan)
-
-        lower = np.clip(npx - self.epsilon, 0., 1.)
-        upper = np.clip(npx + self.epsilon, 0., 1.)
-
-        if self.rand:
-            npx = npx + np.random.uniform(self.epsilon, self.epsilon, npx.shape)
-        else:
-            npx = np.copy(npx)
-
-        for i in range(self.max_steps):
-            npx_prime = self.mydefgan.purify_np(npx)
-            # baseline
-            # npx_prime = npx
-            p, g = self.sess.run([self.logits, self.grads],
-                            {self.x: npx_prime, self.y: npy})
-            # FIXME all different?? I should stop each one individually
-            ypred = np.argmax(p, axis=1)
-            # print('ypred: {}'.format(ypred))
-            ytrue = np.argmax(npy, axis=1)
-            # print('ytrue: {}'.format(ytrue))
-            wrong = (ypred != ytrue).astype(int).sum()
-            total = npy.shape[0]
-            print('Step {} / {}, number of wrong {} / {}'.format(i, self.max_steps, wrong, total))
-            if wrong == total:
-                print('done')
-                break
-            # print(g.shape)
-            npx += self.step_size * np.sign(g)
-            npx = np.clip(npx, lower, upper)
-        return npx
-        
-def my_PGD_BPDA(sess, mydefgan, cnn, x, y,
-                epsilon=0.3, max_steps=40, step_size=0.01, loss_func='xent', rand=True):
-    attack = MyPgdBpdaAttack(sess, mydefgan, cnn, x, y,
-                             epsilon=epsilon, max_steps=max_steps, step_size=step_size,
-                             loss_func=loss_func, rand=rand)
-    
-    def my_wrap(npx, npy):
-        res = attack.attack(npx, npy)
-        return np.array(res, dtype=np.float32)
-
-    wrap = tf.py_func(my_wrap, [x, y], tf.float32)
-    wrap.set_shape(x.get_shape())
-    return wrap
 
 def __test():
     """Testing the PGD BPDA attack."""
@@ -314,16 +225,17 @@ def test_defgan(filename):
     
     # FGSM
     print('Testing FGSM ..')
-    adv_x = my_PGD_BPDA(sess, mydefgan, cnn, cnn.x, cnn.y,
+    # FIXME whether the method purify_np can be used like this, e.g. as first class function
+    adv_x = my_PGD_BPDA(sess, mydefgan.purify_np, cnn, cnn.x, cnn.y,
                         loss_func='xent', epsilon=0.3, max_steps=1, step_size=0.3, rand=False)
     res['FGSM'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
     print('Testing PGD ..')
     # PGD
-    adv_x = my_PGD_BPDA(sess, mydefgan, cnn, cnn.x, cnn.y, loss_func='xent')
+    adv_x = my_PGD_BPDA(sess, mydefgan.purify_np, cnn, cnn.x, cnn.y, loss_func='xent')
     res['PGD'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
     print('Testing CW l2 ..')
     # CW l2
-    adv_x = my_CW_BPDA(sess, mydefgan, cnn, cnn.x, cnn.y, params={'max_iterations': 30})
+    adv_x = my_CW_BPDA(sess, mydefgan.purify_np, cnn, cnn.x, cnn.y, params={'max_iterations': 30})
     res['CW'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
 
     with open(filename, 'w') as fp:

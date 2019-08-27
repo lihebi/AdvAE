@@ -1877,3 +1877,57 @@ class FCAdvAEModel(AdvAEModel):
         decoded = keras.layers.Reshape([28,28,1])(x)
         self.AE = keras.models.Model(inputs, decoded)
 
+    
+def restore_0517():
+    """Restore 0517 model and results."""
+    sess = create_tf_session()
+    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
+    cnn = MyResNet29()
+    ae = DunetModel(cnn)
+    adv = C0_A2_Model(cnn, ae)
+    tf_init_uninitialized(sess)
+
+    print('============================== restore-0517-AdvAE')
+    # cnn.load_weights(sess, '/home/hebi/data/back/saved_models-0517/resnet-CNN.hdf5')
+    cnn.load_weights(sess, 'saved_models/CIFAR10-resnet29-CNN.hdf5')
+    ae.load_weights(sess, '/home/hebi/data/back/saved_models-0517/resnet-dunet-C0_A2-AdvAE.hdf5')
+    adv.test_all(sess, test_x, test_y, attacks=['FGSM', 'PGD'], save_prefix='restore-0517-AdvAE')
+    
+    # HGD
+    print('============================== restore-0517-HGD')
+    ae.load_weights(sess, 'back/saved_models-0517/resnet-dunet-C0_B2-AdvAE.hdf5')
+    adv.test_all(sess, test_x, test_y, attacks=['CW', 'FGSM', 'PGD'], save_prefix='restore-0517-HGD')
+    
+    # Adv Train. Note that this will load the CNN weights, so should
+    # be the last one to run
+    print('============================== restore-0517-identity')
+    ae.load_weights(sess, 'back/saved_models-0517/resnet-dunet-C0_B2-AdvAE.hdf5')
+    adv.test_all(sess, test_x, test_y, attacks=['CW', 'FGSM', 'PGD'], save_prefix='restore-0517-identity')
+
+    return
+    
+    # blackbox
+    print('============================== restore-0517-bbox')
+    cnn.load_weights(sess, 'back/saved_models-0517/resnet-CNN.hdf5')
+    ae.load_weights(sess, 'back/saved_models-0517/resnet-dunet-C0_A2-AdvAE.hdf5')
+    sub = MyResNet29()
+    # after getting the sub model, run attack on sub model
+    # 93.6 accuracy of substitute model
+    res = test_sub(sess, adv, sub, test_x, test_y)
+
+    datafile = 'images/{}.json'.format('restore-0517-bbox')
+    print('Result:')
+    # {'FGSM': 0.6100000023841858, 'CW': 0.6149999976158143, 'PGD': 0.6150000035762787}
+    # new {'FGSM': 0.6069999933242798, 'CW': 0.6129999995231629, 'PGD': 0.6089999914169312}
+    print(res)
+    with open(datafile, 'w') as fp:
+        json.dump(res, fp, indent=4)
+    print('Done. Saved to {}'.format(datafile))
+
+    # transfer (this is not likely to work)
+    print('============================== restore-0517-transfer')
+    to_cls = MyDenseNetFCN()
+    adv_trans = C0_A2_Model(to_cls, ae)
+    to_cls.load_weights(sess, 'back/saved_models-0522-2/CIFAR10-densenetFCN-CNN.hdf5')
+    ae.load_weights(sess, 'back/saved_models-0517/resnet-dunet-C0_B2-AdvAE.hdf5')
+    adv.test_all(sess, test_x, test_y, attacks=['CW', 'FGSM', 'PGD'], save_prefix='restore-0517-transfer')

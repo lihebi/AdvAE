@@ -72,15 +72,6 @@ class MyCallback(keras.callbacks.Callback):
         dd /= nbatch
 
         print({'advacc': aa, 'acc': bb, 'cnnacc': cc, 'obliacc': dd})
-            
-        # accs_val = sess.run(accs, feed_dict={inputs: val_x,
-        #                                      outputs: val_y,
-        #                                      # FIXME
-        #                                      keras.backend.learning_phase(): 0
-        # })
-        # print('accs: {}'.format(accs_val))
-
-        
 
 class AdvAEModel(cleverhans.model.Model):
     """Implement a denoising auto encoder.
@@ -331,9 +322,10 @@ class AdvAEModel(cleverhans.model.Model):
             attack = lambda m, x: my_JSMA(m, x, params=self.cnn_model.JSMA_params)
         elif name is 'CW':
             attack = lambda m, x: my_CW(sess, m, x, self.y, params=self.cnn_model.CW_params)
+        elif name is 'Hop':
+            attack = lambda m, x: my_HopSkipJump(sess, m, x)
         else:
             assert False
-
 
         def myl2dist(x1, x2, logits, labels):
             # calculate the correct indices
@@ -419,6 +411,9 @@ class AdvAEModel(cleverhans.model.Model):
                 # FIXME the image visualization only uses the first batch
                 for key in res:
                     tmp_images, tmp_titles, acc, l2 = res[key]
+                    if len(tmp_images) < 10:
+                        print('WARNING: {} less than 10 image available'.format(len(tmp_images)))
+                        assert False
                     images.append(tmp_images[:10])
                     if acc == -1:
                         titles.append(['']*10)
@@ -533,6 +528,7 @@ class AdvAEModel(cleverhans.model.Model):
             all_data.append({name: data})
         
         print('Plotting result ..')
+        # print(all_data)
         plot_filename = 'images/{}.pdf'.format(save_prefix)
         data_filename = 'images/{}.json'.format(save_prefix)
         grid_show_image(all_images, filename=plot_filename, titles=all_titles, fringes=all_fringes)

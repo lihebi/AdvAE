@@ -156,7 +156,12 @@ def train_model(cnn_cls, ae_cls, advae_cls,
     if not os.path.exists(pAdvAE):
         with create_tf_session() as sess:
             # FIXME not the case for It-adv-train baseline
-            cnn = cnn_cls(training=False)
+            if 'identity' in ae_cls.NAME():
+                print('!!!!!!! ******** Training identityAE, '
+                      'setting CNN bath normalization layers trainable')
+                cnn = cnn_cls(training=True)
+            else:
+                cnn = cnn_cls(training=False)
             ae = ae_cls(cnn)
             adv = advae_cls(cnn, ae)
             tf_init_uninitialized(sess)
@@ -169,39 +174,6 @@ def train_model(cnn_cls, ae_cls, advae_cls,
             ae.save_weights(sess, pAdvAE)
     else:
         print('Already trained {}'.format(pAdvAE))
-
-    
-def __test():
-    (train_x, train_y), (test_x, test_y) = load_mnist_data()
-    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
-    
-    sess = create_tf_session()
-    
-    cnn = MyResNet()
-    cnn = MyResNet56()
-    cnn = MyResNet110()
-    cnn = CNNModel()
-    ae = AEModel(cnn)
-    ae = CifarAEModel(cnn)
-    ae = TestCifarAEModel(cnn)
-    ae = DunetModel(cnn)
-    adv = A2_Model(cnn, ae)
-
-    tf_init_uninitialized(sess)
-    
-    cnn.train_CNN(sess, train_x, train_y)
-    cnn.train_CNN_keras(sess, train_x, train_y)
-
-    cnn.load_weights(sess, 'saved_models/resnet-CNN.hdf5')
-    ae.load_weights(sess, 'saved_models/resnet-cifarae-AE.hdf5')
-    
-    ae.train_AE(sess, train_x, train_y)
-    ae.train_AE_keras(sess, train_x, train_y)
-    
-    adv.train_Adv(sess, train_x, train_y)
-
-    ae.test_AE(sess, test_x, test_y)
-
 
 def test_model(cnn_cls, ae_cls, advae_cls,
                test_x, test_y,
@@ -225,6 +197,7 @@ def test_model(cnn_cls, ae_cls, advae_cls,
                        save_prefix=save_prefix)
     else:
         print('Already tested, see {}'.format(filename))
+
 def test_model_transfer(cnn_cls, ae_cls, advae_cls, test_x, test_y,
                         dataset_name='', to_cnn_cls=None,
                         saved_folder='saved_models', force=False):
@@ -608,7 +581,6 @@ MNIST data already showed near 100% accuracy."""
     
 def mnist_exp():
     # run_exp_model(MNISTModel, AEModel, A2_Model, dataset_name='MNIST', run_test=True)
-
     # Testing different hyperparameter lambdas
     # this is the same as A2_Model
     run_exp_model(MNISTModel, AEModel, get_lambda_model(0), dataset_name='MNIST', run_test=True)
@@ -648,14 +620,17 @@ def transfer_exp():
                                 to_cnn_cls=m,
                                 dataset_name='MNIST')
     
-
 if __name__ == '__main__':
 
     # run_exp_model(MNISTModel, AEModel, A2_Model, dataset_name='MNIST', run_test=True)
 
     # mnist_exp()
     # cifar10_exp()
-    transfer_exp()
+    # transfer_exp()
+
+    # baseline adversarial training
+    # run_exp_model(MNISTModel, IdentityAEModel, A2_Model, dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, AEModel, B2_Model, dataset_name='MNIST', run_test=True)
     
     # run_exp_model(MNISTModel, AEModel, C0_A2_Model, dataset_name='MNIST', run_test=True)
 

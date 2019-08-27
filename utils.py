@@ -20,6 +20,7 @@ def load_mnist_data():
     train_y = keras.utils.to_categorical(train_y, 10)
     test_y = keras.utils.to_categorical(test_y, 10)
     return (train_x, train_y), (test_x, test_y)
+    # return (train_x[:1000], train_y[:1000]), (test_x[:1000], test_y[:1000])
 def load_mnist_data_nocat():
     (train_x, train_y), (test_x, test_y) = keras.datasets.mnist.load_data()
     # convert data
@@ -108,6 +109,9 @@ def grid_show_image(images,
     plt.ioff()
 
     images = np.array(images)
+
+    # print(images.shape)
+    
     height = images.shape[0]
     width = images.shape[1]
     

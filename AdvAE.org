@@ -8,6 +8,27 @@
 * Introduction
 * Thread Model
 
+* New TODOs
+** DONE BPDA
+   CLOSED: [2019-07-30 Tue 18:00]
+** TODO Transferability on CIFAR models
+** TODO performance on CIFAR
+** TODO other blackbox
+** TODO simplify base models
+- e.g. remove dropout, remove unused FC and CNN layers in both base
+  models and AE model.
+- also do sth. about dunet and CIFAR
+
+
+* Possible problems
+Probably:
+- K.learning_phase (3684993)
+- PGD stop gradients (9c21e64)
+- add dunet model (55b34b5)
+
+No:
+- setupFC (3684993)
+- AE pretraining
 * Approach
 
 ** Loss

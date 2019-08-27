@@ -55,6 +55,9 @@ class AEModel():
             
         self.AE_vars = tf.trainable_variables('my_AE')
         self.additional_train_steps = [self.AE.updates]
+
+    def evaluate_np(self, sess, npx):
+        return sess.run(self.rec, feed_dict={self.x: npx})
         
     def train_AE(self, sess, clean_x):
         noise_factor = 0.1
@@ -108,11 +111,16 @@ class AEModel():
         # channel = 1 or 3 depending on dataset
         channel = self.shape[2]
         decoded = keras.layers.Conv2D(channel, (3, 3), padding='same')(x)
+
         
         self.AE1 = keras.models.Model(inputs, decoded)
+        rec = keras.layers.Activation('sigmoid')(decoded)
         
-        self.AE = keras.models.Model(inputs, keras.layers.Activation('sigmoid')(decoded))
-        
+        self.AE = keras.models.Model(inputs, rec)
+
+        # These are just place holders for easier evaluation
+        self.x = inputs
+        self.rec = decoded
         
     def save_weights(self, sess, path):
         """Save weights using keras API."""

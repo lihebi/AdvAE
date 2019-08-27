@@ -10,6 +10,7 @@ import cleverhans.model
 from cleverhans.attacks import FastGradientMethod
 from cleverhans.attacks import ProjectedGradientDescent, SaliencyMapMethod
 from cleverhans.attacks import CarliniWagnerL2
+from cleverhans.attacks import HopSkipJumpAttack
 from bpda import CarliniWagnerL2_BPDA
 
 
@@ -59,7 +60,50 @@ def my_PGD(model, x, params=dict()):
     pgd_params.update(params)
     adv_x = pgd.generate(x, **pgd_params)
     return tf.stop_gradient(adv_x)
-    # return adv_x
+
+def my_PGD_np(sess, model, xval, params=dict()):
+    pgd = ProjectedGradientDescent(model, sess=sess)
+    pgd_params = {'eps': 0.3,
+                  'nb_iter': 40,
+                  'eps_iter': 0.01,
+                  'clip_min': CLIP_MIN,
+                  'clip_max': CLIP_MAX}
+    pgd_params.update(params)
+    return pgd.generate_np(xval, **pgd_params)
+
+def my_HopSkipJump(sess, model, x, params=dict()):
+    assert False
+    attack = HopSkipJumpAttack(model, sess=sess)
+    # TODO add allowed pertubation parameter
+    default_params = {
+        # 'stepsize_search': 0.01,
+        'clip_min': CLIP_MIN,
+        'clip_max': CLIP_MAX,
+        # 'num_iterations': 40,
+        # anything that is not l2
+        'constraint': 'linf',
+        'verbose': False,
+    }
+    # FIXME the generate method of HopSkipJumpAttack is problematic,
+    # it uses x[0] instead of x, i.e. it only generates adv for one
+    # value, the adv_x and x is not the same shape (although it
+    # pretended to be by setting the shape at the end).
+    adv_x = attack.generate(x, **default_params)
+    return tf.stop_gradient(adv_x)
+def my_HopSkipJump_np(sess, model, xval, params=dict()):
+    attack = HopSkipJumpAttack(model, sess=sess)
+    # TODO add allowed pertubation parameter
+    default_params = {
+        'clip_min': CLIP_MIN,
+        'clip_max': CLIP_MAX,
+        # anything that is not l2
+        'constraint': 'linf',
+        # 'verbose': False,
+    }
+    adv_xval = attack.generate_np(xval, **default_params)
+    return adv_xval
+
+
 def my_JSMA(model, x, params=dict()):
     jsma = SaliencyMapMethod(model)
     jsma_params = {'theta': 1., 'gamma': 0.1,

@@ -261,8 +261,8 @@ class AdvAEModel(cleverhans.model.Model):
             'input': self.x,
             'output': self.y,
         }
-        if 'identity' in self.ae_model.NAME():
-            print('!!!!!!! Training identityAE, setting CNN trainable')
+        if 'ItAdv' in self.NAME():
+            print('!!!!!!! Training ItAdv models, setting CNN trainable')
             self.CNN.trainable = True
             self.FC.trainable = True
         else:
@@ -294,7 +294,7 @@ class AdvAEModel(cleverhans.model.Model):
             model.fit(train_x, train_y,
                       validation_split=0.1,
                       # DEBUG 10 for testing, 100 for production
-                      epochs=100,
+                      epochs=10,
                       callbacks=callbacks)
 
     def test_attack(self, sess, test_x, test_y, name,
@@ -311,9 +311,6 @@ class AdvAEModel(cleverhans.model.Model):
         # test_y = test_y[indices]
         # feed_dict = {self.x: test_x, self.y: test_y}
 
-        # JSMA is pretty slow ..
-        # attack_funcs = [my_FGSM, my_PGD, my_JSMA]
-        # attack_names = ['FGSM', 'PGD', 'JSMA']
         if name is 'FGSM':
             attack = lambda m, x: my_FGSM(m, x, params=self.cnn_model.FGSM_params)
         elif name is 'PGD':
@@ -425,6 +422,7 @@ class AdvAEModel(cleverhans.model.Model):
                     print(fringe.replace('\n', ' '))
         for key in data:
             data[key] /= nbatch
+        print('Result: ', data)
         return images, titles, fringes, data
 
     def test_Model(self, sess, test_x, test_y,
@@ -486,6 +484,7 @@ class AdvAEModel(cleverhans.model.Model):
 
         for key in data:
             data[key] /= nbatch
+        print('Result: ', data)
         return images, titles, fringes, data
 
     def test_all(self, sess, test_x, test_y, attacks=[],
@@ -539,48 +538,67 @@ class AdvAEModel(cleverhans.model.Model):
     
 class A2_Model(AdvAEModel):
     """This is a dummy class, exactly same as AdvAEModel except name()."""
+    @staticmethod
     def NAME():
         return 'A2'
     def setup_trainloss(self):
         self.adv_loss = self.A2_loss
+
+
+class ItAdv_Model(AdvAEModel):
+    """This is a dummy class, exactly same as AdvAEModel except name()."""
+    @staticmethod
+    def NAME():
+        return 'ItAdv'
+    def setup_trainloss(self):
+        self.adv_loss = self.A2_loss
+        
 class B2_Model(AdvAEModel):
     """B2/B1 loss is exactly the oblivious loss, corresponding to HGD."""
     def setup_trainloss(self):
         self.adv_loss = self.B2_loss
+    @staticmethod
     def NAME():
         return 'B2'
 class C0_B2_Model(AdvAEModel):
     def setup_trainloss(self):
         self.adv_loss = self.B2_loss
+    @staticmethod
     def NAME():
         return 'C0_B2'
 class C2_B2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'C2_B2'
     def setup_trainloss(self):
         self.adv_loss = (self.B2_loss + self.C2_loss)
 class A2_B2_C2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'A2_B2_C2'
     def setup_trainloss(self):
         self.adv_loss = self.A2_loss + self.B2_loss + self.C2_loss
 class A1_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'A1'
     def setup_trainloss(self):
         self.adv_loss = (self.A1_loss)
 class A12_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'A12'
     def setup_trainloss(self):
         self.adv_loss = (self.A2_loss + self.A1_loss)
 # two
 class N0_A2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'N0_A2'
     def setup_trainloss(self):
         self.adv_loss = (self.A2_loss + self.N0_loss)
 class C0_A2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'C0_A2'
     def setup_trainloss(self):
@@ -589,6 +607,7 @@ class C0_A2_Model(AdvAEModel):
 
 class Pretrained_C0_A2_Model(AdvAEModel):
     """A model with pretrained AE"""
+    @staticmethod
     def NAME():
         return 'Pretrained_C0_A2'
     def setup_trainloss(self):
@@ -613,6 +632,7 @@ class Pretrained_C0_A2_Model(AdvAEModel):
 def get_lambda_model(lam):
     # assuming lam is 0-10
     class C0_A2_lambda_Model(AdvAEModel):
+        @staticmethod
         def NAME():
             return 'C0_A2_{}'.format(lam)
         def setup_trainloss(self):
@@ -629,19 +649,35 @@ def test():
 #         return 'C2'
 #     def setup_trainloss(self):
 #         self.adv_loss = self.C2_loss
+
+class C0_A2_A0_Model(AdvAEModel):
+    @staticmethod
+    def NAME():
+        return "C0_A2_A0"
+    def setup_trainloss(self):
+        self.adv_loss = (self.C0_loss + self.A2_loss + self.A0_loss)
+class A2_A0_Model(AdvAEModel):
+    @staticmethod
+    def NAME():
+        return "A2_A0"
+    def setup_trainloss(self):
+        self.adv_loss = (self.A2_loss + self.A0_loss)
         
 class C2_A2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'C2_A2'
     def setup_trainloss(self):
         self.adv_loss = (self.A2_loss + self.C2_loss)
 
 class C1_A1_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'C1_A1'
     def setup_trainloss(self):
         self.adv_loss = self.A1_loss + self.C1_loss
 class C1_A2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'C1_A2'
     def setup_trainloss(self):
@@ -649,11 +685,13 @@ class C1_A2_Model(AdvAEModel):
 
 # three
 class C0_N0_A2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'C0_N0_A2'
     def setup_trainloss(self):
         self.adv_loss = (self.A2_loss + self.N0_loss + self.C0_loss)
 class C2_N0_A2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'C2_N0_A2'
     def setup_trainloss(self):
@@ -661,40 +699,47 @@ class C2_N0_A2_Model(AdvAEModel):
 
 # P models
 class P2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'P2'
     def setup_trainloss(self):
         self.adv_loss = (self.P2_loss)
 class A2_P2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'A2_P2'
     def setup_trainloss(self):
         self.adv_loss = (self.A2_loss + self.P2_loss)
 class N0_A2_P2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'N0_A2_P2'
     def setup_trainloss(self):
         self.adv_loss = (self.A2_loss + self.P2_loss + self.N0_loss)
         
 class C0_N0_A2_P2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'C0_N0_A2_P2'
     def setup_trainloss(self):
         self.adv_loss = (self.A2_loss + self.P2_loss +
                                  self.N0_loss + self.C0_loss)
 class C2_A2_P2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'C2_A2_P2'
     def setup_trainloss(self):
         self.adv_loss = (self.A2_loss + self.P2_loss +
                                  self.C2_loss)
 class C2_N0_A2_P2_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'C2_N0_A2_P2'
     def setup_trainloss(self):
         self.adv_loss = (self.A2_loss + self.P2_loss +
                                  self.N0_loss + self.C2_loss)
 class A2_P1_Model(AdvAEModel):
+    @staticmethod
     def NAME():
         return 'A2_P1'
     def setup_trainloss(self):

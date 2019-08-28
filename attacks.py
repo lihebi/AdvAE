@@ -13,6 +13,8 @@ from cleverhans.attacks import CarliniWagnerL2
 from cleverhans.attacks import HopSkipJumpAttack
 from bpda import CarliniWagnerL2_BPDA
 
+import foolbox
+
 
 CLIP_MIN = 0.
 CLIP_MAX = 1.
@@ -50,6 +52,16 @@ def my_FGSM(model, x, params=dict()):
     adv_x = fgsm.generate(x, **fgsm_params)
     return tf.stop_gradient(adv_x)
     # return adv_x
+def my_FGSM_np(sess, model, xval, params=dict()):
+    # FGSM attack
+    fgsm_params = {
+        'eps': 0.3,
+        'clip_min': CLIP_MIN,
+        'clip_max': CLIP_MAX
+    }
+    fgsm_params.update(params)
+    fgsm = FastGradientMethod(model, sess=sess)
+    return fgsm.generate_np(xval, **fgsm_params)
 def my_PGD(model, x, params=dict()):
     pgd = ProjectedGradientDescent(model)
     pgd_params = {'eps': 0.3,
@@ -103,6 +115,22 @@ def my_HopSkipJump_np(sess, model, xval, params=dict()):
     adv_xval = attack.generate_np(xval, **default_params)
     return adv_xval
 
+def my_HSJA_foolbox_np(sess, model, xval, yval):
+    with sess.as_default():
+        fbmodel = foolbox.models.TensorFlowModel(model.x, model.logits, (0, 1))
+        # fbmodel = foolbox.models.TensorFlowModel(model.cnn_model.x, model.cnn_model.logits, (0, 1))
+        attack = foolbox.attacks.BoundaryAttackPlusPlus(fbmodel, distance=foolbox.distances.Linfinity)
+        print('Single attacking ..')
+        # adversarial = attack(test_x[0], np.argmax(test_y[0]), max_epsilon=0.3)
+
+        res = []
+        for i, (x,y) in enumerate(zip(xval, yval)):
+            print('foolbox HSJA attacking {}-th sample ..'.format(i))
+            adversarial = attack(x, np.argmax(y), log_every_n_steps=20)
+            # FIXME NOW this might be None
+            # print(adversarial.shape)
+            res.append(adversarial)
+        return np.array(res)
 
 def my_JSMA(model, x, params=dict()):
     jsma = SaliencyMapMethod(model)
@@ -127,6 +155,22 @@ def my_CW(sess, model, x, y, targeted=False, params=dict()):
     cw_params.update(params)
     adv_x = cw.generate(x, **cw_params)
     return adv_x
+def my_CW_np(sess, model, xval, targeted=False, params=dict()):
+    """When targeted=True, remember to put target as y."""
+    # CW attack
+    cw = CarliniWagnerL2(model, sess=sess)
+    yname = 'y_target' if targeted else 'y'
+    cw_params = {'binary_search_steps': 1,
+                 # FIXME
+                 yname: None,
+                 'max_iterations': 1000,
+                 'learning_rate': 0.2,
+                 'batch_size': 50,
+                 'initial_const': 10,
+                 'clip_min': CLIP_MIN,
+                 'clip_max': CLIP_MAX}
+    cw_params.update(params)
+    return cw.generate_np(xval, **cw_params)
 def my_CW_BPDA(sess, pre_model, post_model, x, y, targeted=False, params=dict()):
     cw = CarliniWagnerL2_BPDA(pre_model, post_model, sess=sess)
     yname = 'y_target' if targeted else 'y'
@@ -145,3 +189,87 @@ def my_CW_BPDA(sess, pre_model, post_model, x, y, targeted=False, params=dict())
     return tf.stop_gradient(adv_x)
 
 
+    
+def evaluate_attack_PGD(sess, model, attack_name, xval, yval, eps):
+    """PGD likes. The attack will take eps as argument."""
+    accs = []
+    for e in eps:
+        if attack_name is 'PGD':
+            adv_val = my_PGD_np(sess, model, xval, {'eps': e})
+        elif attack_name is 'FGSM':
+            adv_val = my_FGSM_np(sess, model, xval, {'eps': e})
+        else:
+            assert False
+        acc = sess.run(model.accuracy, feed_dict={model.x: adv_val, model.y: yval})
+        accs.append(acc)
+    return np.array(accs).tolist()
+
+def evaluate_attack_CW(sess, model, xval, yval):
+    """This is L2, so no eps, no thresholding."""
+    adv_val = my_CW_np(sess, model, xval)
+    acc = sess.run(model.accuracy, feed_dict={model.x: adv_val, model.y: yval})
+    return float(acc)
+
+def evaluate_attack_Hop(sess, model, attack_name, xval, yval, eps):
+    # assuming attack name is 'Hop'
+    if attack_name is 'Hop':
+        # adv_val = my_HopSkipJump_np(sess, model, xval)
+        adv_val = my_HSJA_foolbox_np(sess, model, xval, yval)
+    else:
+        assert False
+    # filter about distortion level
+    # get indices that are within eps
+    # print(adv_val)
+    # print(adv_val.shape)
+    # print(xval.shape)
+    diff = adv_val - xval
+
+    accs = []
+    for e in eps:
+        # The problem of np.linalg.norm is that, it sum the row/column for 2D matrix
+        # np.linalg.norm(diff, ord=np.inf, axis=(1,2))
+
+        diffnorm = np.max(np.abs(diff), axis=(1,2))
+        # round because PGD is giving 0.3000004
+        # .round(decimals=4)
+        # print(diffnorm)
+        idx = diffnorm <= e
+        idx = idx.reshape(-1)
+
+        print('All: {}, valid: {}'.format(idx.shape[0], np.sum(idx)))
+
+        # probably just replace invalid ones with xval
+        adv_val_copy = adv_val.copy()
+        adv_val_copy[np.logical_not(idx)] = xval[np.logical_not(idx)]
+
+        acc = sess.run(model.accuracy, feed_dict={model.x: adv_val_copy, model.y: yval})
+        accs.append(acc)
+    return np.array(accs).tolist()
+
+def evaluate_attack(sess, model, attack_name, xval, yval, num_samples=100, eps=[]):
+    assert len(eps) > 0
+    
+    shuffle_idx = np.arange(xval.shape[0])
+    idx = shuffle_idx[:num_samples]
+
+    if attack_name in ['PGD', 'FGSM']:
+        return evaluate_attack_PGD(sess, model, attack_name, xval[idx], yval[idx], eps=eps)
+    elif attack_name in ['Hop']:
+        return evaluate_attack_Hop(sess, model, attack_name, xval[idx], yval[idx], eps=eps)
+    elif attack_name in ['CW']:
+        return evaluate_attack_CW(sess, model, xval[idx], yval[idx])
+    else:
+        assert False
+
+
+def evaluate_no_attack_CNN(sess, model, xval, yval, num_samples=100):
+    shuffle_idx = np.arange(xval.shape[0])
+    idx = shuffle_idx[:num_samples]
+    acc = sess.run(model.CNN_accuracy, feed_dict={model.x: xval[idx], model.y: yval[idx]})
+    return acc.tolist()
+
+def evaluate_no_attack_AE(sess, model, xval, yval, num_samples=100):
+    shuffle_idx = np.arange(xval.shape[0])
+    idx = shuffle_idx[:num_samples]
+    acc = sess.run(model.accuracy, feed_dict={model.x: xval[idx], model.y: yval[idx]})
+    return acc.tolist()

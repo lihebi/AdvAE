@@ -1931,3 +1931,264 @@ def restore_0517():
     to_cls.load_weights(sess, 'back/saved_models-0522-2/CIFAR10-densenetFCN-CNN.hdf5')
     ae.load_weights(sess, 'back/saved_models-0517/resnet-dunet-C0_B2-AdvAE.hdf5')
     adv.test_all(sess, test_x, test_y, attacks=['CW', 'FGSM', 'PGD'], save_prefix='restore-0517-transfer')
+
+def __test():
+    model, sess = load_model(MNISTModel, AEModel, get_lambda_model(0),
+                             dataset_name='MNIST')
+    model, sess = load_model(MNISTModel, AEModel, B2_Model,
+                             dataset_name='MNIST')
+    model, sess = load_model(MNISTModel, IdentityAEModel, A2_Model,
+                             dataset_name='MNIST')
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+
+    xval = test_x[:10]
+    yval = test_y[:10]
+
+    sess.run(model.accuracy, feed_dict={model.x: a, model.y: yval})
+
+    a = my_HSJA_foolbox_np(sess, model, xval, yval)
+
+    eps = np.arange(0.2,0.5,0.03)
+
+    eps = [0.1, 0.15, 0.2, 0.25, 0.3, 0.33, 0.36, 0.39, 0.42, 0.45, 0.48, 0.51, 0.55, 0.6, 0.7]
+
+    a = evaluate_attack(sess, model, 'PGD', test_x, test_y,
+                    num_samples=10, eps=eps)
+    
+    with open('test.json', 'w') as fp:
+        json.dump(np.array(a).tolist(), fp, indent=4)
+    evaluate_attack(sess, model, 'Hop', test_x, test_y,
+                    num_samples=10, eps=eps)
+    
+    images, _, _, data = model.test_attack(sess, test_x, test_y, 'Hop', num_samples=100)
+
+    adv = my_HopSkipJump(sess, model, model.x)
+    adv_val = sess.run(adv, feed_dict={model.x: test_x[:10], model.y: test_y[:10]})
+
+    # cleverhans.model.CallableModelWrapper()
+
+    adv_val = my_HopSkipJump_np(sess, model, test_x[:20])
+
+    adv_val = my_HopSkipJump_np(sess, model.cnn_model, test_x[:5])
+    
+    i2, _, _, data = model.test_attack(sess, test_x, test_y, 'PGD', num_samples=100)
+    _, _, _, data = model.test_attack(sess, test_x, test_y, 'CW', num_samples=100)
+    print(data)
+
+    model.test_all(sess, test_x, test_y,
+                   # attacks=['CW', 'FGSM', 'PGD', 'Hop'],
+                   # attacks=['FGSM', 'PGD'],
+                   attacks=['Hop'],
+                   save_prefix='test',
+                   num_samples=100)
+
+    # testing foolbox attacks
+    with sess.as_default():
+        fbmodel = foolbox.models.TensorFlowModel(model.x, model.logits, (0, 1))
+        # fbmodel = foolbox.models.TensorFlowModel(model.cnn_model.x, model.cnn_model.logits, (0, 1))
+        # criterion = foolbox.criteria.TargetClassProbability('ostrich', p=0.99)
+        # attack = foolbox.attacks.FGSM(fbmodel)
+        # attack = foolbox.attacks.BoundaryAttack(fbmodel)
+        # attack = foolbox.attacks.CarliniWagnerL2Attack(fbmodel)
+        # attack = foolbox.attacks.PGD(fbmodel, distance=foolbox.distances.Linfinity)
+
+        attack = foolbox.attacks.BoundaryAttackPlusPlus(fbmodel, distance=foolbox.distances.Linfinity)
+        # attack = foolbox.attacks.BoundaryAttackPlusPlus(fbmodel)
+        # foolbox.attacks.boundary_attack
+
+        print('Single attacking ..')
+        # adversarial = attack(test_x[0], np.argmax(test_y[0]), max_epsilon=0.3)
+        
+        # If binary search is not set, the epsilon is increased by 1.5
+        # each time in a loop, this does not make sense if I want to
+        # experiment with a fixed distortion level. But it probably
+        # makes sense to search for hyperparameter optimization?
+        # adversarial = attack(test_x[0], np.argmax(test_y[0]), epsilon=0.3, binary_search=False)
+        adversarial = attack(test_x[0], np.argmax(test_y[0]))
+        
+        # adversarial = attack(test_x[0], np.argmax(test_y[0]))
+        # print(np.argmax(fbmodel.forward_one(image)))
+
+        # batching
+        
+        # print('Batching attacking ..')
+        # criterion = foolbox.criteria.Misclassification()
+        # attack_create_fn = foolbox.batch_attacks.PGD
+        # advs = foolbox.run_parallel(attack_create_fn, fbmodel, criterion,
+        #                             test_x[:100], np.argmax(test_y[:100], axis=1))
+
+    np.argmax(sess.run(model.logits,
+                       feed_dict={
+                           # model.x: [test_x[0]]
+                           model.x: [adversarial]
+                       }))
+
+    np.argmax(sess.run(model.logits,
+                       feed_dict={
+                           # model.x: test_x[:100]
+                           # model.x: [advs[8].perturbed]
+                           model.x: [test_x[8]]
+                           # model.x: [adversarial]
+                       }), axis=1)
+
+    np.max(np.abs(adversarial - test_x[0]))
+
+    grid_show_image([[test_x[0], adversarial]])
+def main_test():
+    """Additional tests."""
+    ##############################
+    ## MNIST
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    
+    # model transfer testing
+    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
+        test_model_transfer(MNISTModel, AEModel, A2_Model,
+                            test_x, test_y,
+                            to_cnn_cls=m,
+                            dataset_name='MNIST')
+    # blackbox testing
+    # test_model_bbox(MNISTModel, AEModel, A2_Model, test_x, test_y,
+    #                 to_cnn_cls=MNISTModel,
+    #                 dataset_name='MNIST', force=True)
+    
+    for m in [MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c]:
+        test_model_bbox(MNISTModel, AEModel, A2_Model, test_x, test_y,
+                        to_cnn_cls=m,
+                        dataset_name='MNIST')
+
+    ##############################
+    ## Fashion MNIST
+    # model transfer testing
+    (train_x, train_y), (test_x, test_y) = load_fashion_mnist_data()
+    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
+        test_model_transfer(MNISTModel, AEModel, A2_Model,
+                            test_x, test_y,
+                            to_cnn_cls=m,
+                            dataset_name='Fashion')
+    # blackbox testing
+    for m in [MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c]:
+        test_model_bbox(MNISTModel, AEModel, A2_Model, test_x, test_y,
+                        to_cnn_cls=m,
+                        dataset_name='Fashion')
+    
+    ##############################
+    ## CIFAR10
+    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
+    # model transfer testing
+    for m in [MyResNet56, MyWideResNet2, MyDenseNetFCN]:
+        test_model_transfer(MyResNet29, DunetModel, C0_A2_Model,
+                            test_x, test_y,
+                            to_cnn_cls=m,
+                            dataset_name='CIFAR10')
+    # blackbox testing
+    for m in [MyResNet29, MyWideResNet2, MyDenseNetFCN]:
+        test_model_bbox(MyResNet29, DunetModel, C0_A2_Model,
+                        to_cnn_cls=m,
+                        dataset_name='CIFAR10')
+
+def main_exp(run_test=True):
+    ##############################
+    ## MNIST
+    for m in [A2_Model, B2_Model, C0_A2_Model, C0_B2_Model]:
+        run_exp_model(MNISTModel, AEModel, m, dataset_name='MNIST', run_test=run_test)
+    run_exp_model(MNISTModel, IdentityAEModel, A2_Model, dataset_name='MNIST', run_test=run_test)
+
+    run_exp_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b],
+                     AEModel, A2_Model,
+                     to_cnn_clses=[MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
+                     dataset_name='MNIST',
+                     run_test=run_test)
+    run_exp_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
+                     AEModel, A2_Model,
+                     to_cnn_clses=[MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
+                     dataset_name='MNIST',
+                     run_test=run_test)
+    run_exp_ensemble([DefenseGAN_c, DefenseGAN_d],
+                     AEModel, A2_Model,
+                     to_cnn_clses=[MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
+                     dataset_name='MNIST',
+                     run_test=run_test)
+
+    ##############################
+    ## Fashion MNIST
+
+    for m in [A2_Model, B2_Model, C0_A2_Model, C0_B2_Model]:
+        run_exp_model(MNISTModel, AEModel, m,
+                      dataset_name='Fashion', run_test=run_test)
+    run_exp_model(MNISTModel, IdentityAEModel, A2_Model,
+                  dataset_name='Fashion', run_test=run_test)
+    
+    # run_exp_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b],
+    #                  AEModel, A2_Model,
+    #                  to_cnn_clses=[MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
+    #                  dataset_name='Fashion',
+    #                  run_test=run_test)
+    
+    ##############################
+    ## CIFAR10
+    
+    run_exp_model(MyResNet29, IdentityAEModel, A2_Model,
+                  dataset_name='CIFAR10', run_test=run_test)
+
+    # I'll probably just use ResNet and some vanila CNN
+    for m in [C2_A2_Model, C1_A2_Model, C0_A2_Model, C2_B2_Model]:
+        for e in [AEModel, DunetModel]:
+            run_exp_model(MyResNet29, e, m,
+                          dataset_name='CIFAR10',
+                          run_test=run_test)
+    run_exp_model(MyResNet29, IdentityAEModel, A2_Model,
+                  dataset_name='CIFAR10', run_test=run_test)
+    run_exp_model(MyResNet29, IdentityAEModel, C2_A2_Model,
+                  dataset_name='CIFAR10', run_test=run_test)
+
+    return
+            
+    # I have no idea which would work, or wouldn't
+    for m in [C2_A2_Model,
+              C1_A2_Model,
+              C0_A2_Model,
+              # C2_B2_Model
+    ]:
+        for e in [AEModel, DunetModel]:
+            run_exp_model(MyResNet29, e, m,
+                          dataset_name='CIFAR10',
+                          run_test=run_test)
+            # DenseNet is so 3X slower than ResNet
+            # run_exp_model(MyDenseNetFCN, e, m,
+            #               dataset_name='CIFAR10',
+            #               run_test=run_test)
+            
+            # This is not working
+            # run_exp_model(MyDenseNet, DunetModel, m,
+            #               dataset_name='CIFAR10',
+            #               run_test=run_test)
+            
+            # WRN seems not working for weired reasons, the AE seems
+            # not working under it.
+            # WRN has even higher overhead. I'm abandening it as well
+            run_exp_model(MyWideResNet2, e, m,
+                          dataset_name='CIFAR10',
+                          run_test=run_test)
+    run_exp_model(MyResNet29, IdentityAEModel, C2_A2_Model,
+                  dataset_name='CIFAR10', run_test=run_test)
+
+    # These two will be very slow
+    # run_exp_ensemble([MyResNet29, MyWideResNet2],
+    #                  DunetModel, C0_A2_Model,
+    #                  to_cnn_clses=[MyResNet29, MyWideResNet2, MyDenseNetFCN],
+    #                  dataset_name='CIFAR10',
+    #                  run_test=run_test)
+    # run_exp_ensemble([MyResNet29, MyWideResNet2, MyDenseNetFCN],
+    #                  DunetModel, C0_A2_Model,
+    #                  to_cnn_clses=[MyResNet29, MyWideResNet2, MyDenseNetFCN],
+    #                  dataset_name='CIFAR10',
+    #                  run_test=run_test)
+def main_train_cnn():
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    for m in [MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
+        train_CNN(m, train_x, train_y, dataset_name='MNIST')
+        
+    (train_x, train_y), (test_x, test_y) = load_fashion_mnist_data()
+    for m in [DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d, DefenseGAN_e, DefenseGAN_f]:
+        train_CNN(m, train_x, train_y, dataset_name='Fashion')
+    

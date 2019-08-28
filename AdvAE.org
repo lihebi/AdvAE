@@ -6,14 +6,131 @@
 # #+ATTR_LATEX: :width 1.2\linewidth,center
 
 * Introduction
-* Thread Model
+
+* test result data format design
+
+#+BEGIN_SRC json
+{
+"no attack CNN": 0.996,
+"no attack AE": 0.991,
+"num_samples": 100,
+"epsilon-exp":{
+    "header": ["ep", "FGSM", "PGD", "Hop"],
+    "data": [[0.02, 1.0, 1.0],
+             [0.04, 1.0, 1.0]
+             ...
+             [...]]},
+
+}
+#+END_SRC
+
+
+* TODOs for AAAI
+** test x+delta in regularization term
+** Better result formatting
+** Remove dunet in CIFAR
+** The #param might be interesting
+The AE parameter is usually much smaller than the CNN parameter
+
+** Tables
+
+Old table:
+
+| attacks  | no def acc | black-box | white-box | oblivious |
+|----------+------------+-----------+-----------+-----------|
+| FGSM     |            |           |           |           |
+| PGD      |            |           |           |           |
+| CW       |            |           |           |           |
+| Hop      |            |           |           |           |
+
+To remove the black-box and oblivious attack confusion:
+
+| attacks         | no def acc | AdvAE | DefenseGAN | HGD | PureVAE | AdvTrain | AdvTrain+AE |   |
+|-----------------+------------+-------+------------+-----+---------+----------+-------------+---|
+| traininig time  |            |       |            |     |         |          |             |   |
+| inference time  |            |       |            |     |         |          |             |   |
+| transferable    |            | Yes   | Yes        | Yes | Yes     | No       | No          |   |
+|-----------------+------------+-------+------------+-----+---------+----------+-------------+---|
+| FGSM            |            |       |            |     |         |          |             |   |
+| PGD obli        |            |       |            |     |         |          |             |   |
+| PGD             |            |       |            |     |         |          |             |   |
+| CW              |            |       |            |     |         |          |             |   |
+| Hop (black-box) |            |       |            |     |         |          |             |   |
+
+I might want to remove CW because:
+- l2 distance seems not working for all defenses
+- CW is slow
+
+Also, the epsilon table should supercede this table. So I can remove
+this table entirely. If I really want to a table to show the numbers,
+pick a epsilon=0.3.
+
+Transferability
+
+| attacks         | no def acc | X/X | X/A | X/B | X/C | X/D | Classification / Detection |
+|-----------------+------------+-----+-----+-----+-----+-----+----------------------------|
+| FGSM            |            |     |     |     |     |     |                            |
+| PGD             |            |     |     |     |     |     |                            |
+| CW              |            |     |     |     |     |     |                            |
+| Hop (black-box) |            |     |     |     |     |     |                            |
+
+Ensemble
+
+| attacks         | no def acc | X/X | X/A | X/B | X/C | X/D |
+|-----------------+------------+-----+-----+-----+-----+-----+
+| FGSM            |            |     |     |     |     |     |
+| PGD             |            |     |     |     |     |     |
+| CW              |            |     |     |     |     |     |
+| Hop (black-box) |            |     |     |     |     |     |
+
+
+*** Epsilon table
+Different distortion (use a figure)
+
+| attacks  | no def acc | epsilon = 0 | 0.1 | 0.2 | 0.3 | 0.4 | 0.5 |
+|----------+------------+-------------+-----+-----+-----+-----+-----|
+| FGSM     |            |             |     |     |     |     |     |
+| PGD      |            |             |     |     |     |     |     |
+| CW       |            |             |     |     |     |     |     |
+| Hop      |            |             |     |     |     |     |     |
+|----------+------------+-------------+-----+-----+-----+-----+-----|
+| defense  |            |             |     |     |     |     |     |
+|----------+------------+-------------+-----+-----+-----+-----+-----|
+| AdvAE    |            |             |     |     |     |     |     |
+| HGD      |            |             |     |     |     |     |     |
+| PureVAE  |            |             |     |     |     |     |     |
+| AdvTrain |            |             |     |     |     |     |     |
+
+*** Different AE
+
+| attacks         | no def acc | d1, w1 | d1 w2 | d2 w1 | d2 w2 | dunet |
+|-----------------+------------+--------+-------+-------+-------+-------|
+| # params        |            |        |       |       |       |       |
+|-----------------+------------+--------+-------+-------+-------+-------|
+| FGSM            |            |        |       |       |       |       |
+| PGD             |            |        |       |       |       |       |
+| CW              |            |        |       |       |       |       |
+| Hop (black-box) |            |        |       |       |       |       |
+
+*** lambda
+Probably a figure for this.
+
+| attacks         | no def acc | lambda = 0 | 0.2 | 0.5 | 1 | 2 | 5 |
+|-----------------+------------+------------+-----+-----+---+---+---|
+| FGSM            |            |            |     |     |   |   |   |
+| PGD             |            |            |     |     |   |   |   |
+| CW              |            |            |     |     |   |   |   |
+| Hop (black-box) |            |            |     |     |   |   |   |
+
+
 
 * New TODOs
 ** DONE BPDA
    CLOSED: [2019-07-30 Tue 18:00]
 ** TODO Transferability on CIFAR models
 ** TODO performance on CIFAR
-** TODO other blackbox
+** DONE other blackbox
+   CLOSED: [2019-08-27 Tue 10:58]
 ** TODO simplify base models
 - e.g. remove dropout, remove unused FC and CNN layers in both base
   models and AE model.

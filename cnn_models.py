@@ -128,15 +128,10 @@ class MNISTModel(CNNModel):
         inputs = keras.layers.Input(shape=self.xshape(), dtype='float32')
         x = inputs
         # x = keras.layers.Reshape(self.xshape())(inputs)
-        x = keras.layers.Conv2D(32, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Conv2D(32, 3)(x)
+        x = keras.layers.Conv2D(32, 5)(x)
         x = keras.layers.Activation('relu')(x)
         x = keras.layers.MaxPool2D((2,2))(x)
-
-        x = keras.layers.Conv2D(64, 3)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Conv2D(64, 3)(x)
+        x = keras.layers.Conv2D(64, 5)(x)
         x = keras.layers.Activation('relu')(x)
         x = keras.layers.MaxPool2D((2,2))(x)
         self.CNN = keras.models.Model(inputs, x)
@@ -147,10 +142,7 @@ class MNISTModel(CNNModel):
         # (4,4,64,)
         inputs = keras.layers.Input(batch_shape=shape, dtype='float32')
         x = keras.layers.Flatten()(inputs)
-        x = keras.layers.Dense(200)(x)
-        x = keras.layers.Activation('relu')(x)
-        x = keras.layers.Dropout(rate=0.5)(x)
-        x = keras.layers.Dense(200)(x)
+        x = keras.layers.Dense(1024)(x)
         x = keras.layers.Activation('relu')(x)
         logits = keras.layers.Dense(10)(x)
         self.FC = keras.models.Model(inputs, logits)
@@ -277,18 +269,21 @@ class MyResNet(CifarModel):
         logits = keras.layers.Dense(10, kernel_initializer='he_normal')(x)
         self.FC = keras.models.Model(inputs, logits)
 class MyResNet29(MyResNet):
+    @staticmethod
     def NAME():
         return 'resnet29'
     def setup_resnet(self):
         n = 3 # 29
         self.depth = n * 9 + 2
 class MyResNet56(MyResNet):
+    @staticmethod
     def NAME():
         return 'resnet56'
     def setup_resnet(self):
         n = 6 # 56
         self.depth = n * 9 + 2
 class MyResNet110(MyResNet):
+    @staticmethod
     def NAME():
         return 'resnet110'
     def setup_resnet(self):

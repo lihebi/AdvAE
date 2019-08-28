@@ -1,4 +1,5 @@
 import keras
+from keras.layers import Dense, Flatten, Reshape, Input, Conv2D, MaxPooling2D, UpSampling2D
 import tensorflow as tf
 import numpy as np
 import sys
@@ -51,13 +52,20 @@ class AEModel():
         self.shape = self.cnn_model.xshape()
         
         with tf.variable_scope('my_AE'):
-            self.setup_AE()
+            self.x = keras.layers.Input(shape=self.shape, dtype='float32')
+            # this function is supposed to use self.x as input, and set self.decoded
+            self.decoded = self.setup_AE(self.x)
+            self.rec = keras.layers.Activation('sigmoid')(self.decoded)
+            self.AE1 = keras.models.Model(self.x, self.decoded)
+            self.AE = keras.models.Model(self.x, self.rec)
             
         self.AE_vars = tf.trainable_variables('my_AE')
         self.additional_train_steps = [self.AE.updates]
 
     def evaluate_np(self, sess, npx):
         return sess.run(self.rec, feed_dict={self.x: npx})
+    def setup_AE(self, x):
+        raise NotImplementedError()
         
     def train_AE(self, sess, clean_x):
         noise_factor = 0.1
@@ -84,7 +92,99 @@ class AEModel():
                       # verbose=2,
                       callbacks=callbacks)
 
-    def setup_AE(self):
+        
+    def save_weights(self, sess, path):
+        """Save weights using keras API."""
+        with sess.as_default():
+            self.AE.save_weights(path)
+    def load_weights(self, sess, path):
+        with sess.as_default():
+            self.AE.load_weights(path)
+
+class FCAE(AEModel):
+    @staticmethod
+    def NAME():
+        return "fcAE"
+    def setup_AE(self, x):
+        x = Flatten()(x)
+        x = Dense(32, activation='relu',
+                  # FIXME effect of this regularizer?
+                  activity_regularizer=keras.regularizers.l1(10e-5))(x)
+        # "decoded" is the lossy reconstruction of the input
+        x = Dense(784)(x)
+        decoded = Reshape(self.shape)(x)
+        return decoded
+
+class deepFCAE(AEModel):
+    @staticmethod
+    def NAME():
+        return "deepfcAE"
+    def setup_AE(self, x):
+        x = Flatten()(x)
+        x = Dense(128, activation='relu')(x)
+        x = Dense(64, activation='relu')(x)
+        x = Dense(32, activation='relu')(x)
+        x = Dense(64, activation='relu')(x)
+        x = Dense(128, activation='relu')(x)
+        # "decoded" is the lossy reconstruction of the input
+        x = Dense(784)(x)
+        decoded = Reshape(self.shape)(x)
+        return decoded
+
+class CNN1AE(AEModel):
+    @staticmethod
+    def NAME():
+        return "cnn1AE"
+    def setup_AE(self, x):
+        encoded = my_ae_conv_layer(x, 16, (3,3), (2,2), batch_norm=False)
+        x = my_ae_conv_layer(encoded, 16, (3,3), (2,2), batch_norm=False, up=True)
+
+        # channel = 1 or 3 depending on dataset
+        channel = self.shape[2]
+        decoded = keras.layers.Conv2D(channel, (3, 3), padding='same')(x)
+        return decoded
+
+class CNN2AE(AEModel):
+    @staticmethod
+    def NAME():
+        return "cnn2AE"
+    def setup_AE(self, x):
+        x = my_ae_conv_layer(x, 16, (3,3), (2,2), batch_norm=False)
+        encoded = my_ae_conv_layer(x, 8, (3,3), (2,2), batch_norm=False)
+        x = my_ae_conv_layer(encoded, 8, (3,3), (2,2), batch_norm=False, up=True)
+        x = my_ae_conv_layer(x, 16, (3,3), (2,2), batch_norm=False, up=True)
+
+        # channel = 1 or 3 depending on dataset
+        channel = self.shape[2]
+        decoded = keras.layers.Conv2D(channel, (3, 3), padding='same')(x)
+        return decoded
+
+class CNN3AE(AEModel):
+    @staticmethod
+    def NAME():
+        return "cnn3AE"
+    def setup_AE(self, x):
+        x = my_ae_conv_layer(x, 16, (3,3), (2,2), batch_norm=False)
+        x = my_ae_conv_layer(x, 8, (3,3), (2,2), batch_norm=False)
+        encoded = my_ae_conv_layer(x, 8, (3,3), (2,2), batch_norm=False)
+        x = my_ae_conv_layer(encoded, 8, (3,3), (2,2), batch_norm=False, up=True)
+        x = my_ae_conv_layer(x, 8, (3,3), (2,2), batch_norm=False, up=True)
+
+        # x = my_ae_conv_layer(x, 16, (3,3), (2,2), batch_norm=False, up=True)
+        # This should not have same padding, so that the dimension is 14*2 instead of 16*2
+        x = keras.layers.Conv2D(16, (3,3), activation='relu')(x)
+        x = UpSampling2D((2,2))(x)
+        
+        # channel = 1 or 3 depending on dataset
+        channel = self.shape[2]
+        decoded = keras.layers.Conv2D(channel, (3, 3), padding='same')(x)
+        return decoded
+
+class MNISTAE(AEModel):
+    @staticmethod
+    def NAME():
+        return "mnistAE"
+    def setup_AE(self, x):
         """From noise_x to x.
 
         Different numbers for AE:
@@ -99,10 +199,10 @@ class AEModel():
         3, (3,3)
 
         """
-        inputs = keras.layers.Input(shape=self.shape, dtype='float32')
+        # inputs = keras.layers.Input(shape=self.shape, dtype='float32')
         # inputs = keras.layers.Input(shape=(28,28,1), dtype='float32')
         # denoising
-        x = my_ae_conv_layer(inputs, 32, (3,3), (2,2))
+        x = my_ae_conv_layer(x, 32, (3,3), (2,2))
         encoded = my_ae_conv_layer(x, 32, (3,3), (2,2))
         # at this point the representation is (7, 7, 32)
         x = my_ae_conv_layer(encoded, 32, (3,3), (2,2), batch_norm=False, up=True)
@@ -111,29 +211,13 @@ class AEModel():
         # channel = 1 or 3 depending on dataset
         channel = self.shape[2]
         decoded = keras.layers.Conv2D(channel, (3, 3), padding='same')(x)
-
+        return decoded
         
-        self.AE1 = keras.models.Model(inputs, decoded)
-        rec = keras.layers.Activation('sigmoid')(decoded)
-        
-        self.AE = keras.models.Model(inputs, rec)
-
-        # These are just place holders for easier evaluation
-        self.x = inputs
-        self.rec = decoded
-        
-    def save_weights(self, sess, path):
-        """Save weights using keras API."""
-        with sess.as_default():
-            self.AE.save_weights(path)
-    def load_weights(self, sess, path):
-        with sess.as_default():
-            self.AE.load_weights(path)
 class CifarAEModel(AEModel):
     """This autoencoder has more capacity"""
     @staticmethod
     def NAME():
-        return "cifarae"
+        return "cifarAE"
     # def __init__(self, cnn_model):
     #     super().__init__(cnn_model)
     def setup_AE(self):

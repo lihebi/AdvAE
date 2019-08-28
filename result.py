@@ -1,5 +1,3 @@
-import keras
-import tensorflow as tf
 import numpy as np
 import sys
 import math
@@ -7,21 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import random
 import os
-import cleverhans.model
-from cleverhans.attacks import FastGradientMethod
-from cleverhans.attacks import ProjectedGradientDescent, SaliencyMapMethod
-from cleverhans.attacks import CarliniWagnerL2
-from cleverhans.attacks_tf import jacobian_graph, jacobian_augmentation
-
-
-from utils import *
-from tf_utils import *
-from models import *
-from defensegan_models import *
-from attacks import *
-from blackbox import test_sub
-from exp_utils import *
-
+import json
 
 def parse_single_whitebox(json_file):
     with open(json_file, 'r') as fp:
@@ -280,3 +264,72 @@ def myplot():
 def __test_plot():
     myplot()
 
+def plot_onto_lambda():
+    "With ep=0.38"
+    lams = [0, 0.2, 0.5, 1, 1.5, 2, 5]
+    res = []
+    for lam in lams:
+        fname = 'images/test-result-MNIST-mnistcnn-cnn3AE-C0_A2_{}.json'.format(lam)
+        with open(fname) as fp:
+            j = json.load(fp)
+            data = j['epsilon_exp_data']
+            assert round(data[2][0], ndigits=1) == 0.1
+            assert round(data[7][0], ndigits=1) == 0.3
+            assert round(data[9][0], ndigits=2) == 0.38
+            assert round(data[12][0], ndigits=1) == 0.5
+            # FGSM, PGD, Hop
+            res.append([data[9][1], data[9][2], data[9][3]])
+    fig = plt.figure(dpi=300)
+
+    plt.plot(lams, [d[0] for d in res], 'x-', color='green', markersize=4, label='FGSM')
+    plt.plot(lams, [d[1] for d in res], '^-', color='brown', markersize=4, label='PGD')
+    plt.plot(lams, [d[2] for d in res], 'o-', color='blue', markersize=4, label='HSJA')
+
+    plt.xlabel('Lambda')
+    plt.ylabel('Accuracy')
+    plt.legend(fontsize='small')
+    plt.savefig('images/onto-lambda-epsilon-0.38.pdf', bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
+
+def plot_lambda_onto_epsilon():
+    """Plot lambda figure, for a selected epsilon setting."""
+    lams = [0, 0.2, 0.5, 1, 1.5, 2, 5]
+    lam_data = []
+    for lam in lams:
+        fname = 'images/test-result-MNIST-mnistcnn-cnn3AE-C0_A2_{}.json'.format(lam)
+        res = {}
+        with open(fname) as fp:
+            j = json.load(fp)
+            data = j['epsilon_exp_data']
+            res['eps'] = [d[0] for d in data]
+            res['FGSM'] = [d[1] for d in data]
+            res['PGD'] = [d[2] for d in data]
+            res['Hop'] = [d[3] for d in data]
+        lam_data.append(res)
+
+    fig = plt.figure(dpi=300)
+
+    colors = [(0.5, x, y) for x,y in zip(np.arange(0, 1, 1 / len(lams)),
+                                         np.arange(0, 1, 1 / len(lams)))]
+    # colors2 = [(0.2, x, y) for x,y in zip(range(0, 1, len(lams)),
+    #                                       range(0, 1, len(lams)))]
+    for lam, data, marker, color in zip(lams, lam_data,
+                                         # ['x-', '^-', 'o-', 's-']*2,
+                                         ['o-']*len(lams),
+                                         colors):
+        # plt.plot(data['eps'], data['FGSM'], marker, color=color,
+        #          markersize=4, label='FGSM {}'.format(lam))
+        plt.plot(data['eps'], data['PGD'], marker, color=color,
+                 markersize=4, label='PGD {}'.format(lam))
+        # plt.plot(data['eps'], data['Hop'], marker, color=color2,
+        #          markersize=4, label='Hop {}'.format(lam))
+    plt.xlabel('Distortion')
+    plt.ylabel('Accuracy')
+    plt.legend(fontsize='small')
+    plt.savefig('images/lamda-onto-epsilon.pdf', bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
+
+def __test():
+    # this is the main lambda plot
+    plot_lambda_onto_epsilon()
+    plot_onto_lambda()

@@ -202,11 +202,18 @@ def test_model(cnn_cls, ae_cls, advae_cls,
         print('loading model ..')
         model, sess = load_model(cnn_cls, ae_cls, advae_cls,
                                  dataset_name=dataset_name)
+        res = {}
         # FIXME this is total #params. If I want to get trainable
         # ones, I might need to do
         # sum([np.prod(K.get_value(w).shape) for w in model.trainable_weights])
         print('CNN params: ', model.cnn_model.model.count_params())
+        print('Conv params: ', model.cnn_model.CNN.count_params())
+        print('FC params: ', model.cnn_model.FC.count_params())
         print('AE params:', model.ae_model.AE.count_params())
+        res['CNN params'] = model.cnn_model.model.count_params()
+        res['Conv params'] = model.cnn_model.CNN.count_params()
+        res['FC params'] = model.cnn_model.FC.count_params()
+        res['AE params'] = model.ae_model.AE.count_params()
         
         print('testing {} ..'.format(plot_prefix))
         # model.test_all(sess, test_x, test_y,
@@ -222,7 +229,6 @@ def test_model(cnn_cls, ae_cls, advae_cls,
         
         # alternative testing
         eps = np.arange(0.02,0.6,0.04).tolist()
-        res = {}
         res["no atttack CNN"] = evaluate_no_attack_CNN(sess, model, test_x, test_y,
                                                        num_samples=100)
         res["no atttack AE"] = evaluate_no_attack_AE(sess, model, test_x, test_y,

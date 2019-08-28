@@ -320,16 +320,50 @@ def plot_lambda_onto_epsilon():
         # plt.plot(data['eps'], data['FGSM'], marker, color=color,
         #          markersize=4, label='FGSM {}'.format(lam))
         plt.plot(data['eps'], data['PGD'], marker, color=color,
-                 markersize=4, label='PGD {}'.format(lam))
+                 markersize=4, label='PGD $\lambda$={}'.format(lam))
         # plt.plot(data['eps'], data['Hop'], marker, color=color2,
         #          markersize=4, label='Hop {}'.format(lam))
     plt.xlabel('Distortion')
     plt.ylabel('Accuracy')
     plt.legend(fontsize='small')
-    plt.savefig('images/lamda-onto-epsilon.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('images/lambda-onto-epsilon.pdf', bbox_inches='tight', pad_inches=0)
     plt.close(fig)
+
+def plot_aesize_onto_epsilon():
+    cols = []
+    cols.append(['attacks', '#params', 'FGSM', 'PGD', 'Hop'])
+    # cnn_params = 1111946
+    # ae_params = [50992, 222384, 2625, 3217, 4385]
+    fig = plt.figure(dpi=300)
+    colors = [(0.5, x, y) for x,y in zip(np.arange(0, 1, 1 / 5),
+                                         np.arange(0, 1, 1 / 5))]
+    for ae, name, marker, color in zip(['fcAE', 'deepfcAE', 'cnn1AE', 'cnn2AE', 'cnn3AE'],
+                                       ['1-layer FC', '5-layer FC', '1-layer CNN',
+                                        '2-layer CNN', '3-layer CNN'],
+                                       ['x-', '^-', 'o-', 's-']*2,
+                                       colors):
+        fname = 'images/test-result-MNIST-mnistcnn-{}-C0_A2_1.json'.format(ae)
+        with open(fname) as fp:
+            j = json.load(fp)
+            data = j['epsilon_exp_data']
+            # res['FGSM'] = [d[1] for d in data]
+            eps = [d[0] for d in data]
+            pgd_data = [d[2] for d in data]
+            param = j['AE params']
+            # res['Hop'] = [d[3] for d in data]
+            # cols.append([ae, param, res['FGSM'], res['PGD'], res['Hop']])
+            plt.plot(eps, pgd_data, marker, color=color,
+                     markersize=4, label='{}, #param={}'.format(name, param))
+    plt.xlabel('Distortion')
+    plt.ylabel('Accuracy')
+    plt.legend(fontsize='small')
+    plt.savefig('images/aesize-onto-epsilon.pdf', bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
+            
 
 def __test():
     # this is the main lambda plot
     plot_lambda_onto_epsilon()
     plot_onto_lambda()
+    plot_aesize_onto_epsilon()
+    

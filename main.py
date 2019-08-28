@@ -123,6 +123,7 @@ def main_epsilon_exp():
     # AdvAE
     # FIXME use some other lambda
     run_exp_model(MNISTModel, CNN3AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, CNN3AE, get_lambda_model(0), dataset_name='MNIST', run_test=True)
     # HGD
     run_exp_model(MNISTModel, CNN3AE, B2_Model, dataset_name='MNIST', run_test=True)
     # ItAdvTrain
@@ -134,15 +135,17 @@ def main_lambda_exp():
     # run_exp_model(MNISTModel, AEModel, A2_Model, dataset_name='MNIST', run_test=True)
     # Testing different hyperparameter lambdas
     # this is the same as A2_Model
-    for lam in [0, 0.2, 0.5, 1, 1.5, 2, 5]:
+    # lams = [0, 0.2, 0.5, 0.8, 1, 1.2, 1.5, 2, 3, 4, 5]
+    lams = [0, 0.2, 0.5, 0.8, 1, 1.2, 1.5, 2, 5]
+    for lam in lams:
         run_exp_model(MNISTModel, CNN3AE, get_lambda_model(lam), dataset_name='MNIST', run_test=True)
 
 def main_ae_size():
-    run_exp_model(MNISTModel, CNN1AE, get_lambda_model(1), dataset_name='MNIST', run_test=False)
-    run_exp_model(MNISTModel, CNN2AE, get_lambda_model(1), dataset_name='MNIST', run_test=False)
-    run_exp_model(MNISTModel, CNN3AE, get_lambda_model(1), dataset_name='MNIST', run_test=False)
-    run_exp_model(MNISTModel, FCAE, get_lambda_model(1), dataset_name='MNIST', run_test=False)
-    run_exp_model(MNISTModel, deepFCAE, get_lambda_model(1), dataset_name='MNIST', run_test=False)
+    run_exp_model(MNISTModel, CNN1AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, CNN2AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, CNN3AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, FCAE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, deepFCAE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
 
 def __test():
     m = MNISTModel()

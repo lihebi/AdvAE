@@ -291,6 +291,45 @@ def plot_onto_lambda():
     plt.savefig('images/onto-lambda-epsilon-0.38.pdf', bbox_inches='tight', pad_inches=0)
     plt.close(fig)
 
+def plot_defense_onto_epsilon():
+    "HGD, ItAdv, AdvAE"
+    
+    jfiles = ['images/test-result-MNIST-mnistcnn-cnn3AE-B2.json',
+              'images/test-result-MNIST-mnistcnn-cnn3AE-C0_A2_1.json',
+              # 'images/test-result-MNIST-mnistcnn-cnn3AE-ItAdv.json',
+              'images/test-result-MNIST-mnistcnn-identityAE-ItAdv.json']
+    lam_data = []
+    for fname in jfiles:
+        res = {}
+        with open(fname) as fp:
+            j = json.load(fp)
+            data = j['epsilon_exp_data']
+            res['eps'] = [d[0] for d in data]
+            res['FGSM'] = [d[1] for d in data]
+            res['PGD'] = [d[2] for d in data]
+            res['Hop'] = [d[3] for d in data]
+        lam_data.append(res)
+
+    colors = [(0.5, x, y) for x,y in zip(np.arange(0, 1, 1 / len(lam_data)),
+                                         np.arange(0, 1, 1 / len(lam_data)))]
+    lams = ['HGD', 'AdvAE',
+            # 'ItAdv-full',
+            'ItAdv']
+    for attack in ['FGSM', 'PGD', 'Hop']:
+        fig = plt.figure(dpi=300)
+        for lam, data, marker, color in zip(lams, lam_data,
+                                             ['o-']*len(lams),
+                                             colors):
+            plt.plot(data['eps'], data[attack], marker, color=color,
+                     markersize=4, label='{} {}'.format(attack, lam))
+        plt.xlabel('Distortion')
+        plt.ylabel('Accuracy')
+        plt.legend(fontsize='small')
+        plt.savefig('images/defense-onto-epsilon-{}.pdf'.format(attack),
+                    bbox_inches='tight', pad_inches=0)
+        plt.close(fig)
+    
+
 def plot_lambda_onto_epsilon():
     """Plot lambda figure, for a selected epsilon setting."""
     lams = [0, 0.2, 0.5, 1, 1.5, 2, 5]
@@ -307,27 +346,25 @@ def plot_lambda_onto_epsilon():
             res['Hop'] = [d[3] for d in data]
         lam_data.append(res)
 
-    fig = plt.figure(dpi=300)
-
     colors = [(0.5, x, y) for x,y in zip(np.arange(0, 1, 1 / len(lams)),
                                          np.arange(0, 1, 1 / len(lams)))]
     # colors2 = [(0.2, x, y) for x,y in zip(range(0, 1, len(lams)),
     #                                       range(0, 1, len(lams)))]
-    for lam, data, marker, color in zip(lams, lam_data,
-                                         # ['x-', '^-', 'o-', 's-']*2,
-                                         ['o-']*len(lams),
-                                         colors):
-        # plt.plot(data['eps'], data['FGSM'], marker, color=color,
-        #          markersize=4, label='FGSM {}'.format(lam))
-        plt.plot(data['eps'], data['PGD'], marker, color=color,
-                 markersize=4, label='PGD $\lambda$={}'.format(lam))
-        # plt.plot(data['eps'], data['Hop'], marker, color=color2,
-        #          markersize=4, label='Hop {}'.format(lam))
-    plt.xlabel('Distortion')
-    plt.ylabel('Accuracy')
-    plt.legend(fontsize='small')
-    plt.savefig('images/lambda-onto-epsilon.pdf', bbox_inches='tight', pad_inches=0)
-    plt.close(fig)
+
+    for attack in ['FGSM', 'PGD', 'Hop']:
+        fig = plt.figure(dpi=300)
+        for lam, data, marker, color in zip(lams, lam_data,
+                                             # ['x-', '^-', 'o-', 's-']*2,
+                                             ['o-']*len(lams),
+                                             colors):
+            plt.plot(data['eps'], data[attack], marker, color=color,
+                     markersize=4, label='{} $\lambda$={}'.format(attack, lam))
+        plt.xlabel('Distortion')
+        plt.ylabel('Accuracy')
+        plt.legend(fontsize='small')
+        plt.savefig('images/lambda-onto-epsilon-{}.pdf'.format(attack),
+                    bbox_inches='tight', pad_inches=0)
+        plt.close(fig)
 
 def plot_aesize_onto_epsilon():
     cols = []
@@ -359,11 +396,57 @@ def plot_aesize_onto_epsilon():
     plt.legend(fontsize='small')
     plt.savefig('images/aesize-onto-epsilon.pdf', bbox_inches='tight', pad_inches=0)
     plt.close(fig)
-            
+
+def plot_train_process():
+    fname = 'images/train-process.json'
+    fig = plt.figure(dpi=300)
+    keys1 = [
+        # different defense
+        'MNIST-mnistcnn-cnn1AE-ItAdv-AdvAE',
+        'MNIST-mnistcnn-cnn3AE-B2-AdvAE',
+        'MNIST-mnistcnn-cnn3AE-ItAdv-AdvAE',
+        'MNIST-mnistcnn-identityAE-ItAdv-AdvAE',
+    ]
+    keys2 = [
+        # differet AE
+        'MNIST-mnistcnn-cnn1AE-C0_A2_1-AdvAE',
+        'MNIST-mnistcnn-cnn2AE-C0_A2_1-AdvAE',
+        'MNIST-mnistcnn-cnn3AE-C0_A2_1-AdvAE',
+        'MNIST-mnistcnn-fcAE-C0_A2_1-AdvAE',
+        'MNIST-mnistcnn-deepfcAE-C0_A2_1-AdvAE',
+    ]
+    keys3 = [
+        # different lambdas
+        # 'MNIST-mnistcnn-cnn3AE-C0_A2_0-AdvAE',
+        # 'MNIST-mnistcnn-cnn3AE-C0_A2_0.2-AdvAE',
+        'MNIST-mnistcnn-cnn3AE-C0_A2_0.5-AdvAE',
+        'MNIST-mnistcnn-cnn3AE-C0_A2_1-AdvAE',
+        'MNIST-mnistcnn-cnn3AE-C0_A2_1.5-AdvAE',
+        'MNIST-mnistcnn-cnn3AE-C0_A2_2-AdvAE',
+        'MNIST-mnistcnn-cnn3AE-C0_A2_5-AdvAE'
+    ]
+
+    keys = keys2
+
+    markers = ['o-', '*-', '+-', 'x-', '^-'] * 3
+    with open(fname) as fp:
+        j = json.load(fp)
+        colors = [(0.5, x, y) for x,y in zip(np.arange(0, 1, 1 / len(keys)),
+                                             np.arange(0, 1, 1 / len(keys)))]
+        for key, marker, color in zip(keys, markers, colors):
+            data = j[key]
+            plt.plot(data, marker, color=color,
+                     markersize=4, label=key)
+    plt.xlabel('Epoch')
+    plt.ylabel('Val loss')
+    plt.legend(fontsize='small')
+    plt.savefig('images/train-process.pdf', bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
 
 def __test():
     # this is the main lambda plot
     plot_lambda_onto_epsilon()
-    plot_onto_lambda()
+    # plot_onto_lambda()
     plot_aesize_onto_epsilon()
-    
+    plot_defense_onto_epsilon()
+    plot_train_process()

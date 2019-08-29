@@ -122,6 +122,9 @@ Probably a figure for this.
 | CW              |            |            |     |     |   |   |   |
 | Hop (black-box) |            |            |     |     |   |   |   |
 
+*** Training process plot
+Training loss, validation loss, validation accuracy.
+
 
 
 * New TODOs

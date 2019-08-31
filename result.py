@@ -296,30 +296,31 @@ def plot_defense_onto_epsilon():
     
     jfiles = ['images/test-result-MNIST-mnistcnn-cnn3AE-B2.json',
               'images/test-result-MNIST-mnistcnn-cnn3AE-C0_A2_1.json',
-              # 'images/test-result-MNIST-mnistcnn-cnn3AE-ItAdv.json',
+              'images/test-result-MNIST-mnistcnn-cnn1AE-C0_A2_1.json',
+              'images/test-result-MNIST-mnistcnn-cnn3AE-ItAdv.json',
               'images/test-result-MNIST-mnistcnn-identityAE-ItAdv.json']
+    lams = ['HGD', 'AdvAE 3-layer',
+            'AdvAE 1-layer',
+            'ItAdv-full',
+            'ItAdv']
     lam_data = []
     for fname in jfiles:
         res = {}
         with open(fname) as fp:
             j = json.load(fp)
-            data = j['epsilon_exp_data']
-            res['eps'] = [d[0] for d in data]
-            res['FGSM'] = [d[1] for d in data]
-            res['PGD'] = [d[2] for d in data]
-            res['Hop'] = [d[3] for d in data]
+            res['eps'] = j['epsilon']
+            res['FGSM'] = j['FGSM']
+            res['PGD'] = j['PGD']
         lam_data.append(res)
 
     colors = [(0.5, x, y) for x,y in zip(np.arange(0, 1, 1 / len(lam_data)),
                                          np.arange(0, 1, 1 / len(lam_data)))]
-    lams = ['HGD', 'AdvAE',
-            # 'ItAdv-full',
-            'ItAdv']
-    for attack in ['FGSM', 'PGD', 'Hop']:
+    for attack in ['FGSM', 'PGD']:
         fig = plt.figure(dpi=300)
         for lam, data, marker, color in zip(lams, lam_data,
-                                             ['o-']*len(lams),
-                                             colors):
+                                            ['o-', '*-', 'x-', '^-'] * 3,
+                                            # ['o-']*len(lams),
+                                            colors):
             plt.plot(data['eps'], data[attack], marker, color=color,
                      markersize=4, label='{} {}'.format(attack, lam))
         plt.xlabel('Distortion')
@@ -332,18 +333,18 @@ def plot_defense_onto_epsilon():
 
 def plot_lambda_onto_epsilon():
     """Plot lambda figure, for a selected epsilon setting."""
-    lams = [0, 0.2, 0.5, 1, 1.5, 2, 5]
+    # lams = [0, 0.2, 0.5, 1, 1.5, 2, 5]
+    lams = [0, 0.2, 0.5, 0.8, 1, 1.2, 1.5, 2, 3, 4, 5]
     lam_data = []
     for lam in lams:
         fname = 'images/test-result-MNIST-mnistcnn-cnn3AE-C0_A2_{}.json'.format(lam)
         res = {}
         with open(fname) as fp:
             j = json.load(fp)
-            data = j['epsilon_exp_data']
-            res['eps'] = [d[0] for d in data]
-            res['FGSM'] = [d[1] for d in data]
-            res['PGD'] = [d[2] for d in data]
-            res['Hop'] = [d[3] for d in data]
+            res['eps'] = j['epsilon']
+            res['FGSM'] = j['FGSM']
+            res['PGD'] = j['PGD']
+            # res['Hop'] = j['Hop']
         lam_data.append(res)
 
     colors = [(0.5, x, y) for x,y in zip(np.arange(0, 1, 1 / len(lams)),
@@ -351,12 +352,11 @@ def plot_lambda_onto_epsilon():
     # colors2 = [(0.2, x, y) for x,y in zip(range(0, 1, len(lams)),
     #                                       range(0, 1, len(lams)))]
 
-    for attack in ['FGSM', 'PGD', 'Hop']:
+    for attack in ['FGSM', 'PGD']:
         fig = plt.figure(dpi=300)
         for lam, data, marker, color in zip(lams, lam_data,
-                                             # ['x-', '^-', 'o-', 's-']*2,
-                                             ['o-']*len(lams),
-                                             colors):
+                                            ['o-', '*-', 'x-', 's-', '^-'] * 3,
+                                            colors):
             plt.plot(data['eps'], data[attack], marker, color=color,
                      markersize=4, label='{} $\lambda$={}'.format(attack, lam))
         plt.xlabel('Distortion')
@@ -367,28 +367,34 @@ def plot_lambda_onto_epsilon():
         plt.close(fig)
 
 def plot_aesize_onto_epsilon():
-    cols = []
-    cols.append(['attacks', '#params', 'FGSM', 'PGD', 'Hop'])
     # cnn_params = 1111946
     # ae_params = [50992, 222384, 2625, 3217, 4385]
     fig = plt.figure(dpi=300)
-    colors = [(0.5, x, y) for x,y in zip(np.arange(0, 1, 1 / 5),
-                                         np.arange(0, 1, 1 / 5))]
-    for ae, name, marker, color in zip(['fcAE', 'deepfcAE', 'cnn1AE', 'cnn2AE', 'cnn3AE'],
-                                       ['1-layer FC', '5-layer FC', '1-layer CNN',
-                                        '2-layer CNN', '3-layer CNN'],
-                                       ['x-', '^-', 'o-', 's-']*2,
+    colors = [(0.5, x, y) for x,y in zip(np.arange(0, 1, 1 / 9),
+                                         np.arange(0, 1, 1 / 9))]
+    for ae, name, marker, color in zip(['fcAE', 'deepfcAE', 'cnn1AE', 'cnn2AE', 'cnn3AE',
+                                        'wide_16_32_32_16_AE',
+                                        'wide_32_16_16_32_AE',
+                                        'wide_32_32_32_32_AE',
+                                        'wide_32_64_64_32_AE'
+    ],
+                                       ['1-layer 32 FC', '5-layer 128-64-32-64-128 FC',
+                                        '2-layer 16-16 CNN',
+                                        '4-layer 16-8-8-16 CNN',
+                                        '6-layer 16-8-8-8-8-16 CNN',
+                                        '4-layer 16-32-32-16',
+                                        '4-layer 32_16_16_32',
+                                        '4-layer 32_32_32_32',
+                                        '4-layer 32_64_64_32'
+                                       ],
+                                       ['x-', '^-', 'o-', 's-']*3,
                                        colors):
         fname = 'images/test-result-MNIST-mnistcnn-{}-C0_A2_1.json'.format(ae)
         with open(fname) as fp:
             j = json.load(fp)
-            data = j['epsilon_exp_data']
-            # res['FGSM'] = [d[1] for d in data]
-            eps = [d[0] for d in data]
-            pgd_data = [d[2] for d in data]
+            eps = j['epsilon']
+            pgd_data = j['PGD']
             param = j['AE params']
-            # res['Hop'] = [d[3] for d in data]
-            # cols.append([ae, param, res['FGSM'], res['PGD'], res['Hop']])
             plt.plot(eps, pgd_data, marker, color=color,
                      markersize=4, label='{}, #param={}'.format(name, param))
     plt.xlabel('Distortion')
@@ -428,7 +434,7 @@ def plot_train_process():
 
     keys = keys2
 
-    markers = ['o-', '*-', '+-', 'x-', '^-'] * 3
+    markers = ['o-', '*-', 'x-', '^-'] * 3
     with open(fname) as fp:
         j = json.load(fp)
         colors = [(0.5, x, y) for x,y in zip(np.arange(0, 1, 1 / len(keys)),
@@ -449,4 +455,4 @@ def __test():
     # plot_onto_lambda()
     plot_aesize_onto_epsilon()
     plot_defense_onto_epsilon()
-    plot_train_process()
+    # plot_train_process()

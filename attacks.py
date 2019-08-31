@@ -114,6 +114,9 @@ def my_HSJA_foolbox_np(sess, model, xval, yval):
             adversarial = attack(x, np.argmax(y), log_every_n_steps=20)
             # FIXME NOW this might be None
             # print(adversarial.shape)
+            if adversarial is None:
+                adversarial = np.zeros_like(x)
+                print('WARNING: HSJA adversarial is None. Setting to 0s.')
             assert adversarial is not None
             res.append(adversarial)
         return np.array(res)

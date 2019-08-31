@@ -37,7 +37,6 @@ def my_ae_conv_layer(inputs, f, k, p, batch_norm=True, up=False):
         x = keras.layers.MaxPooling2D(p, padding='same')(x)
     return x
 
-
 class AEModel():
     """This is the default model for mnist."""
     @staticmethod
@@ -159,6 +158,27 @@ class CNN2AE(AEModel):
         decoded = keras.layers.Conv2D(channel, (3, 3), padding='same')(x)
         return decoded
 
+def get_wideae_model(filter_sizes):
+    # [32,32,32,32]
+    assert (len(filter_sizes) == 4)
+    class WideAE(AEModel):
+        """TODO NOW"""
+        @staticmethod
+        def NAME():
+            return "wide_{}_AE".format('_'.join(map(str, filter_sizes)))
+        
+        def setup_AE(self, x):
+            x = my_ae_conv_layer(x, filter_sizes[0], (3,3), (2,2), batch_norm=False)
+            encoded = my_ae_conv_layer(x, filter_sizes[1], (3,3), (2,2), batch_norm=False)
+            x = my_ae_conv_layer(encoded, filter_sizes[2], (3,3), (2,2), batch_norm=False, up=True)
+            x = my_ae_conv_layer(x, filter_sizes[3], (3,3), (2,2), batch_norm=False, up=True)
+
+            channel = self.shape[2]
+            decoded = keras.layers.Conv2D(channel, (3, 3), padding='same')(x)
+            return decoded
+    return WideAE
+
+    
 class CNN3AE(AEModel):
     @staticmethod
     def NAME():

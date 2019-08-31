@@ -286,15 +286,14 @@ class AdvAEModel(cleverhans.model.Model):
         with sess.as_default():
             callbacks = [get_lr_reducer(patience=4),
                          MyCallback(),
-                         get_es(patience=10)]
+                         get_es(patience=7)]
             model.compile(loss=myloss,
                           metrics=metrics,
                           optimizer=keras.optimizers.Adam(lr=1e-3),
                           target_tensors=self.y)
             model.fit(train_x, train_y,
                       validation_split=0.1,
-                      # DEBUG 10 for testing, 100 for production
-                      epochs=10,
+                      epochs=30,
                       callbacks=callbacks)
 
     def test_attack(self, sess, test_x, test_y, name,

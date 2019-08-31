@@ -68,6 +68,11 @@ def load_model(cnn_cls, ae_cls, advae_cls,
 
     tf_init_uninitialized(sess)
 
+    # FIXME this CNN should not be used directly
+    if 'ItAdv' in advae_cls.NAME():
+        print('!!!!!!! ******** Loading ItAdv')
+        pCNN = pCNN + '-ItAdv.hdf5'
+
     print('loading {} ..'.format(pCNN))
     cnn.load_weights(sess, pCNN)
     if load_advae:
@@ -166,6 +171,8 @@ def train_model(cnn_cls, ae_cls, advae_cls,
                 print('Trainng AdvAE ..')
                 adv.train_Adv(sess, train_x, train_y)
                 # save cnn
+                # CAUTION different filename to save new CNN weights
+                pCNN = pCNN + '-ItAdv.hdf5'
                 print('Saving model to {} ..'.format(pCNN))
                 cnn.save_weights(sess, pCNN)
                 print('saving to {} ..'.format(pAdvAE))
@@ -186,6 +193,72 @@ def train_model(cnn_cls, ae_cls, advae_cls,
     else:
         print('Already trained {}'.format(pAdvAE))
 
+def test_model_impl(sess, model, test_x, test_y):
+    res = {}
+    # FIXME this is total #params. If I want to get trainable
+    # ones, I might need to do
+    # sum([np.prod(K.get_value(w).shape) for w in model.trainable_weights])
+    # print('CNN params: ', model.cnn_model.model.count_params())
+    # print('Conv params: ', model.cnn_model.CNN.count_params())
+    # print('FC params: ', model.cnn_model.FC.count_params())
+    # print('AE params:', model.ae_model.AE.count_params())
+    res['CNN params'] = model.cnn_model.model.count_params()
+    res['Conv params'] = model.cnn_model.CNN.count_params()
+    res['FC params'] = model.cnn_model.FC.count_params()
+    if model.ae_model:
+        res['AE params'] = model.ae_model.AE.count_params()
+    else:
+        # currently only for defgan
+        res['AE params'] = 0
+
+    # model.test_all(sess, test_x, test_y,
+    #                attacks=[
+    #                    'CW',
+    #                    'FGSM',
+    #                    'PGD',
+    #                    # 'Hop',
+    #                    # 'PGD_BPDA',
+    #                    # 'CW_BPDA'
+    #                ],
+    #                save_prefix=save_prefix)
+
+    # alternative testing
+    eps = np.arange(0.02,0.6,0.04).tolist()
+    print('testing no atttack CNN ..')
+    res["no atttack CNN"] = evaluate_no_attack_CNN(sess, model, test_x, test_y,
+                                                   num_samples=50)
+    print('testing no atttack AE ..')
+    res["no atttack AE"] = evaluate_no_attack_AE(sess, model, test_x, test_y,
+                                                 num_samples=50)
+    res["num_samples"] = 50
+    res['epsilon'] = eps
+    
+    print('Running whitebox FGSM ..')
+    fgsm_res = evaluate_attack(sess, model, 'FGSM', test_x, test_y,
+                               num_samples=50, eps=eps)
+    res['FGSM'] = fgsm_res
+    
+    print('Running whitebox PGD ..')
+    pgd_res = evaluate_attack(sess, model, 'PGD', test_x, test_y,
+                              num_samples=50, eps=eps)
+    res['PGD'] = pgd_res
+    
+    # print('Running CW ..')
+    # cw_res = evaluate_attack(sess, model, 'CW', test_x, test_y,
+    #                          num_samples=100, eps=eps)
+    # # CW result is a single accuracy
+    # res["CW"] = cw_res
+
+    # this is extremely slow, so setting to run 20
+
+    # print('Running blackbox Hop ..')
+    # hop_res = evaluate_attack(sess, model, 'Hop', test_x, test_y,
+    #                              num_samples=20, eps=eps)
+    # res["epsilon_exp_header"] = ["epsilon", "FGSM", "PGD", "Hop"]
+    # res["epsilon_exp_data"] = list(zip(eps, fgsm_res, pgd_res, hop_res))
+
+    return res
+
 def test_model(cnn_cls, ae_cls, advae_cls,
                test_x, test_y,
                saved_folder='saved_models',
@@ -202,56 +275,8 @@ def test_model(cnn_cls, ae_cls, advae_cls,
         print('loading model ..')
         model, sess = load_model(cnn_cls, ae_cls, advae_cls,
                                  dataset_name=dataset_name)
-        res = {}
-        # FIXME this is total #params. If I want to get trainable
-        # ones, I might need to do
-        # sum([np.prod(K.get_value(w).shape) for w in model.trainable_weights])
-        print('CNN params: ', model.cnn_model.model.count_params())
-        print('Conv params: ', model.cnn_model.CNN.count_params())
-        print('FC params: ', model.cnn_model.FC.count_params())
-        print('AE params:', model.ae_model.AE.count_params())
-        res['CNN params'] = model.cnn_model.model.count_params()
-        res['Conv params'] = model.cnn_model.CNN.count_params()
-        res['FC params'] = model.cnn_model.FC.count_params()
-        res['AE params'] = model.ae_model.AE.count_params()
-        
         print('testing {} ..'.format(plot_prefix))
-        # model.test_all(sess, test_x, test_y,
-        #                attacks=[
-        #                    'CW',
-        #                    'FGSM',
-        #                    'PGD',
-        #                    # 'Hop',
-        #                    # 'PGD_BPDA',
-        #                    # 'CW_BPDA'
-        #                ],
-        #                save_prefix=save_prefix)
-        
-        # alternative testing
-        eps = np.arange(0.02,0.6,0.04).tolist()
-        res["no atttack CNN"] = evaluate_no_attack_CNN(sess, model, test_x, test_y,
-                                                       num_samples=100)
-        res["no atttack AE"] = evaluate_no_attack_AE(sess, model, test_x, test_y,
-                                                     num_samples=100)
-        res["num_samples"] = 100
-        print('Running whitebox FGSM ..')
-        fgsm_res = evaluate_attack(sess, model, 'FGSM', test_x, test_y,
-                                   num_samples=100, eps=eps)
-        print('Running whitebox PGD ..')
-        pgd_res = evaluate_attack(sess, model, 'PGD', test_x, test_y,
-                                  num_samples=100, eps=eps)
-        print('Running CW ..')
-        cw_res = evaluate_attack(sess, model, 'CW', test_x, test_y,
-                                 num_samples=100, eps=eps)
-        # CW result is a single accuracy
-        res["CW"] = cw_res
-        # this is extremely slow, so setting to run 20
-        print('Running blackbox Hop ..')
-        hop_res = evaluate_attack(sess, model, 'Hop', test_x, test_y,
-                                     num_samples=20, eps=eps)
-        res["epsilon_exp_header"] = ["epsilon", "FGSM", "PGD", "Hop"]
-        res["epsilon_exp_data"] = list(zip(eps, fgsm_res, pgd_res, hop_res))
-        
+        res = test_model_impl(sess, model, test_x, test_y)
         print('Saving to {} ..'.format(filename))
         with open(filename, 'w') as fp:
             json.dump(res, fp, indent=4)

@@ -32,6 +32,17 @@
 ** The #param might be interesting
 The AE parameter is usually much smaller than the CNN parameter
 
+** [#A] Get defgan into plot
+
+** PuVAE
+
+** [#A] new results on transfer and ensemble
+** Try not bottleneck AE
+
+** CANCELED How to run faster? mini-batch?
+   CLOSED: [2019-08-29 Thu 16:11]
+I'm using up to 30 epochs.
+
 ** Tables
 
 Old table:

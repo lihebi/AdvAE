@@ -120,27 +120,45 @@ def main_epsilon_exp():
     # res = epsilon_exp(IdentityAEModel, A2_Model, 100, 'images/epsilon-itadv-100.json')
     # TODO defgan
 
+    # ItAdvTrain
+    # run_exp_model(MNISTModel, IdentityAEModel, A2_Model, dataset_name='MNIST', run_test=True)
+    # FIXME these models seems to make HopSkipJumpAttack to return None, so run_test=False for now
+    run_exp_model(MNISTModel, CNN3AE, ItAdv_Model, dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, CNN1AE, ItAdv_Model, dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, IdentityAEModel, ItAdv_Model, dataset_name='MNIST', run_test=True)
     # AdvAE
     # FIXME use some other lambda
     run_exp_model(MNISTModel, CNN3AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
     run_exp_model(MNISTModel, CNN3AE, get_lambda_model(0), dataset_name='MNIST', run_test=True)
     # HGD
+    #
+    # looks like I have to add C2 regularizer, otherwise the clean
+    # AE+CNN has 0.8 accuracy
+    run_exp_model(MNISTModel, CNN3AE, C2_B2_Model, dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, CNN3AE, C0_B2_Model, dataset_name='MNIST', run_test=True)
     run_exp_model(MNISTModel, CNN3AE, B2_Model, dataset_name='MNIST', run_test=True)
-    # ItAdvTrain
-    # run_exp_model(MNISTModel, IdentityAEModel, A2_Model, dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, IdentityAEModel, ItAdv_Model, dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, CNN3AE, ItAdv_Model, dataset_name='MNIST', run_test=True)
+
+    run_exp_model(MNISTModel, CNN3AE, C0_A2_A0_Model, dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, CNN3AE, A2_A0_Model, dataset_name='MNIST', run_test=True)
 
 def main_lambda_exp():
     # run_exp_model(MNISTModel, AEModel, A2_Model, dataset_name='MNIST', run_test=True)
     # Testing different hyperparameter lambdas
     # this is the same as A2_Model
     # lams = [0, 0.2, 0.5, 0.8, 1, 1.2, 1.5, 2, 3, 4, 5]
-    lams = [0, 0.2, 0.5, 0.8, 1, 1.2, 1.5, 2, 5]
+    lams = [0, 0.2, 0.5, 0.8, 1, 1.2, 1.5, 2, 3, 4, 5]
     for lam in lams:
         run_exp_model(MNISTModel, CNN3AE, get_lambda_model(lam), dataset_name='MNIST', run_test=True)
 
 def main_ae_size():
+    for config in [(32,32,32,32),
+                   (32,16,16,32),
+                   (16,32,32,16),
+                   (32,64,64,32)]:
+        run_exp_model(MNISTModel,
+                      get_wideae_model(config),
+                      get_lambda_model(1),
+                      dataset_name='MNIST', run_test=True)
     run_exp_model(MNISTModel, CNN1AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
     run_exp_model(MNISTModel, CNN2AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
     run_exp_model(MNISTModel, CNN3AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
@@ -149,6 +167,7 @@ def main_ae_size():
 
 def __test():
     m = MNISTModel()
+    get_wideae_model((32,32,32,32))(m)
     # ae = AEModel(m)
     ae = FCAE(m)
     # ae = deepFCAE(m)
@@ -172,9 +191,9 @@ if __name__ == '__main__':
     
     # run_exp_model(MNISTModel, AEModel, get_lambda_model(0), dataset_name='MNIST', run_test=True)
 
-    main_lambda_exp()
-    main_ae_size()
     main_epsilon_exp()
+    main_ae_size()
+    main_lambda_exp()
     
     # main_ae_size()
 

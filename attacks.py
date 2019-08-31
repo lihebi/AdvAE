@@ -40,10 +40,11 @@ def generate_victim(test_x, test_y):
     labels = np.array(labels)
     return inputs, labels, targets
 
-def my_FGSM(model, x, params=dict()):
+def my_FGSM(model, x, y=None, params=dict()):
     # FGSM attack
     fgsm_params = {
         'eps': 0.3,
+        'y': y,
         'clip_min': CLIP_MIN,
         'clip_max': CLIP_MAX
     }
@@ -52,19 +53,12 @@ def my_FGSM(model, x, params=dict()):
     adv_x = fgsm.generate(x, **fgsm_params)
     return tf.stop_gradient(adv_x)
     # return adv_x
-def my_FGSM_np(sess, model, xval, params=dict()):
-    # FGSM attack
-    fgsm_params = {
-        'eps': 0.3,
-        'clip_min': CLIP_MIN,
-        'clip_max': CLIP_MAX
-    }
-    fgsm_params.update(params)
-    fgsm = FastGradientMethod(model, sess=sess)
-    return fgsm.generate_np(xval, **fgsm_params)
-def my_PGD(model, x, params=dict()):
+def my_PGD(model, x, y=None, params=dict()):
     pgd = ProjectedGradientDescent(model)
     pgd_params = {'eps': 0.3,
+                  # CAUTION I need this, otherwise the adv acc data is
+                  # not accurate
+                  'y': y,
                   'nb_iter': 40,
                   'eps_iter': 0.01,
                   'clip_min': CLIP_MIN,
@@ -72,16 +66,6 @@ def my_PGD(model, x, params=dict()):
     pgd_params.update(params)
     adv_x = pgd.generate(x, **pgd_params)
     return tf.stop_gradient(adv_x)
-
-def my_PGD_np(sess, model, xval, params=dict()):
-    pgd = ProjectedGradientDescent(model, sess=sess)
-    pgd_params = {'eps': 0.3,
-                  'nb_iter': 40,
-                  'eps_iter': 0.01,
-                  'clip_min': CLIP_MIN,
-                  'clip_max': CLIP_MAX}
-    pgd_params.update(params)
-    return pgd.generate_np(xval, **pgd_params)
 
 def my_HopSkipJump(sess, model, x, params=dict()):
     assert False
@@ -103,6 +87,7 @@ def my_HopSkipJump(sess, model, x, params=dict()):
     adv_x = attack.generate(x, **default_params)
     return tf.stop_gradient(adv_x)
 def my_HopSkipJump_np(sess, model, xval, params=dict()):
+    assert False
     attack = HopSkipJumpAttack(model, sess=sess)
     # TODO add allowed pertubation parameter
     default_params = {
@@ -146,7 +131,7 @@ def my_CW(sess, model, x, y, targeted=False, params=dict()):
     cw = CarliniWagnerL2(model, sess=sess)
     yname = 'y_target' if targeted else 'y'
     cw_params = {'binary_search_steps': 1,
-                 yname: y,
+                 'y': y,
                  'max_iterations': 1000,
                  'learning_rate': 0.2,
                  'batch_size': 50,
@@ -156,22 +141,6 @@ def my_CW(sess, model, x, y, targeted=False, params=dict()):
     cw_params.update(params)
     adv_x = cw.generate(x, **cw_params)
     return adv_x
-def my_CW_np(sess, model, xval, targeted=False, params=dict()):
-    """When targeted=True, remember to put target as y."""
-    # CW attack
-    cw = CarliniWagnerL2(model, sess=sess)
-    yname = 'y_target' if targeted else 'y'
-    cw_params = {'binary_search_steps': 1,
-                 # FIXME
-                 yname: None,
-                 'max_iterations': 1000,
-                 'learning_rate': 0.2,
-                 'batch_size': 50,
-                 'initial_const': 10,
-                 'clip_min': CLIP_MIN,
-                 'clip_max': CLIP_MAX}
-    cw_params.update(params)
-    return cw.generate_np(xval, **cw_params)
 def my_CW_BPDA(sess, pre_model, post_model, x, y, targeted=False, params=dict()):
     cw = CarliniWagnerL2_BPDA(pre_model, post_model, sess=sess)
     yname = 'y_target' if targeted else 'y'
@@ -196,18 +165,20 @@ def evaluate_attack_PGD(sess, model, attack_name, xval, yval, eps):
     accs = []
     for e in eps:
         if attack_name is 'PGD':
-            adv_val = my_PGD_np(sess, model, xval, {'eps': e})
+            adv = my_PGD(model, model.x, y=model.y, params={'eps': e})
         elif attack_name is 'FGSM':
-            adv_val = my_FGSM_np(sess, model, xval, {'eps': e})
+            adv = my_FGSM(model, model.x, y=model.y, params={'eps': e})
         else:
             assert False
+        adv_val = sess.run(adv, feed_dict={model.x: xval, model.y: yval})
         acc = sess.run(model.accuracy, feed_dict={model.x: adv_val, model.y: yval})
         accs.append(acc)
     return np.array(accs).tolist()
 
 def evaluate_attack_CW(sess, model, xval, yval):
     """This is L2, so no eps, no thresholding."""
-    adv_val = my_CW_np(sess, model, xval)
+    adv = my_CW(model, xval)
+    adv_val = sess.run(adv, feed_dict={model.x: xval, model.y: yval})
     acc = sess.run(model.accuracy, feed_dict={model.x: adv_val, model.y: yval})
     return float(acc)
 

@@ -39,6 +39,14 @@ ItAdvCNN. For diferent AE model, this is overwritten, but should not
 have.
 
 - 0902_11AM: 20 epoch CIFAR, with setting y during training.
+- 0903_2AM: 50 epoch CIFAR, with setting y during training.
+
+I'm going to delete all MNIST models and rerun with:
+- 30 epoch (same as before)
+- with setting y during training
+- All MNIST using CNN1AE instead of CNN3AE by default
+
+Also, I'm running more CIFAR models using 30 epochs this time.
 
 
 * TODOs for AAAI
@@ -47,21 +55,21 @@ have.
 ** Performance-wise
 - Can I use a smaller number of iterations of PGD during training?
 
-** The target tensor in PGD
-*** STARTED [#A] Testing
+** DONE The target tensor in PGD
+   CLOSED: [2019-09-03 Tue 03:13]
+*** DONE [#A] Testing
+    CLOSED: [2019-09-03 Tue 03:13]
 
 Use the new PGD attack with y supplied
 
-It's good for MNIST.
-
-But, it is not good for CIFAR!
-*** STARTED [#A] Training
+*** DONE [#A] Training
+    CLOSED: [2019-09-03 Tue 03:13]
 
 Use y option in FGSM/PGD during training.
 
 Why setting y giving bad results, not converging?
 
-** TODO [#A] CIFAR experiments
+** STARTED [#A] CIFAR experiments
 The CIFAR experiments are not good for proper PGD attack (with
 target tensor). Thus, I'm considering two reasons:
 - not enough epoch

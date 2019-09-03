@@ -179,7 +179,6 @@ def evaluate_attack_PGD(sess, model, attack_name, xval, yval, eps):
             params = model.cnn_model.PGD_params
             params.update({'eps': e})
             adv = my_PGD(model, model.x,
-                         # DEBUG setting the y tensor
                          y=model.y,
                          params=params)
         elif attack_name is 'FGSM':

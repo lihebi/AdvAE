@@ -29,7 +29,7 @@ class CNNModel(cleverhans.model.Model):
     @staticmethod
     def NAME():
         raise NotImplementedError()
-    def __init__(self, training=True):
+    def __init__(self, training):
         # CAUTION This mode indicates test mode or train mode. CIFAR
         # resnet models must inspect this value and set the
         # batch_normalization layer trainable to False when training
@@ -160,7 +160,7 @@ class CifarModel(CNNModel):
         self.FGSM_params = {'eps': 8./255}
         self.JSMA_params = {}
         self.PGD_params = {'eps': 8.0/255,
-                           'nb_iter': 10,
+                           'nb_iter': 7,
                            'eps_iter': 2./255}
         self.CW_params = {'max_iterations': 1000,
                           'learning_rate': 0.2}

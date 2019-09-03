@@ -67,8 +67,9 @@ def load_model(cnn_cls, ae_cls, advae_cls,
     pCNN, pAdvAE, _ = compute_names(cnn_cls, ae_cls, advae_cls,
                                     dataset_name=dataset_name)
     sess = create_tf_session()
-    
-    cnn = cnn_cls()
+
+    # This load model should be for testing, not training
+    cnn = cnn_cls(training=False)
     ae = ae_cls(cnn)
     adv = advae_cls(cnn, ae)
 
@@ -115,7 +116,7 @@ def train_CNN(cnn_cls, train_x, train_y, saved_folder='saved_models', dataset_na
         print('Already trained {}'.format(pCNN))
     else:
         with create_tf_session() as sess:
-            cnn = cnn_cls()
+            cnn = cnn_cls(training=True)
 
             tf_init_uninitialized(sess)
 
@@ -150,7 +151,7 @@ def train_model(cnn_cls, ae_cls, advae_cls,
     # FIXME In case of ItAdv train, the CNN is not pretrained.
     if not os.path.exists(pCNN) and 'ItAdv' not in advae_cls.NAME():
         with create_tf_session() as sess:
-            cnn = cnn_cls()
+            cnn = cnn_cls(training=True)
             cnn.model.summary()
             tf_init_uninitialized(sess)
             print('Training CNN ..')
@@ -172,10 +173,6 @@ def train_model(cnn_cls, ae_cls, advae_cls,
                 ae.AE.summary()
                 adv = advae_cls(cnn, ae)
                 tf_init_uninitialized(sess)
-                # DEBUG I want to load a trained CNN here
-                # print('DEBUG: loading pretrained CNN to make ItAdv training converge')
-                # TODO use correct name
-                # cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
                 print('Trainng AdvAE ..')
                 adv.train_Adv(sess, train_x, train_y)
                 # save cnn

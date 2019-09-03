@@ -133,6 +133,9 @@ def main_epsilon_exp():
     # run_exp_model(MNISTModel, IdentityAEModel, A2_Model, dataset_name='MNIST', run_test=True)
     # FIXME these models seems to make HopSkipJumpAttack to return None, so run_test=False for now
     for cnn_cls in [
+            # looks like using the PGD with y during training, this
+            # thing is not even converging.
+            #
             # CNN1AE,
             IdentityAEModel,
             # CNN2AE,
@@ -156,7 +159,7 @@ def main_epsilon_exp():
                       # testing C2
                       # C2_A2_Model,
                       C0_A2_Model]:
-        run_exp_model(MNISTModel, CNN3AE, advae_cls, dataset_name='MNIST', run_test=True)
+        run_exp_model(MNISTModel, CNN1AE, advae_cls, dataset_name='MNIST', run_test=True)
         
 def main_lambda_exp():
     # run_exp_model(MNISTModel, AEModel, A2_Model, dataset_name='MNIST', run_test=True)
@@ -165,7 +168,7 @@ def main_lambda_exp():
     # lams = [0, 0.2, 0.5, 0.8, 1, 1.2, 1.5, 2, 3, 4, 5]
     lams = [0, 0.2, 0.5, 0.8, 1, 1.2, 1.5, 2, 3, 4, 5]
     for lam in lams:
-        run_exp_model(MNISTModel, CNN3AE, get_lambda_model(lam), dataset_name='MNIST', run_test=True)
+        run_exp_model(MNISTModel, CNN1AE, get_lambda_model(lam), dataset_name='MNIST', run_test=True)
 
 def main_ae_size():
     for config in [(32,32,32,32),
@@ -184,13 +187,22 @@ def main_new_cifar10():
     # dunet has no batch norm layer
     run_exp_model(MyResNet29, DunetModel, get_lambda_model(1), dataset_name='CIFAR10', run_test=True)
     run_exp_model(MyResNet29, IdentityAEModel, ItAdv_Model, dataset_name='CIFAR10', run_test=True)
+    # Testing C2
+    run_exp_model(MyResNet29, DunetModel, C2_A2_Model, dataset_name='CIFAR10', run_test=True)
+    # TODO running B2, the HGD
+    # FIXME C0_B2_Model?
+    run_exp_model(MyResNet29, DunetModel, B2_Model, dataset_name='CIFAR10', run_test=True)
+    
+    # testing other lambdas
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(2), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(3), dataset_name='CIFAR10', run_test=True)
 
     # Only Dunet seems to work a little, so I'm not going to even try these
     run_exp_model(MyResNet29, CNN1AE, get_lambda_model(1), dataset_name='CIFAR10', run_test=True)
     run_exp_model(MyResNet29, CNN2AE, get_lambda_model(1), dataset_name='CIFAR10', run_test=True)
     # run_exp_model(MyResNet29, CNN1AE, get_lambda_model(0), dataset_name='CIFAR10', run_test=True)
 
-    # run_exp_model(MyResNet29, CNN1AE, ItAdv_Model, dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, CNN1AE, ItAdv_Model, dataset_name='CIFAR10', run_test=True)
     # run_exp_model(MyResNet29, CNN2AE, ItAdv_Model, dataset_name='CIFAR10', run_test=True)
     # AdvAE
     # FIXME use some other lambda
@@ -228,16 +240,16 @@ def test_defgan():
     acc = sess.run(model.accuracy, feed_dict={model.x: test_x[:50], model.y: test_y[:50]})
     
     res = test_model_impl(sess, model, test_x, test_y)
-    
+
 if __name__ == '__main__':
     with warnings.catch_warnings():
         # I'm suppressing cleverhans's deprecated usage of reduce_sum
         # This might be dangerous, all warnings.warn will not show up
         warnings.simplefilter("ignore")
         warnings.warn("WARNNNNNNN")
-        # main_epsilon_exp()
-        # main_ae_size()
-        # main_lambda_exp()
+        main_epsilon_exp()
+        main_ae_size()
+        main_lambda_exp()
         main_new_cifar10()
     
     # main_mnist_exp()

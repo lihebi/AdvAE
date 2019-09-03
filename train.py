@@ -38,7 +38,6 @@ def get_lr_scheduler():
     return keras.callbacks.LearningRateScheduler(my_lr_schedule, verbose=1)
 
 def get_lr_reducer(patience=4):
-    # FIXME if this is working, I prefer to use it instead of lr scheduler
     return keras.callbacks.ReduceLROnPlateau(monitor='val_loss',
                                              factor=0.5,
                                              cooldown=0,
@@ -47,7 +46,6 @@ def get_lr_reducer(patience=4):
                                              verbose=1,
                                              min_lr=0.5e-4)
 def get_es(patience=10, min_delta=0):
-    # FIXME should I directly use accuracy for early stopping?
     return keras.callbacks.EarlyStopping(monitor='val_loss',
                                          # TODO adjust this to make ensemble training faster
                                          min_delta=min_delta,
@@ -262,163 +260,3 @@ def run_on_batch(sess, res, x, y, npx, npy, batch_size=BATCH_SIZE):
         print('.', end='', flush=True)
     print('')
     return allres
-
-
-def my_training(sess, model_x, model_y,
-                loss, train_step, metrics, metric_names,
-                train_x, train_y,
-                additional_train_steps=[],
-                data_augment=None,
-                do_plot=True,
-                plot_prefix='', patience=2,
-                batch_size=BATCH_SIZE, num_epochs=NUM_EPOCHS,
-                print_interval=20):
-    """Adversarially training the model. Each batch, use PGD to generate
-    adv examples, and use that to train the model.
-
-    Print clean and adv rate each time.
-
-    Early stopping when the clean rate is good and adv rate does not
-    improve.
-
-    FIXME metrics and metric_names are not coming from the same source.
-
-    DEPRECATED
-
-    """
-    (train_x, train_y), (val_x, val_y) = validation_split(train_x, train_y)
-
-    best_loss = math.inf
-    best_epoch = 0
-    pat = patience
-
-    plot_data = {'metrics': [],
-                 'simple': [],
-                 'loss': []}
-
-    # FIXME seems that the saver is causing tf memory issues when
-    # restoring. So trying keras.
-    saver = tf.train.Saver(max_to_keep=100)
-    
-    for i in range(num_epochs):
-        epoch_t = time.time()
-        shuffle_idx = np.arange(train_x.shape[0])
-        np.random.shuffle(shuffle_idx)
-        nbatch = train_x.shape[0] // batch_size
-        t = time.time()
-        for j in range(nbatch):
-            start = j * batch_size
-            end = (j+1) * batch_size
-            batch_x = train_x[shuffle_idx[start:end]]
-            batch_y = train_y[shuffle_idx[start:end]]
-
-            if data_augment is not None:
-                batch_x = data_augment.augment_batch(sess, batch_x)
-            
-            # actual training
-            # 0.12
-            # feed_dict={model_x: batch_x, model_y: batch_y}
-            sess.run([train_step] + additional_train_steps,
-                     feed_dict={model_x: batch_x, model_y: batch_y,
-                                keras.backend.learning_phase(): 1})
-            # print('1')
-            # sess.run([train_step] + additional_train_steps,
-            #          feed_dict=feed_dict)
-            # print('2')
-            # print('training time: {}'.format(time.time() - t))
-
-            if j % print_interval == 0:
-                # t = time.time()
-                # 0.46
-                l, m = sess.run([loss, metrics],
-                                feed_dict={model_x: batch_x, model_y: batch_y,
-                                           keras.backend.learning_phase(): 0})
-                # print('metrics time: {}'.format(time.time() - t))
-
-                # the time for running train step
-                t1 = time.time() - t
-                
-                plot_data['metrics'].append(m)
-                plot_data['loss'].append(l)
-
-                if do_plot:
-                    # this introduces only small overhead
-                    #
-                    # FIXME I should more focus on the validation
-                    # metrics instead of these training ones
-                    adv_training_plot(plot_data['metrics'], metric_names,
-                                      'training-process-{}.pdf'.format(plot_prefix), False)
-                    adv_training_plot(plot_data['metrics'], metric_names,
-                                      'training-process-split-{}.pdf'.format(plot_prefix), True)
-                    # plot loss
-                    fig, ax = plt.subplots(dpi=300)
-                    ax.plot(plot_data['loss'])
-                    plt.savefig('images/training-process-loss-{}.pdf'.format(plot_prefix))
-                    plt.close(fig)
-                
-                print('Batch {} / {}, \t time {:.2f} ({:.2f}), loss: {:.5f},\t metrics: {}'
-                      .format(j, nbatch, time.time()-t, t1, l, ', '.join(['{:.5f}'.format(mi) for mi in m])))
-                t = time.time()
-            # print('plot time: {}'.format(time.time() - t))
-
-        # evaluate the loss on validation data, also batched
-        print('EPOCH ends, calculating total validation loss ..')
-        allres = run_on_batch(sess, [loss, metrics], model_x, model_y, val_x, val_y)
-        all_l = []
-        all_m = []
-        for l,m in allres:
-            all_l.append(l)
-            all_m.append(m)
-        # FIXME these are list of list. np.mean should have returned a
-        # single number, as I wanted.
-        l = np.mean(all_l)
-        m = np.mean(all_m, 0)
-        plot_data['simple'].append(m)
-
-        if do_plot:
-            print('plotting ..')
-            adv_training_plot(plot_data['simple'], metric_names, 'training-process-simple-{}.pdf'.format(plot_prefix), True)
-            
-        # save plot data
-        print('saving plot data ..')
-        with open('images/train-data-{}.pkl'.format(plot_prefix), 'wb') as fp:
-            pickle.dump(plot_data, fp)
-
-        # save the weights
-        save_path = saver.save(sess, 'tmp/epoch-{}'.format(i))
-        
-        if best_loss < l:
-            pat -= 1
-        else:
-            best_loss = l
-            best_epoch = i
-            pat = patience
-        print('EPOCH {} / {}: loss: {:.5f}, time: {:.2f}, patience: {},\t metrics: {}'
-              .format(i, num_epochs, l, time.time()-epoch_t, pat, ', '.join(['{:.5f}'.format(mi) for mi in m])))
-        if pat <= 0:
-            # restore the best model
-            filename = 'tmp/epoch-{}'.format(best_epoch)
-            print('restoring from {} ..'.format(filename))
-            saver.restore(sess, filename)
-
-            # verify if the best model is restored
-            # FIXME I need batched version. This will run out of GPU memory.
-            # clean_dict = {model_x: val_x, model_y: val_y}
-            # l,m = sess.run([loss, metrics], feed_dict=clean_dict)
-            # print('Best loss: {}, restored loss: {}'.format(best_loss, l))
-            # print('Corresponding metris: {}'.format(m))
-            
-            # FIXME this is not equal, as there's randomness in PGD?
-            # assert abs(l - best_loss) < 0.001
-            print('Early stopping .., best loss: {}'.format(best_loss))
-            # TODO I actually want to implement lr reducer here. When
-            # the given patience is reached, I'll reduce the learning
-            # rate by half if it is larger than a minimum (say 1e-6),
-            # and restore the patience counting. This should be done
-            # after restoring the previously best model.
-            #
-            # FIXME however, seems that I need to create a new
-            # optimizer, and thus a new train step. But creating this
-            # would create new variables. I need to initialize those
-            # variables alone. This should not be very difficult.
-            break

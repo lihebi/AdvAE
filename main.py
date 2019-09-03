@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import random
 import os
+import time
 import cleverhans.model
 from cleverhans.attacks import FastGradientMethod
 from cleverhans.attacks import ProjectedGradientDescent, SaliencyMapMethod
@@ -22,14 +23,22 @@ from attacks import *
 from blackbox import test_sub
 from exp_utils import *
 
+import warnings
+
+# suppress deprecation warnings. The warning is caused by
+# tf.reduce_sum, used in cleverhans
+# THIS is not working
+# import tensorflow.python.util.deprecation as deprecation
+# deprecation._PRINT_DEPRECATION_WARNINGS = False
+
 def run_exp_model(cnn_cls, ae_cls, advae_cls,
                   saved_folder='saved_models',
                   dataset_name='', run_test=True):
     """Both training and testing."""
     # reset seed here
-    tf.random.set_random_seed(0)
-    np.random.seed(0)
-    random.seed(0)
+    # tf.random.set_random_seed(0)
+    # np.random.seed(0)
+    # random.seed(0)
     
     (train_x, train_y), (test_x, test_y) = load_dataset(dataset_name)
     train_model(cnn_cls, ae_cls, advae_cls, train_x, train_y, dataset_name=dataset_name)
@@ -123,24 +132,32 @@ def main_epsilon_exp():
     # ItAdvTrain
     # run_exp_model(MNISTModel, IdentityAEModel, A2_Model, dataset_name='MNIST', run_test=True)
     # FIXME these models seems to make HopSkipJumpAttack to return None, so run_test=False for now
-    run_exp_model(MNISTModel, CNN3AE, ItAdv_Model, dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, CNN1AE, ItAdv_Model, dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, IdentityAEModel, ItAdv_Model, dataset_name='MNIST', run_test=True)
+    for cnn_cls in [
+            # CNN1AE,
+            IdentityAEModel,
+            # CNN2AE,
+            # CNN3AE
+    ]:
+        run_exp_model(MNISTModel, cnn_cls, ItAdv_Model, dataset_name='MNIST', run_test=True)
     # AdvAE
-    # FIXME use some other lambda
-    run_exp_model(MNISTModel, CNN3AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, CNN3AE, get_lambda_model(0), dataset_name='MNIST', run_test=True)
-    # HGD
-    #
-    # looks like I have to add C2 regularizer, otherwise the clean
-    # AE+CNN has 0.8 accuracy
-    run_exp_model(MNISTModel, CNN3AE, C2_B2_Model, dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, CNN3AE, C0_B2_Model, dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, CNN3AE, B2_Model, dataset_name='MNIST', run_test=True)
+    # run_exp_model(MNISTModel, CNN1AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
+    # run_exp_model(MNISTModel, CNN1AE, get_lambda_model(0), dataset_name='MNIST', run_test=True)
 
-    run_exp_model(MNISTModel, CNN3AE, C0_A2_A0_Model, dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, CNN3AE, A2_A0_Model, dataset_name='MNIST', run_test=True)
-
+    for advae_cls in [get_lambda_model(1), get_lambda_model(0),
+                      # HGD
+                      B2_Model,
+                      # looks like I have to add C2 regularizer, otherwise the clean
+                      # AE+CNN has 0.8 accuracy
+                      # C2_B2_Model,
+                      # seems C0 B2 is not good. Thus probobly C0 is not good? TODO I should try C2
+                      C0_B2_Model,
+                      # A0?
+                      C0_A2_A0_Model, A2_A0_Model,
+                      # testing C2
+                      # C2_A2_Model,
+                      C0_A2_Model]:
+        run_exp_model(MNISTModel, CNN3AE, advae_cls, dataset_name='MNIST', run_test=True)
+        
 def main_lambda_exp():
     # run_exp_model(MNISTModel, AEModel, A2_Model, dataset_name='MNIST', run_test=True)
     # Testing different hyperparameter lambdas
@@ -159,14 +176,28 @@ def main_ae_size():
                       get_wideae_model(config),
                       get_lambda_model(1),
                       dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, CNN1AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, CNN2AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, CNN3AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, FCAE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
-    run_exp_model(MNISTModel, deepFCAE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
+    for ae_cls in [CNN1AE, CNN2AE, CNN3AE, FCAE, deepFCAE]:
+        run_exp_model(MNISTModel, ae_cls, get_lambda_model(1), dataset_name='MNIST', run_test=True)
+
+def main_new_cifar10():
+    # dunet may still be the best
+    # dunet has no batch norm layer
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(1), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, IdentityAEModel, ItAdv_Model, dataset_name='CIFAR10', run_test=True)
+
+    # Only Dunet seems to work a little, so I'm not going to even try these
+    run_exp_model(MyResNet29, CNN1AE, get_lambda_model(1), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, CNN2AE, get_lambda_model(1), dataset_name='CIFAR10', run_test=True)
+    # run_exp_model(MyResNet29, CNN1AE, get_lambda_model(0), dataset_name='CIFAR10', run_test=True)
+
+    # run_exp_model(MyResNet29, CNN1AE, ItAdv_Model, dataset_name='CIFAR10', run_test=True)
+    # run_exp_model(MyResNet29, CNN2AE, ItAdv_Model, dataset_name='CIFAR10', run_test=True)
+    # AdvAE
+    # FIXME use some other lambda
 
 def __test():
     m = MNISTModel()
+    m = MyResNet29()
     get_wideae_model((32,32,32,32))(m)
     # ae = AEModel(m)
     ae = FCAE(m)
@@ -175,35 +206,41 @@ def __test():
     ae = CNN2AE(m)
     ae = CNN3AE(m)
     ae = MNISTAE(m)
+    ae = CifarAEModel(m)
     adv = A2_Model(m, ae)
     adv = ItAdv_Model(m, ae)
 
+def test_defgan():
+    """Test clean and three attacks on defgan models."""
+    sess = create_tf_session()
+
+    from defensegan_test import load_defgan
+    defgan = load_defgan(sess)
+    cnn = MNISTModel()
+    
+    cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
+    model = DefGanAdvAE(cnn, defgan)
+    
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
+    
+    # shuffle_idx = np.arange(xval.shape[0])
+    # idx = shuffle_idx[:num_samples]
+    acc = sess.run(model.accuracy, feed_dict={model.x: test_x[:50], model.y: test_y[:50]})
+    
+    res = test_model_impl(sess, model, test_x, test_y)
+    
 if __name__ == '__main__':
-    # testing A0 loss
-    # run_exp_model(MNISTModel, CNN3AE, A2_Model, dataset_name='MNIST', run_test=True)
+    with warnings.catch_warnings():
+        # I'm suppressing cleverhans's deprecated usage of reduce_sum
+        # This might be dangerous, all warnings.warn will not show up
+        warnings.simplefilter("ignore")
+        warnings.warn("WARNNNNNNN")
+        # main_epsilon_exp()
+        # main_ae_size()
+        # main_lambda_exp()
+        main_new_cifar10()
     
-    # run_exp_model(MNISTModel, CNN3AE, C0_A2_A0_Model, dataset_name='MNIST', run_test=True)
-    # run_exp_model(MNISTModel, CNN3AE, A2_A0_Model, dataset_name='MNIST', run_test=True)
-
-    # ItAdv
-    # run_exp_model(MNISTModel, IdentityAEModel, ItAdv_Model, dataset_name='MNIST', run_test=False)
-    # run_exp_model(MNISTModel, CNN3AE, ItAdv_Model, dataset_name='MNIST', run_test=False)
-    
-    # run_exp_model(MNISTModel, AEModel, get_lambda_model(0), dataset_name='MNIST', run_test=True)
-
-    main_epsilon_exp()
-    main_ae_size()
-    main_lambda_exp()
-    
-    # main_ae_size()
-
     # main_mnist_exp()
     # main_cifar10_exp()
     # main_transfer_exp()
     # main_epsilon_exp()
-
-    # baseline adversarial training
-    # run_exp_model(MNISTModel, IdentityAEModel, A2_Model, dataset_name='MNIST', run_test=True)
-    # run_exp_model(MNISTModel, AEModel, B2_Model, dataset_name='MNIST', run_test=True)
-    
-    # run_exp_model(MNISTModel, AEModel, C0_A2_Model, dataset_name='MNIST', run_test=True)

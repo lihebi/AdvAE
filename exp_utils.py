@@ -31,6 +31,12 @@ def compute_names(cnn_cls, ae_cls, advae_cls,
     advae_prefix = advae_cls.NAME()
 
     pCNN = os.path.join(saved_folder, '{}-{}-CNN.hdf5'.format(dataset_name, cnn_prefix))
+    # FIXME this CNN should not be used directly
+    if 'ItAdv' in advae_cls.NAME():
+        print('!!!!!!! ******** computing ItAdv names')
+        # FIXME this should be related to the AE name
+        pCNN = pCNN + '-' + ae_cls.NAME() + '-ItAdvCNN.hdf5'
+
     pAdvAE = os.path.join(saved_folder, '{}-{}-{}-{}-AdvAE.hdf5'.format(dataset_name, cnn_prefix, ae_prefix, advae_prefix))
     
     plot_prefix = '{}-{}-{}-{}'.format(dataset_name, cnn_prefix, ae_prefix, advae_prefix)
@@ -67,11 +73,6 @@ def load_model(cnn_cls, ae_cls, advae_cls,
     adv = advae_cls(cnn, ae)
 
     tf_init_uninitialized(sess)
-
-    # FIXME this CNN should not be used directly
-    if 'ItAdv' in advae_cls.NAME():
-        print('!!!!!!! ******** Loading ItAdv')
-        pCNN = pCNN + '-ItAdv.hdf5'
 
     print('loading {} ..'.format(pCNN))
     cnn.load_weights(sess, pCNN)
@@ -138,6 +139,8 @@ def train_model(cnn_cls, ae_cls, advae_cls,
                                               dataset_name=dataset_name)
 
     # DEBUG early return here to avoid the big overhead of creating the graph
+    print('-' * 80)
+    print('-' * 80)
     print('====== Denoising training for {} ..'.format(pAdvAE))
     if os.path.exists(pCNN) and os.path.exists(pAdvAE):
         print('Already trained {}'.format(pAdvAE))
@@ -159,6 +162,7 @@ def train_model(cnn_cls, ae_cls, advae_cls,
     
     if not os.path.exists(pAdvAE):
         with create_tf_session() as sess:
+            # FIXME the training of ItAdv is not stable
             if 'ItAdv' in advae_cls.NAME():
                 print('!!!!!!! ******** Training ItAdv, '
                       'setting CNN bath normalization layers trainable')
@@ -168,11 +172,13 @@ def train_model(cnn_cls, ae_cls, advae_cls,
                 ae.AE.summary()
                 adv = advae_cls(cnn, ae)
                 tf_init_uninitialized(sess)
+                # DEBUG I want to load a trained CNN here
+                # print('DEBUG: loading pretrained CNN to make ItAdv training converge')
+                # TODO use correct name
+                # cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
                 print('Trainng AdvAE ..')
                 adv.train_Adv(sess, train_x, train_y)
                 # save cnn
-                # CAUTION different filename to save new CNN weights
-                pCNN = pCNN + '-ItAdv.hdf5'
                 print('Saving model to {} ..'.format(pCNN))
                 cnn.save_weights(sess, pCNN)
                 print('saving to {} ..'.format(pAdvAE))
@@ -193,7 +199,7 @@ def train_model(cnn_cls, ae_cls, advae_cls,
     else:
         print('Already trained {}'.format(pAdvAE))
 
-def test_model_impl(sess, model, test_x, test_y):
+def test_model_impl(sess, model, test_x, test_y, dataset_name):
     res = {}
     # FIXME this is total #params. If I want to get trainable
     # ones, I might need to do
@@ -223,7 +229,10 @@ def test_model_impl(sess, model, test_x, test_y):
     #                save_prefix=save_prefix)
 
     # alternative testing
-    eps = np.arange(0.02,0.6,0.04).tolist()
+    if dataset_name is 'MNIST':
+        eps = np.arange(0.02,0.6,0.04).tolist()
+    elif dataset_name is 'CIFAR10':
+        eps = (np.arange(2,17,2)/255).tolist()
     print('testing no atttack CNN ..')
     res["no atttack CNN"] = evaluate_no_attack_CNN(sess, model, test_x, test_y,
                                                    num_samples=50)
@@ -276,7 +285,7 @@ def test_model(cnn_cls, ae_cls, advae_cls,
         model, sess = load_model(cnn_cls, ae_cls, advae_cls,
                                  dataset_name=dataset_name)
         print('testing {} ..'.format(plot_prefix))
-        res = test_model_impl(sess, model, test_x, test_y)
+        res = test_model_impl(sess, model, test_x, test_y, dataset_name)
         print('Saving to {} ..'.format(filename))
         with open(filename, 'w') as fp:
             json.dump(res, fp, indent=4)

@@ -44,16 +44,22 @@ def my_FGSM(model, x, y=None, params=dict()):
     # FGSM attack
     fgsm_params = {
         'eps': 0.3,
-        'y': y,
         'clip_min': CLIP_MIN,
         'clip_max': CLIP_MAX
     }
     fgsm_params.update(params)
+    # FIXME Cleverhans has a bug in Attack.get_or_guess_labels: it
+    # only checks y is in the key, but didn't check whether the value
+    # is None. fgsm.generate calls that function
+    if y is not None:
+        fgsm_params.update({'y': y})
     fgsm = FastGradientMethod(model)
     adv_x = fgsm.generate(x, **fgsm_params)
     return tf.stop_gradient(adv_x)
-    # return adv_x
+
 def my_PGD(model, x, y=None, params=dict()):
+    # DEBUG I would always want to supply the y manually
+    # assert y is not None
     pgd = ProjectedGradientDescent(model)
     pgd_params = {'eps': 0.3,
                   # CAUTION I need this, otherwise the adv acc data is
@@ -65,6 +71,7 @@ def my_PGD(model, x, y=None, params=dict()):
                   'clip_max': CLIP_MAX}
     pgd_params.update(params)
     adv_x = pgd.generate(x, **pgd_params)
+    # DEBUG do I need to stop gradients here?
     return tf.stop_gradient(adv_x)
 
 def my_HopSkipJump(sess, model, x, params=dict()):
@@ -127,7 +134,7 @@ def my_JSMA(model, x, params=dict()):
                    'clip_min': CLIP_MIN, 'clip_max': CLIP_MAX,
                    'y_target': None}
     jsma_params.update(params)
-    return jsma.generate(x, **jsma_params)
+    return tf.stop_gradient(jsma.generate(x, **jsma_params))
 def my_CW(sess, model, x, y, targeted=False, params=dict()):
     """When targeted=True, remember to put target as y."""
     # CW attack
@@ -143,7 +150,7 @@ def my_CW(sess, model, x, y, targeted=False, params=dict()):
                  'clip_max': CLIP_MAX}
     cw_params.update(params)
     adv_x = cw.generate(x, **cw_params)
-    return adv_x
+    return tf.stop_gradient(adv_x)
 def my_CW_BPDA(sess, pre_model, post_model, x, y, targeted=False, params=dict()):
     cw = CarliniWagnerL2_BPDA(pre_model, post_model, sess=sess)
     yname = 'y_target' if targeted else 'y'
@@ -168,9 +175,19 @@ def evaluate_attack_PGD(sess, model, attack_name, xval, yval, eps):
     accs = []
     for e in eps:
         if attack_name is 'PGD':
-            adv = my_PGD(model, model.x, y=model.y, params={'eps': e})
+            # setting mainly the niter and step_size
+            params = model.cnn_model.PGD_params
+            params.update({'eps': e})
+            adv = my_PGD(model, model.x,
+                         # DEBUG setting the y tensor
+                         y=model.y,
+                         params=params)
         elif attack_name is 'FGSM':
-            adv = my_FGSM(model, model.x, y=model.y, params={'eps': e})
+            params = model.cnn_model.FGSM_params
+            params.update({'eps': e})
+            adv = my_FGSM(model, model.x,
+                          y=model.y,
+                          params=params)
         else:
             assert False
         adv_val = sess.run(adv, feed_dict={model.x: xval, model.y: yval})

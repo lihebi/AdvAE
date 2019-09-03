@@ -166,7 +166,10 @@ class AdvAEModel(cleverhans.model.Model):
         self.N1_loss = my_sigmoid_xent(noisy_rec_high, tf.nn.sigmoid(high))
         self.N2_loss = my_softmax_xent(noisy_rec_logits, self.y)
 
-        adv_x = my_PGD(self, self.x, params=self.cnn_model.PGD_params)
+        adv_x = my_PGD(self, self.x,
+                       # DEBUG NOW why setting y is not working even in training?
+                       y=self.y,
+                       params=self.cnn_model.PGD_params)
         adv_high = self.CNN(adv_x)
         adv_logits = self.FC(adv_high)
 
@@ -179,7 +182,9 @@ class AdvAEModel(cleverhans.model.Model):
         self.A1_loss = tf.reduce_mean(tf.abs(adv_rec_high - high))
         self.A2_loss = my_softmax_xent(adv_rec_logits, self.y)
 
-        postadv = my_PGD(self.cnn_model, rec, params=self.cnn_model.PGD_params)
+        postadv = my_PGD(self.cnn_model, rec,
+                         y=self.y,
+                         params=self.cnn_model.PGD_params)
         postadv_high = self.CNN(postadv)
         postadv_logits = self.FC(postadv_high)
 
@@ -187,7 +192,10 @@ class AdvAEModel(cleverhans.model.Model):
         self.P1_loss = my_sigmoid_xent(postadv_high, tf.nn.sigmoid(high))
         self.P2_loss = my_softmax_xent(postadv_logits, self.y)
 
-        obliadv = my_PGD(self.cnn_model, self.x, params=self.cnn_model.PGD_params)
+        obliadv = my_PGD(self.cnn_model,
+                         self.x,
+                         y=self.y,
+                         params=self.cnn_model.PGD_params)
         obliadv_high = self.CNN(self.AE(obliadv))
         obliadv_logits = self.FC(obliadv_high)
 
@@ -203,13 +211,19 @@ class AdvAEModel(cleverhans.model.Model):
         logits = self.FC(self.CNN(self.AE(self.x)))
         self.accuracy = my_accuracy_wrapper(logits, self.y)
         
-        adv_logits = self.FC(self.CNN(self.AE(my_PGD(self, self.x, params=self.cnn_model.PGD_params))))
+        adv_logits = self.FC(self.CNN(self.AE(my_PGD(self, self.x,
+                                                     y=self.y,
+                                                     params=self.cnn_model.PGD_params))))
         self.adv_accuracy = my_accuracy_wrapper(adv_logits, self.y)
 
-        postadv_logits = self.FC(self.CNN(my_PGD(self.cnn_model, self.AE(self.x), params=self.cnn_model.PGD_params)))
+        postadv_logits = self.FC(self.CNN(my_PGD(self.cnn_model, self.AE(self.x),
+                                                 y=self.y,
+                                                 params=self.cnn_model.PGD_params)))
         self.postadv_accuracy = my_accuracy_wrapper(postadv_logits, self.y)
         
-        obli_logits = self.FC(self.CNN(self.AE(my_PGD(self.cnn_model, self.x, params=self.cnn_model.PGD_params))))
+        obli_logits = self.FC(self.CNN(self.AE(my_PGD(self.cnn_model, self.x,
+                                                      y=self.y,
+                                                      params=self.cnn_model.PGD_params))))
         self.obli_accuracy = my_accuracy_wrapper(obli_logits, self.y)
 
         noisy_x = my_add_noise(self.x)
@@ -286,6 +300,7 @@ class AdvAEModel(cleverhans.model.Model):
         with sess.as_default():
             callbacks = [get_lr_reducer(patience=4),
                          MyCallback(),
+                         # DEBUG whether to use 7 or 10
                          get_es(patience=7)]
             model.compile(loss=myloss,
                           metrics=metrics,
@@ -293,11 +308,13 @@ class AdvAEModel(cleverhans.model.Model):
                           target_tensors=self.y)
             model.fit(train_x, train_y,
                       validation_split=0.1,
-                      epochs=30,
+                      # DEBUG adv train epoch
+                      epochs=50,
                       callbacks=callbacks)
 
     def test_attack(self, sess, test_x, test_y, name,
                     num_samples=NUM_SAMPLES, batch_size=50):
+        assert False
         """Reurn images and titles."""
         # TODO mark the correct and incorrect predictions
         # to_run += [adv_x, adv_rec, postadv]
@@ -550,6 +567,12 @@ class ItAdv_Model(AdvAEModel):
     def NAME():
         return 'ItAdv'
     def setup_trainloss(self):
+        # DEBUG I have to load pre-trained CNN to make it easy to
+        # converge. Is that because of C2 loss?
+
+        # Looks like I have to do this
+        # self.adv_loss = self.A2_loss + self.C2_loss
+        # self.adv_loss = self.C2_loss
         self.adv_loss = self.A2_loss
         
 class B2_Model(AdvAEModel):
@@ -630,6 +653,7 @@ class Pretrained_C0_A2_Model(AdvAEModel):
 
 def get_lambda_model(lam):
     # assuming lam is 0-10
+    # TODO Should I use C2 instead of C0?
     class C0_A2_lambda_Model(AdvAEModel):
         @staticmethod
         def NAME():

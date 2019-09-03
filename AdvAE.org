@@ -24,20 +24,115 @@
 }
 #+END_SRC
 
+* Experiment Logs
+
+- 0831_0AM
+- 0831_4AM: This is 30 epoch, without setting y in PGD. I need to
+  rerun the tests for setting y in PGD
+- 0831_2PM: This is 10 epoch, with setting y in PGD. The ItAdv
+  versions do not typically converge, but can sometimes converge
+  randomly.
+- 0901_8PM: 10 epoch CIFAR exp, without setting y in PGD training.
+
+All the models before 0901 8PM (inclusive) have a defect of
+ItAdvCNN. For diferent AE model, this is overwritten, but should not
+have.
+
+- 0902_11AM: 20 epoch CIFAR, with setting y during training.
+
 
 * TODOs for AAAI
-** test x+delta in regularization term
-** Better result formatting
-** Remove dunet in CIFAR
-** The #param might be interesting
+** STARTED [#A] new results on transfer and ensemble
+** STARTED [#A] Get defgan into plot
+** Performance-wise
+- Can I use a smaller number of iterations of PGD during training?
+
+** The target tensor in PGD
+*** STARTED [#A] Testing
+
+Use the new PGD attack with y supplied
+
+It's good for MNIST.
+
+But, it is not good for CIFAR!
+*** STARTED [#A] Training
+
+Use y option in FGSM/PGD during training.
+
+Why setting y giving bad results, not converging?
+
+** TODO [#A] CIFAR experiments
+The CIFAR experiments are not good for proper PGD attack (with
+target tensor). Thus, I'm considering two reasons:
+- not enough epoch
+- not using the proper PGD with target during training
+*** difference between mnist_challenge and cifar_challenge
+
+- data augmentation for adv training
+- weight decay
+- NOT using C2 loss
+
+**** Additional experiments in Madry's paper
+
+- plot training loss and validation loss during training
+- in epsilon plot, show the training epsilon
+- show l2 norm epsilon plot. Madry's paper didn't mention which l2 it
+  is using.
+- show adversarial with different number of steps
+
+- 40, 0.01, 0.3 for training, 40, 100 for testing
+  - no attack: 98.8
+  - 40: 93.2%
+  - 100: 89.3%
+- 7, 2, 8 for training, 7, 20 for testing 
+  - no attack: 87.3
+  - 50.0%
+  - 45.8%
+
+*** I was using 0.3 to test cifar
+I should have used 8/255 instead.
+
+*** DONE I'm exploring these.
+    CLOSED: [2019-09-02 Mon 11:20]
+- using 20 epoch
+- using PGD with targets during training
+
+*** TODO Next, I probably
+- increasing epochs
+- training using PGD with targets in MNIST exp
+
+*** TODO [#A] Remove dunet in CIFAR
+
+** TODO [#A] Investigate CNN3AE problems
+It seems that CNN3AE the last layer needs some special treatment
+('sampling' not to be 'same'). This also does not work on CIFAR model
+in terms of dimension match.
+
+Thus, I'm going to either
+- investigate why CNN3AE has such problem, or
+- remove CNN3AE entirely
+
+*** replace CNN3AE with CNN1AE
+*** model all (all 2/4/6-layer CNN) using get_wideae lambda function
+
+*** TODO [#A] Try not bottleneck AE
+
+
+
+** [#C] test x+delta in regularization term
+** DONE Better result formatting
+   CLOSED: [2019-08-31 Sat 01:06]
+** [#C] Try C2 loss
+** DONE The #param might be interesting
+   CLOSED: [2019-08-31 Sat 01:07]
 The AE parameter is usually much smaller than the CNN parameter
 
-** [#A] Get defgan into plot
+** Inference time comparison
+** [#B] BPDA on AdvAE
 
-** PuVAE
+** [#C] Try different parameters of PGD *during* training
+** [#C] PuVAE
 
-** [#A] new results on transfer and ensemble
-** Try not bottleneck AE
 
 ** CANCELED How to run faster? mini-batch?
    CLOSED: [2019-08-29 Thu 16:11]

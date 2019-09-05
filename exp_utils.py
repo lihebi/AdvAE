@@ -95,7 +95,7 @@ def load_model_transfer(cnn_cls, ae_cls, advae_cls,
                                dataset_name=dataset_name)
     sess = create_tf_session()
    
-    cnn = to_cnn_cls()
+    cnn = to_cnn_cls(training=False)
     ae = ae_cls(cnn)
     adv = advae_cls(cnn, ae)
 
@@ -173,7 +173,7 @@ def train_model(cnn_cls, ae_cls, advae_cls,
                 ae.AE.summary()
                 adv = advae_cls(cnn, ae)
                 tf_init_uninitialized(sess)
-                print('Trainng AdvAE ..')
+                print('Trainng AdvAE {} ..'.format(pAdvAE))
                 if dataset_name is 'MNIST':
                     adv.train_Adv(sess, train_x, train_y, augment=False)
                 else:
@@ -192,7 +192,7 @@ def train_model(cnn_cls, ae_cls, advae_cls,
                 # load cnn
                 print('Loading {} ..'.format(pCNN))
                 cnn.load_weights(sess, pCNN)
-                print('Trainng AdvAE ..')
+                print('Trainng AdvAE {} ..'.format(pAdvAE))
                 if dataset_name is 'MNIST':
                     adv.train_Adv(sess, train_x, train_y, augment=False)
                 else:
@@ -316,56 +316,23 @@ def test_model_transfer(cnn_cls, ae_cls, advae_cls, test_x, test_y,
                                       dataset_name=dataset_name)
     save_prefix = 'test-result-{}-TO-{}'.format(plot_prefix, to_cnn_cls.NAME())
     
-    filename = 'images/{}.pdf'.format(save_prefix)
-    filename2 = 'images/{}.json'.format(save_prefix)
+    filename = 'images/{}.json'.format(save_prefix)
 
     print('Testing transfer {} ..'.format(save_prefix))
-    if not os.path.exists(filename2) or force:
+    if not os.path.exists(filename) or force:
         print('loading model ..')
         model, sess = load_model_transfer(cnn_cls, ae_cls, advae_cls,
                                           to_cnn_cls=to_cnn_cls,
                                           dataset_name=dataset_name)
         
         print('testing {} ..'.format(plot_prefix))
-        model.test_all(sess, test_x, test_y,
-                       attacks=['CW', 'FGSM', 'PGD'],
-                       save_prefix=save_prefix)
-    else:
-        print('Already tested, see {}'.format(filename))
-    
-
-def test_model_bbox(cnn_cls, ae_cls, advae_cls, test_x, test_y,
-                    dataset_name='', to_cnn_cls=None,
-                    saved_folder='saved_models', force=False,
-                    save_prefix=''):
-    """Transfer to TO_CNN_CLS."""
-    assert to_cnn_cls is not None
-    _, _, plot_prefix = compute_names(cnn_cls, ae_cls, advae_cls,
-                                      dataset_name=dataset_name)
-    if not save_prefix:
-        save_prefix = 'test-result-{}-BBOX-{}'.format(plot_prefix, to_cnn_cls.NAME())
-    filename = 'images/{}.json'.format(save_prefix)
-    
-    print('Testing transfer {} ..'.format(save_prefix))
-    if not os.path.exists(filename) or force:
-        print('loading model ..')
-        model, sess = load_model(cnn_cls, ae_cls, advae_cls,
-                                 dataset_name=dataset_name)
-        sub = to_cnn_cls()
-        
-        # after getting the sub model, run attack on sub model
-        res = test_sub(sess, model, sub, test_x, test_y)
-        
-        datafile = 'images/{}.json'.format(save_prefix)
-        print('Result:')
-        print(res)
-        with open(datafile, 'w') as fp:
+        res = test_model_impl(sess, model, test_x, test_y, dataset_name)
+        print('Saving to {} ..'.format(filename))
+        with open(filename, 'w') as fp:
             json.dump(res, fp, indent=4)
-        print('Done. Saved to {}'.format(datafile))
     else:
         print('Already tested, see {}'.format(filename))
-
-
+    
 def train_ensemble(cnn_clses, ae_cls, advae_cls,
                    train_x, train_y,
                    saved_folder='saved_models',
@@ -388,7 +355,7 @@ def train_ensemble(cnn_clses, ae_cls, advae_cls,
     
     with create_tf_session() as sess:
         print('creating cnns ..')
-        cnns = [cnn_cls() for cnn_cls in cnn_clses]
+        cnns = [cnn_cls(training=False) for cnn_cls in cnn_clses]
         print('creating AE ..')
         ae = ae_cls(cnns[0])
         print('creating advae ..')
@@ -450,28 +417,35 @@ def ensemble_training_impl(sess, advae_models, train_x, train_y):
 
     print('creating keras model ..')
     model = keras.models.Model(inputs=advae_models[0].x,
-                               # outputs=[m.logits for m in advae_models],
-                               outputs=advae_models[0].logits
-    )
+                               outputs=advae_models[0].logits)
 
+    model.extrainfo = {
+        'accs': {
+            'advacc': tf.reduce_mean([m.adv_accuracy for m in advae_models]),
+            'acc': tf.reduce_mean([m.accuracy for m in advae_models]),
+            'cnnacc': tf.reduce_mean([m.CNN_accuracy for m in advae_models]),
+            'obliacc': tf.reduce_mean([m.obli_accuracy for m in advae_models]),
+        },
+        'input': advae_models[0].x,
+        'output': advae_models[0].y,
+    }
     print('creating loss ..')
     def myloss(ytrue, ypred):
         return tf.reduce_sum([m.adv_loss for m in advae_models])
 
     with sess.as_default():
         # DEBUG This is painfully slow, so setting a lower patience
-        callbacks = [get_lr_reducer(),
-                     get_es()]
+        callbacks = [get_lr_reducer(3),
+                     MyCallback(),
+                     get_es(7)]
         print('compiling model ..')
         model.compile(loss=myloss,
-                      # metrics includes 5x overhead
-                      # metrics=metrics,
-                      optimizer=keras.optimizers.Adam(lr=1e-3),
+                      optimizer=keras.optimizers.Adam(lr=2e-3),
                       target_tensors=[advae_models[0].y])
         print('fitting model ..')
         model.fit(train_x, train_y,
                   validation_split=0.1,
-                  epochs=100,
+                  epochs=50,
                   callbacks=callbacks)
 def load_dataset(dataset_name):
     if dataset_name == 'MNIST':

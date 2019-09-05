@@ -2368,3 +2368,34 @@ is in the NAME()."""
         with sess.as_default():
             self.AE.load_weights(path.replace('.hdf5', '-hackAE.hdf5'))
 
+def test_model_bbox(cnn_cls, ae_cls, advae_cls, test_x, test_y,
+                    dataset_name='', to_cnn_cls=None,
+                    saved_folder='saved_models', force=False,
+                    save_prefix=''):
+    """Transfer to TO_CNN_CLS."""
+    assert to_cnn_cls is not None
+    _, _, plot_prefix = compute_names(cnn_cls, ae_cls, advae_cls,
+                                      dataset_name=dataset_name)
+    if not save_prefix:
+        save_prefix = 'test-result-{}-BBOX-{}'.format(plot_prefix, to_cnn_cls.NAME())
+    filename = 'images/{}.json'.format(save_prefix)
+    
+    print('Testing transfer {} ..'.format(save_prefix))
+    if not os.path.exists(filename) or force:
+        print('loading model ..')
+        model, sess = load_model(cnn_cls, ae_cls, advae_cls,
+                                 dataset_name=dataset_name)
+        sub = to_cnn_cls()
+        
+        # after getting the sub model, run attack on sub model
+        res = test_sub(sess, model, sub, test_x, test_y)
+        
+        datafile = 'images/{}.json'.format(save_prefix)
+        print('Result:')
+        print(res)
+        with open(datafile, 'w') as fp:
+            json.dump(res, fp, indent=4)
+        print('Done. Saved to {}'.format(datafile))
+    else:
+        print('Already tested, see {}'.format(filename))
+

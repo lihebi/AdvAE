@@ -51,13 +51,13 @@ def run_exp_ensemble(cnn_clses, ae_cls, advae_cls,
                      dataset_name='',
                      run_test=True):
     (train_x, train_y), (test_x, test_y) = load_dataset(dataset_name)
-    train_ensemble(cnn_clses, ae_cls, advae_cls, train_x, train_y, dataset_name='MNIST')
+    train_ensemble(cnn_clses, ae_cls, advae_cls, train_x, train_y, dataset_name=dataset_name)
     if run_test:
         for m in to_cnn_clses:
             test_ensemble(cnn_clses, ae_cls, advae_cls,
                           test_x, test_y,
                           to_cnn_cls=m,
-                          dataset_name='MNIST')
+                          dataset_name=dataset_name)
 
 
 def main_cifar10_exp():
@@ -75,19 +75,40 @@ def main_cifar10_exp():
 def main_transfer_exp():
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
     print('training CNNs for transfer models')
-    for m in [MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d]:
+    for m in [MNISTModel, DefenseGAN_a, DefenseGAN_b,
+              DefenseGAN_c, DefenseGAN_d
+    ]:
         train_CNN(m, train_x, train_y, dataset_name='MNIST')
     print('Testing ..')
     for m in [
             DefenseGAN_a,
             DefenseGAN_b,
             DefenseGAN_c,
-            DefenseGAN_d]:
-        for l in [0, 0.2, 0.5, 1, 1.5, 5]:
-            test_model_transfer(MNISTModel, AEModel, get_lambda_model(l),
+            DefenseGAN_d
+    ]:
+        # for l in [0, 0.2, 0.5, 1, 1.5, 5]:
+        for l in [1]:
+            test_model_transfer(MNISTModel, CNN1AE, get_lambda_model(l),
                                 test_x, test_y,
                                 to_cnn_cls=m,
                                 dataset_name='MNIST')
+
+def main_cifar_transfer():
+    (train_x, train_y), (test_x, test_y) = load_cifar10_data()
+    print('training CNNs for transfer models')
+    for m in [MyResNet29, MyResNet56, MyResNet110]:
+        train_CNN(m, train_x, train_y, dataset_name='CIFAR10')
+    print('Testing ..')
+    for m in [
+            MyResNet56,
+            MyResNet110
+    ]:
+        for l in [1]:
+            test_model_transfer(MyResNet29, DunetModel, get_lambda_model(l),
+                                test_x, test_y,
+                                to_cnn_cls=m,
+                                dataset_name='CIFAR10')
+    
 
 def epsilon_exp(ae_cls, advae_cls, num_samples, save_name):
     """Experiment for different epsilon and add advanced blackbox results."""
@@ -157,8 +178,7 @@ def main_epsilon_exp():
                       # A0?
                       C0_A2_A0_Model, A2_A0_Model,
                       # testing C2
-                      # C2_A2_Model,
-                      C0_A2_Model]:
+                      C2_A2_Model]:
         run_exp_model(MNISTModel, CNN1AE, advae_cls, dataset_name='MNIST', run_test=True)
         
 def main_lambda_exp():
@@ -182,6 +202,36 @@ def main_ae_size():
     for ae_cls in [CNN1AE, CNN2AE, CNN3AE, FCAE, deepFCAE]:
         run_exp_model(MNISTModel, ae_cls, get_lambda_model(1), dataset_name='MNIST', run_test=True)
 
+def main_new_cifar10_2():
+    # testing itadv
+    # FIXME why the new identity experiments have different AE and CNN accuracy?
+    run_exp_model(MyResNet29, IdentityAEModel, TestItAdv_Model, dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(1.5), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(0), dataset_name='CIFAR10', run_test=True)
+    # it looks like this converges much faster?
+    run_exp_model(MyResNet29, IdentityAEModel, ItAdvA2C2_Model, dataset_name='CIFAR10', run_test=True)
+    # This is not working
+    # run_exp_model(MyResNet29, DunetModel, ItAdv_Model, dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, ItAdvA2C2_Model, dataset_name='CIFAR10', run_test=True)
+    # rerun C2 A2
+    run_exp_model(MyResNet29, DunetModel, C2_A2_Model, dataset_name='CIFAR10', run_test=True)
+    # whether CNN1AE can work with more epochs
+    # run_exp_model(MyResNet29, CNN1AE, get_lambda_model(300), dataset_name='CIFAR10', run_test=True)
+    # testing A0 model
+    run_exp_model(MyResNet29, DunetModel, C0_A2_A0_Model, dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, A2_A0_Model, dataset_name='CIFAR10', run_test=True)
+
+    # testing the auto encoder clean accuracy
+    # Result: CNN1AE is very good. I need to rerun exp.
+    #
+    # run_exp_model(MyResNet29, CNN2AE, C0_Model, dataset_name='CIFAR10', run_test=True)
+    # run_exp_model(MyResNet29, CNN1AE, C2_Model, dataset_name='CIFAR10', run_test=True)
+    # run_exp_model(MyResNet29, CNN2AE, C2_Model, dataset_name='CIFAR10', run_test=True)
+    # run_exp_model(MyResNet29, CNN1AE, C0_Model, dataset_name='CIFAR10', run_test=True)
+
+    # run_exp_model(MyResNet29, DunetModel, C2_Model, dataset_name='CIFAR10', run_test=True)
+    # run_exp_model(MyResNet29, DunetModel, C0_Model, dataset_name='CIFAR10', run_test=True)
+
 def main_new_cifar10():
     # dunet may still be the best
     # dunet has no batch norm layer
@@ -192,20 +242,33 @@ def main_new_cifar10():
     # TODO running B2, the HGD
     # FIXME C0_B2_Model?
     run_exp_model(MyResNet29, DunetModel, B2_Model, dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, C0_B2_Model, dataset_name='CIFAR10', run_test=True)
     
     # testing other lambdas
     run_exp_model(MyResNet29, DunetModel, get_lambda_model(2), dataset_name='CIFAR10', run_test=True)
     run_exp_model(MyResNet29, DunetModel, get_lambda_model(3), dataset_name='CIFAR10', run_test=True)
 
+    # different cnn models
+    #
+    # TODO for WideResNet and DenseNet, I need to set the batch
+    # normalization training label correctly, so skip for now.
+    run_exp_model(MyResNet56, DunetModel, get_lambda_model(1), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet110, DunetModel, get_lambda_model(1), dataset_name='CIFAR10', run_test=True)
+    
     # Only Dunet seems to work a little, so I'm not going to even try these
     run_exp_model(MyResNet29, CNN1AE, get_lambda_model(1), dataset_name='CIFAR10', run_test=True)
     run_exp_model(MyResNet29, CNN2AE, get_lambda_model(1), dataset_name='CIFAR10', run_test=True)
     # run_exp_model(MyResNet29, CNN1AE, get_lambda_model(0), dataset_name='CIFAR10', run_test=True)
 
+    # More itadv models
     run_exp_model(MyResNet29, CNN1AE, ItAdv_Model, dataset_name='CIFAR10', run_test=True)
     # run_exp_model(MyResNet29, CNN2AE, ItAdv_Model, dataset_name='CIFAR10', run_test=True)
-    # AdvAE
-    # FIXME use some other lambda
+    
+    # More lambdas
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(0), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(0.5), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(4), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(5), dataset_name='CIFAR10', run_test=True)
 
 def __test():
     m = MNISTModel()
@@ -241,16 +304,36 @@ def test_defgan():
     
     res = test_model_impl(sess, model, test_x, test_y)
 
+def new_mnist_exp():
+    run_exp_model(MNISTModel, CNN1AE, get_lambda_model(0), dataset_name='MNIST', run_test=True)
+    # rerun these two
+    run_exp_model(MNISTModel, CNN1AE, get_lambda_model(0), dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, CNN1AE, get_lambda_model(0.2), dataset_name='MNIST', run_test=True)
+    run_exp_model(MNISTModel, CNN1AE, C2_A2_Model, dataset_name='MNIST', run_test=True)
+
 if __name__ == '__main__':
     with warnings.catch_warnings():
         # I'm suppressing cleverhans's deprecated usage of reduce_sum
         # This might be dangerous, all warnings.warn will not show up
         warnings.simplefilter("ignore")
         warnings.warn("WARNNNNNNN")
-        main_epsilon_exp()
-        main_ae_size()
-        main_lambda_exp()
-        main_new_cifar10()
+        # (train_x, train_y), (test_x, test_y) = load_dataset('MNIST')
+        # test_model(MNISTModel, CNN1AE, get_lambda_model(1),
+        #            test_x, test_y, dataset_name='MNIST', force=True)
+
+        # main_transfer_exp()
+        # main_cifar_transfer()
+        run_exp_ensemble([MyResNet29, MyResNet56],
+                         DunetModel, get_lambda_model(1),
+                         to_cnn_clses=[MyResNet110],
+                         dataset_name='CIFAR10')
+
+        # main_new_cifar10()
+        # main_new_cifar10_2()
+        # new_mnist_exp()
+        # main_epsilon_exp()
+        # main_ae_size()
+        # main_lambda_exp()
     
     # main_mnist_exp()
     # main_cifar10_exp()

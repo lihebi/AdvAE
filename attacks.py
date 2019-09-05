@@ -171,8 +171,8 @@ def my_CW_BPDA(sess, pre_model, post_model, x, y, params=dict()):
 def evaluate_attack_PGD(sess, model, attack_name, xval, yval, eps):
     """PGD likes. The attack will take eps as argument."""
     accs = []
-    for e in eps:
-        print('Running on eps ', e)
+    for i,e in enumerate(eps):
+        print('Running on eps ({} / {})'.format(i+1, len(eps)))
         if attack_name is 'PGD':
             # setting mainly the niter and step_size
             params = model.cnn_model.PGD_params

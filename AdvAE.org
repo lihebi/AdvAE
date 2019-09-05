@@ -48,12 +48,17 @@ I'm going to delete all MNIST models and rerun with:
 
 Also, I'm running more CIFAR models using 30 epochs this time.
 
+- 0904_1PM: all MNIST and remaining CIFAR experiments, 30 epoch
+
 
 * TODOs for AAAI
 ** STARTED [#A] new results on transfer and ensemble
 ** STARTED [#A] Get defgan into plot
+** HSJA black-box
 ** Performance-wise
 - Can I use a smaller number of iterations of PGD during training?
+** [#A] PuVAE
+** [#B] BPDA on AdvAE
 
 ** DONE The target tensor in PGD
    CLOSED: [2019-09-03 Tue 03:13]
@@ -74,6 +79,14 @@ The CIFAR experiments are not good for proper PGD attack (with
 target tensor). Thus, I'm considering two reasons:
 - not enough epoch
 - not using the proper PGD with target during training
+*** Other ideas to improve CIFAR results?
+- augmentation in adv training
+- ae pretraining
+- batch normalized AE
+- non-batch normalized CNN
+- C2_A2 seems to have pretty good AE accuracy (0.74)
+- use different parameters of PGD during training
+
 *** difference between mnist_challenge and cifar_challenge
 
 - data augmentation for adv training
@@ -136,10 +149,8 @@ Thus, I'm going to either
 The AE parameter is usually much smaller than the CNN parameter
 
 ** Inference time comparison
-** [#B] BPDA on AdvAE
 
 ** [#C] Try different parameters of PGD *during* training
-** [#C] PuVAE
 
 
 ** CANCELED How to run faster? mini-batch?

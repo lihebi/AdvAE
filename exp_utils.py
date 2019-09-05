@@ -229,39 +229,51 @@ def test_model_impl(sess, model, test_x, test_y, dataset_name):
     if dataset_name is 'MNIST':
         eps = np.arange(0.02,0.6,0.04).tolist()
     elif dataset_name is 'CIFAR10':
-        eps = (np.arange(2,17,2)/255).tolist()
+        # DEBUG more distortion
+        eps = (np.arange(2,30,2)/255).tolist()
+
+    # I probably need to use the same set of tests to evaluate these
+    # DEBUG number of samples
+    indices = random.sample(range(test_x.shape[0]), 100)
+
     print('testing no atttack CNN ..')
-    res["no atttack CNN"] = evaluate_no_attack_CNN(sess, model, test_x, test_y,
-                                                   num_samples=50)
+    res["no atttack CNN"] = evaluate_no_attack_CNN(sess, model,
+                                                   test_x[indices], test_y[indices])
+    print("no atttack CNN", res["no atttack CNN"])
+
     print('testing no atttack AE ..')
-    res["no atttack AE"] = evaluate_no_attack_AE(sess, model, test_x, test_y,
-                                                 num_samples=50)
-    res["num_samples"] = 50
+    res["no atttack AE"] = evaluate_no_attack_AE(sess, model,
+                                                 test_x[indices], test_y[indices])
+    print("no atttack AE", res["no atttack AE"])
+    # res["num_samples"] = 50
+    
     res['epsilon'] = eps
     
     print('Running whitebox FGSM ..')
-    fgsm_res = evaluate_attack(sess, model, 'FGSM', test_x, test_y,
-                               num_samples=50, eps=eps)
+    fgsm_res = evaluate_attack(sess, model, 'FGSM',
+                               test_x[indices], test_y[indices],
+                               eps=eps)
     res['FGSM'] = fgsm_res
     
     print('Running whitebox PGD ..')
-    pgd_res = evaluate_attack(sess, model, 'PGD', test_x, test_y,
-                              num_samples=50, eps=eps)
+    pgd_res = evaluate_attack(sess, model, 'PGD',
+                              test_x[indices], test_y[indices],
+                              eps=eps)
     res['PGD'] = pgd_res
     
-    # print('Running CW ..')
-    # cw_res = evaluate_attack(sess, model, 'CW', test_x, test_y,
-    #                          num_samples=100, eps=eps)
-    # # CW result is a single accuracy
-    # res["CW"] = cw_res
+    print('Running CW ..')
+    cw_res = evaluate_attack(sess, model, 'CW',
+                             test_x[indices], test_y[indices])
+    res["CW"] = cw_res
+    print(res["CW"])
 
     # this is extremely slow, so setting to run 20
 
-    # print('Running blackbox Hop ..')
-    # hop_res = evaluate_attack(sess, model, 'Hop', test_x, test_y,
-    #                              num_samples=20, eps=eps)
-    # res["epsilon_exp_header"] = ["epsilon", "FGSM", "PGD", "Hop"]
-    # res["epsilon_exp_data"] = list(zip(eps, fgsm_res, pgd_res, hop_res))
+    print('Running blackbox Hop ..')
+    hop_res = evaluate_attack(sess, model, 'Hop',
+                              test_x[indices][:20], test_y[indices][:20],
+                              eps=eps)
+    res["Hop"] = hop_res
 
     return res
 

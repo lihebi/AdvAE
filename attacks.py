@@ -135,11 +135,10 @@ def my_JSMA(model, x, params=dict()):
                    'y_target': None}
     jsma_params.update(params)
     return tf.stop_gradient(jsma.generate(x, **jsma_params))
-def my_CW(sess, model, x, y, targeted=False, params=dict()):
+def my_CW(sess, model, x, y, params=dict()):
     """When targeted=True, remember to put target as y."""
     # CW attack
     cw = CarliniWagnerL2(model, sess=sess)
-    yname = 'y_target' if targeted else 'y'
     cw_params = {'binary_search_steps': 1,
                  'y': y,
                  'max_iterations': 1000,
@@ -151,11 +150,10 @@ def my_CW(sess, model, x, y, targeted=False, params=dict()):
     cw_params.update(params)
     adv_x = cw.generate(x, **cw_params)
     return tf.stop_gradient(adv_x)
-def my_CW_BPDA(sess, pre_model, post_model, x, y, targeted=False, params=dict()):
+def my_CW_BPDA(sess, pre_model, post_model, x, y, params=dict()):
     cw = CarliniWagnerL2_BPDA(pre_model, post_model, sess=sess)
-    yname = 'y_target' if targeted else 'y'
     cw_params = {'binary_search_steps': 1,
-                 yname: y,
+                 'y': y,
                  # 3 sec per iteration
                  'max_iterations': 10,
                  'learning_rate': 0.2,
@@ -174,6 +172,7 @@ def evaluate_attack_PGD(sess, model, attack_name, xval, yval, eps):
     """PGD likes. The attack will take eps as argument."""
     accs = []
     for e in eps:
+        print('Running on eps ', e)
         if attack_name is 'PGD':
             # setting mainly the niter and step_size
             params = model.cnn_model.PGD_params
@@ -189,19 +188,26 @@ def evaluate_attack_PGD(sess, model, attack_name, xval, yval, eps):
                           params=params)
         else:
             assert False
-        adv_val = sess.run(adv, feed_dict={model.x: xval, model.y: yval})
-        acc = sess.run(model.accuracy, feed_dict={model.x: adv_val, model.y: yval})
-        accs.append(acc)
+        def foo(batch_x, batch_y):
+            adv_val = sess.run(adv, feed_dict={model.x: batch_x, model.y: batch_y})
+            acc = sess.run(model.accuracy, feed_dict={model.x: adv_val, model.y: batch_y})
+            return acc
+        acc = run_on_batch_light(foo, xval, yval, 100)
+        accs.append(sum(acc) / len(acc))
     return np.array(accs).tolist()
 
 def evaluate_attack_CW(sess, model, xval, yval):
     """This is L2, so no eps, no thresholding."""
-    adv = my_CW(model, xval)
-    adv_val = sess.run(adv, feed_dict={model.x: xval, model.y: yval})
-    acc = sess.run(model.accuracy, feed_dict={model.x: adv_val, model.y: yval})
-    return float(acc)
+    def foo(x,y):
+        adv = my_CW(sess, model, model.x, model.y)
+        adv_val = sess.run(adv, feed_dict={model.x: x, model.y: y})
+        acc = sess.run(model.accuracy, feed_dict={model.x: adv_val, model.y: y})
+        return acc
+    res = run_on_batch_light(foo, xval, yval, 100)
+    return float(sum(res) / len(res))
 
 def evaluate_attack_Hop(sess, model, attack_name, xval, yval, eps):
+    assert xval.shape[0] <= 100
     # assuming attack name is 'Hop'
     if attack_name is 'Hop':
         # adv_val = my_HopSkipJump_np(sess, model, xval)
@@ -237,30 +243,41 @@ def evaluate_attack_Hop(sess, model, attack_name, xval, yval, eps):
         accs.append(acc)
     return np.array(accs).tolist()
 
-def evaluate_attack(sess, model, attack_name, xval, yval, num_samples=100, eps=[]):
-    assert len(eps) > 0
-    
-    shuffle_idx = np.arange(xval.shape[0])
-    idx = shuffle_idx[:num_samples]
-
+def evaluate_attack(sess, model, attack_name, xval, yval, eps=[]):
     if attack_name in ['PGD', 'FGSM']:
-        return evaluate_attack_PGD(sess, model, attack_name, xval[idx], yval[idx], eps=eps)
+        return evaluate_attack_PGD(sess, model, attack_name, xval, yval, eps=eps)
     elif attack_name in ['Hop']:
-        return evaluate_attack_Hop(sess, model, attack_name, xval[idx], yval[idx], eps=eps)
+        return evaluate_attack_Hop(sess, model, attack_name, xval, yval, eps=eps)
     elif attack_name in ['CW']:
-        return evaluate_attack_CW(sess, model, xval[idx], yval[idx])
+        return evaluate_attack_CW(sess, model, xval, yval)
     else:
         assert False
 
-
-def evaluate_no_attack_CNN(sess, model, xval, yval, num_samples=100):
-    shuffle_idx = np.arange(xval.shape[0])
-    idx = shuffle_idx[:num_samples]
-    acc = sess.run(model.CNN_accuracy, feed_dict={model.x: xval[idx], model.y: yval[idx]})
-    return acc.tolist()
+def evaluate_no_attack_CNN(sess, model, xval, yval):
+    # FIXME does lexical scope work?
+    def foo(batch_x, batch_y):
+        return sess.run(model.CNN_accuracy, feed_dict={model.x: batch_x, model.y: batch_y})
+    accs = run_on_batch_light(foo, xval, yval, 100)
+    # FIXME not accurate if cannot divide equally
+    return sum(accs) / len(accs)
 
 def evaluate_no_attack_AE(sess, model, xval, yval, num_samples=100):
-    shuffle_idx = np.arange(xval.shape[0])
-    idx = shuffle_idx[:num_samples]
-    acc = sess.run(model.accuracy, feed_dict={model.x: xval[idx], model.y: yval[idx]})
-    return acc.tolist()
+    def foo(batch_x, batch_y):
+        return sess.run(model.accuracy, feed_dict={model.x: batch_x, model.y: batch_y})
+    accs = run_on_batch_light(foo, xval, yval, 100)
+    return sum(accs) / len(accs)
+
+def run_on_batch_light(f, npx, npy, batch_size):
+    nbatch = npx.shape[0] // batch_size
+    print('running on {} batches: '.format(nbatch), end='', flush=True)
+    allres = []
+    for i in range(nbatch):
+        start = i * batch_size
+        end = (i+1) * batch_size
+        batch_x = npx[start:end]
+        batch_y = npy[start:end]
+        npres = f(batch_x, batch_y)
+        allres.append(npres)
+        print('.', end='', flush=True)
+    print('')
+    return allres

@@ -255,13 +255,15 @@ class AdvAEModel(cleverhans.model.Model):
     def train_or_load_AE(self, sess, train_x):
         pass
 
-    def train_Adv(self, sess, train_x, train_y, plot_prefix='', light=True):
+    def train_Adv(self, sess, train_x, train_y, plot_prefix='', light=True, augment=False):
         """Adv training.
 
         TODO the training with metrics slow down by 2X. But I want to
         have the metrics score at the end of each epoch.
 
         """
+        if augment:
+            (train_x, train_y), (val_x, val_y) = validation_split(train_x, train_y)
         self.train_or_load_AE(sess, train_x)
         outputs = keras.layers.Activation('softmax')(self.FC(self.CNN(self.AE(self.x))))
         model = keras.models.Model(self.x, outputs)
@@ -296,21 +298,98 @@ class AdvAEModel(cleverhans.model.Model):
             metrics = None
         else:
             metrics = [cnnacc, acc, obliacc, advacc]
-            
+
+        if augment:
+            datagen = keras.preprocessing.image.ImageDataGenerator(
+                # set input mean to 0 over the dataset
+                featurewise_center=False,
+                # set each sample mean to 0
+                samplewise_center=False,
+                # divide inputs by std of dataset
+                featurewise_std_normalization=False,
+                # divide each input by its std
+                samplewise_std_normalization=False,
+                # apply ZCA whitening
+                zca_whitening=False,
+                # epsilon for ZCA whitening
+                zca_epsilon=1e-06,
+                # randomly rotate images in the range (deg 0 to 180)
+                rotation_range=0,
+                # randomly shift images horizontally
+                width_shift_range=0.1,
+                # randomly shift images vertically
+                height_shift_range=0.1,
+                # set range for random shear
+                shear_range=0.,
+                # set range for random zoom
+                zoom_range=0.,
+                # set range for random channel shifts
+                channel_shift_range=0.,
+                # set mode for filling points outside the input boundaries
+                fill_mode='nearest',
+                # value used for fill_mode = "constant"
+                cval=0.,
+                # randomly flip images
+                horizontal_flip=True,
+                # randomly flip images
+                vertical_flip=False,
+                # set rescaling factor (applied before any other transformation)
+                rescale=None,
+                # set function that will be applied on each input
+                preprocessing_function=None,
+                # image data format, either "channels_first" or "channels_last"
+                data_format=None,
+                # fraction of images reserved for validation (strictly between 0 and 1)
+                validation_split=0.0)
+            # datagen = keras.preprocessing.image.ImageDataGenerator(
+            #     rotation_range=10,
+            #     width_shift_range=0.1,
+            #     height_shift_range=0.1,
+            #     horizontal_flip=True,)
+            datagen.fit(train_x)
+        
+        # can I train a AE loss for 1 epoch first?
+        # with sess.as_default():
+        #     def aeloss(ytrue, ypred):
+        #         return self.C0_loss
+        #     callbacks = [MyCallback()]
+        #     # FIXME if the model can be recompiled
+        #     # FIXME if the optimizer has states
+        #     model.compile(loss=aeloss,
+        #                   metrics=metrics,
+        #                   optimizer=keras.optimizers.Adam(lr=1e-3),
+        #                   target_tensors=self.y)
+        #     # FIXME the validation split is not the same as below training
+        #     model.fit(train_x, train_y,
+        #               validation_split=0.1,
+        #               epochs=1,
+        #               callbacks=callbacks)
+
         with sess.as_default():
-            callbacks = [get_lr_reducer(patience=4),
+            callbacks = [get_lr_reducer(patience=3),
                          MyCallback(),
                          # DEBUG whether to use 7 or 10
                          get_es(patience=7)]
             model.compile(loss=myloss,
                           metrics=metrics,
-                          optimizer=keras.optimizers.Adam(lr=1e-3),
+                          optimizer=keras.optimizers.Adam(lr=2e-3),
+                          # optimizer=keras.optimizers.Adam(lr=1e-3),
                           target_tensors=self.y)
-            model.fit(train_x, train_y,
-                      validation_split=0.1,
-                      # DEBUG adv train epoch
-                      epochs=50,
-                      callbacks=callbacks)
+            if augment:
+                print('!!!!! Training on datagen with data augmentation')
+                model.fit_generator(datagen.flow(train_x, train_y, batch_size=BATCH_SIZE),
+                                    validation_data=(val_x, val_y),
+                                    verbose=1,
+                                    workers=4,
+                                    steps_per_epoch=math.ceil(train_x.shape[0] / BATCH_SIZE),
+                                    epochs=200,
+                                    callbacks=callbacks)
+            else:
+                model.fit(train_x, train_y,
+                          validation_split=0.1,
+                          # DEBUG adv train epoch
+                          epochs=200,
+                          callbacks=callbacks)
 
     def test_attack(self, sess, test_x, test_y, name,
                     num_samples=NUM_SAMPLES, batch_size=50):
@@ -574,6 +653,19 @@ class ItAdv_Model(AdvAEModel):
         # self.adv_loss = self.A2_loss + self.C2_loss
         # self.adv_loss = self.C2_loss
         self.adv_loss = self.A2_loss
+class TestItAdv_Model(AdvAEModel):
+    """This is a dummy class, exactly same as AdvAEModel except name()."""
+    @staticmethod
+    def NAME():
+        return 'ItAdv-test'
+    def setup_trainloss(self):
+        self.adv_loss = self.A2_loss
+class ItAdvA2C2_Model(AdvAEModel):
+    @staticmethod
+    def NAME():
+        return 'ItAdvA2C2'
+    def setup_trainloss(self):
+        self.adv_loss = self.A2_loss + self.C2_loss
         
 class B2_Model(AdvAEModel):
     """B2/B1 loss is exactly the oblivious loss, corresponding to HGD."""
@@ -582,6 +674,18 @@ class B2_Model(AdvAEModel):
     @staticmethod
     def NAME():
         return 'B2'
+class C0_Model(AdvAEModel):
+    @staticmethod
+    def NAME():
+        return 'C0'
+    def setup_trainloss(self):
+        self.adv_loss = self.C0_loss
+class C2_Model(AdvAEModel):
+    def setup_trainloss(self):
+        self.adv_loss = self.C2_loss
+    @staticmethod
+    def NAME():
+        return 'C2'
 class C0_B2_Model(AdvAEModel):
     def setup_trainloss(self):
         self.adv_loss = self.B2_loss

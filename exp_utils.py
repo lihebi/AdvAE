@@ -174,7 +174,10 @@ def train_model(cnn_cls, ae_cls, advae_cls,
                 adv = advae_cls(cnn, ae)
                 tf_init_uninitialized(sess)
                 print('Trainng AdvAE ..')
-                adv.train_Adv(sess, train_x, train_y)
+                if dataset_name is 'MNIST':
+                    adv.train_Adv(sess, train_x, train_y, augment=False)
+                else:
+                    adv.train_Adv(sess, train_x, train_y, augment=True)
                 # save cnn
                 print('Saving model to {} ..'.format(pCNN))
                 cnn.save_weights(sess, pCNN)
@@ -190,7 +193,10 @@ def train_model(cnn_cls, ae_cls, advae_cls,
                 print('Loading {} ..'.format(pCNN))
                 cnn.load_weights(sess, pCNN)
                 print('Trainng AdvAE ..')
-                adv.train_Adv(sess, train_x, train_y)
+                if dataset_name is 'MNIST':
+                    adv.train_Adv(sess, train_x, train_y, augment=False)
+                else:
+                    adv.train_Adv(sess, train_x, train_y, augment=True)
                 print('saving to {} ..'.format(pAdvAE))
                 ae.save_weights(sess, pAdvAE)
     else:

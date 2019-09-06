@@ -266,43 +266,37 @@ def __test_plot():
 
 def plot_onto_lambda():
     "With ep=0.38"
-    lams = [0, 0.2, 0.5, 1, 1.5, 2, 5]
+    lams = [0.5, 0.8, 1, 1.2, 1.5, 2, 3, 4, 5]
+    # lams = [0, 0.2, 0.5, 1, 1.5, 2, 5]
     res = []
     for lam in lams:
-        fname = 'images/test-result-MNIST-mnistcnn-cnn3AE-C0_A2_{}.json'.format(lam)
+        fname = 'images/test-result-MNIST-mnistcnn-cnn1AE-C0_A2_{}.json'.format(lam)
         with open(fname) as fp:
             j = json.load(fp)
-            data = j['epsilon_exp_data']
-            assert round(data[2][0], ndigits=1) == 0.1
-            assert round(data[7][0], ndigits=1) == 0.3
-            assert round(data[9][0], ndigits=2) == 0.38
-            assert round(data[12][0], ndigits=1) == 0.5
             # FGSM, PGD, Hop
-            res.append([data[9][1], data[9][2], data[9][3]])
+            res.append(j['PGD'][7])
     fig = plt.figure(dpi=300)
 
-    plt.plot(lams, [d[0] for d in res], 'x-', color='green', markersize=4, label='FGSM')
-    plt.plot(lams, [d[1] for d in res], '^-', color='brown', markersize=4, label='PGD')
-    plt.plot(lams, [d[2] for d in res], 'o-', color='blue', markersize=4, label='HSJA')
+    plt.plot(lams, res, 'x-', color='green', markersize=4, label='PGD')
+    # plt.plot(lams, [d[1] for d in res], '^-', color='brown', markersize=4, label='PGD')
+    # plt.plot(lams, [d[2] for d in res], 'o-', color='blue', markersize=4, label='HSJA')
 
     plt.xlabel('Lambda')
     plt.ylabel('Accuracy')
     plt.legend(fontsize='small')
-    plt.savefig('images/onto-lambda-epsilon-0.38.pdf', bbox_inches='tight', pad_inches=0)
+    plt.savefig('images/onto-lambda-epsilon.pdf', bbox_inches='tight', pad_inches=0)
     plt.close(fig)
 
 def plot_defense_onto_epsilon():
     "HGD, ItAdv, AdvAE"
     
-    jfiles = ['images/test-result-MNIST-mnistcnn-cnn3AE-B2.json',
-              'images/test-result-MNIST-mnistcnn-cnn3AE-C0_A2_1.json',
+    jfiles = ['images/test-result-MNIST-mnistcnn-cnn1AE-B2.json',
               'images/test-result-MNIST-mnistcnn-cnn1AE-C0_A2_1.json',
-              'images/test-result-MNIST-mnistcnn-cnn3AE-ItAdv.json',
               'images/test-result-MNIST-mnistcnn-identityAE-ItAdv.json']
-    lams = ['HGD', 'AdvAE 3-layer',
-            'AdvAE 1-layer',
-            'ItAdv-full',
+    lams = ['HGD',
+            r"$\bf{"  + 'AdvAE' + "}$",
             'ItAdv']
+    assert len(jfiles) == len(lams)
     lam_data = []
     for fname in jfiles:
         res = {}
@@ -311,33 +305,83 @@ def plot_defense_onto_epsilon():
             res['eps'] = j['epsilon']
             res['FGSM'] = j['FGSM']
             res['PGD'] = j['PGD']
+            res['Hop'] = j['Hop']
         lam_data.append(res)
 
     colors = [(0.5, x, y) for x,y in zip(np.arange(0, 1, 1 / len(lam_data)),
                                          np.arange(0, 1, 1 / len(lam_data)))]
-    for attack in ['FGSM', 'PGD']:
-        fig = plt.figure(dpi=300)
-        for lam, data, marker, color in zip(lams, lam_data,
-                                            ['o-', '*-', 'x-', '^-'] * 3,
-                                            # ['o-']*len(lams),
-                                            colors):
-            plt.plot(data['eps'], data[attack], marker, color=color,
-                     markersize=4, label='{} {}'.format(attack, lam))
-        plt.xlabel('Distortion')
-        plt.ylabel('Accuracy')
-        plt.legend(fontsize='small')
-        plt.savefig('images/defense-onto-epsilon-{}.pdf'.format(attack),
-                    bbox_inches='tight', pad_inches=0)
-        plt.close(fig)
+    # I'm going to omit FGSM, and plot both PGD and Hop onto the same figure
+    fig = plt.figure(dpi=300)
     
+    for lam, data, marker, color in zip(lams, lam_data,
+                                               ['x', '^', 'o'],
+                                               ['brown', 'green', 'blue']):
+        plt.plot(data['eps'], data['PGD'], marker + '-', color=color,
+                 markersize=4, label='{} / {}'.format('PGD', lam))
+        plt.plot(data['eps'], data['Hop'], marker, dashes=[2,3], color=color,
+                 markersize=4, label='{} / {}'.format('HSJA', lam))
+    plt.axvline(x=.3, ymin=0.05, ymax=0.95, color='red', alpha=0.5, linewidth=0.5)
+    plt.axvline(x=.38, ymin=0.05, ymax=0.95, color='red', alpha=0.5, linewidth=0.5)
+    plt.axvline(x=.46, ymin=0.05, ymax=0.95, color='red', alpha=0.5, linewidth=0.5)
+    plt.xlabel('Distortion')
+    plt.ylabel('Accuracy')
+    plt.legend(fontsize='small')
+    plt.savefig('images/defense-onto-epsilon.pdf',
+                bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
+
+
+def plot_defense_onto_epsilon_cifar():
+    "HGD, ItAdv, AdvAE"
+    
+    jfiles = ['images/test-result-CIFAR10-resnet29-dunet-B2.json',
+              'images/test-result-CIFAR10-resnet29-dunet-C0_A2_2.json',
+              'images/test-result-CIFAR10-resnet29-identityAE-ItAdv.json']
+    lams = ['HGD',
+            r"$\bf{"  + 'AdvAE' + "}$",
+            'ItAdv']
+    assert len(jfiles) == len(lams)
+    lam_data = []
+    for fname in jfiles:
+        res = {}
+        with open(fname) as fp:
+            j = json.load(fp)
+            res['eps'] = j['epsilon']
+            res['FGSM'] = j['FGSM']
+            res['PGD'] = j['PGD']
+            res['Hop'] = j['Hop']
+        lam_data.append(res)
+
+    colors = [(0.5, x, y) for x,y in zip(np.arange(0, 1, 1 / len(lam_data)),
+                                         np.arange(0, 1, 1 / len(lam_data)))]
+    # I'm going to omit FGSM, and plot both PGD and Hop onto the same figure
+    fig = plt.figure(dpi=300)
+    
+    for lam, data, marker, color in zip(lams, lam_data,
+                                               ['x', '^', 'o'],
+                                               ['brown', 'green', 'blue']):
+        plt.plot(data['eps'], data['PGD'], marker + '-', color=color,
+                 markersize=4, label='{} / {}'.format('PGD', lam))
+        plt.plot(data['eps'], data['Hop'], marker, dashes=[2,3], color=color,
+                 markersize=4, label='{} / {}'.format('HSJA', lam))
+    plt.axvline(x=8/255, ymin=0.05, ymax=0.95, color='red', alpha=0.5, linewidth=0.5)
+    plt.axvline(x=14/255, ymin=0.05, ymax=0.95, color='red', alpha=0.5, linewidth=0.5)
+    plt.axvline(x=20/255, ymin=0.05, ymax=0.95, color='red', alpha=0.5, linewidth=0.5)
+    plt.xlabel('Distortion')
+    plt.ylabel('Accuracy')
+    plt.legend(fontsize='small')
+    plt.savefig('images/defense-onto-epsilon_cifar.pdf',
+                bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
 
 def plot_lambda_onto_epsilon():
     """Plot lambda figure, for a selected epsilon setting."""
     # lams = [0, 0.2, 0.5, 1, 1.5, 2, 5]
     lams = [0, 0.2, 0.5, 0.8, 1, 1.2, 1.5, 2, 3, 4, 5]
+    # lams = [0.5, 0.8, 1, 1.2, 1.5, 2, 3, 4, 5]
     lam_data = []
     for lam in lams:
-        fname = 'images/test-result-MNIST-mnistcnn-cnn3AE-C0_A2_{}.json'.format(lam)
+        fname = 'images/test-result-MNIST-mnistcnn-cnn1AE-C0_A2_{}.json'.format(lam)
         res = {}
         with open(fname) as fp:
             j = json.load(fp)
@@ -449,10 +493,140 @@ def plot_train_process():
     plt.savefig('images/train-process.pdf', bbox_inches='tight', pad_inches=0)
     plt.close(fig)
 
+def aaai_table():
+    # retest these
+    advae_json = 'images/test-result-MNIST-mnistcnn-cnn1AE-C0_A2_1.json'
+    nodef_json = 'images/nodef-mnist.json'
+    hgd_json = 'images/test-result-MNIST-mnistcnn-cnn1AE-B2.json'
+    defgan_json = 'images/defgan2.json'
+    itadv_json = 'images/test-result-MNIST-mnistcnn-identityAE-ItAdv.json'
+    with open(nodef_json, 'r') as fp:
+        nodef = json.load(fp)
+    with open(advae_json, 'r') as fp:
+        advae = json.load(fp)
+    with open(hgd_json, 'r') as fp:
+        hgd = json.load(fp)
+    with open(defgan_json, 'r') as fp:
+        defgan = json.load(fp)
+    with open(itadv_json, 'r') as fp:
+        itadv = json.load(fp)
+
+    # adjust the format of defgan
+    defgan['PGD'] = [defgan['PGD']] * 20
+    defgan['PGD'][9] = defgan['PGD 0.38']
+    defgan['PGD'][11] = defgan['PGD 0.46']
+    defgan['FGSM'] = [defgan['FGSM']] * 20
+    defgan['no atttack AE'] = defgan['CNN clean']
+    defgan['Hop'] = [0] * 20
+    rows = []
+    data = [nodef, hgd, defgan, advae, itadv]
+    # header
+    rows.append(['attacks', 'no def', 'HGD', 'DefGAN', 'AdvAE', 'ItAdvTrain'])
+    # data
+    # FIXME atttack
+    rows.append(['no attack'] + [d['no atttack AE'] for d in data])
+    rows.append([r'FGSM $\ell_\infty$'] + [d['FGSM'][7] for d in data])
+    rows.append([r'PGD $\ell_\infty, \epsilon=0.3$'] + [d['PGD'][7] for d in data])
+    rows.append([r'PGD $\ell_\infty, \epsilon=0.38$'] + [d['PGD'][9] for d in data])
+    rows.append([r'PGD $\ell_\infty, \epsilon=0.46$'] + [d['PGD'][11] for d in data])
+    rows.append(['HSJA (black) $\epsilon=0.3$'] + [d['Hop'][7] for d in data])
+    rows.append(['HSJA (black) $\epsilon=0.38$'] + [d['Hop'][9] for d in data])
+    rows.append(['HSJA (black) $\epsilon=0.46$'] + [d['Hop'][11] for d in data])
+    rows.append([r'CW $\ell_2$'] + [d['CW'] for d in data])
+
+    for row in rows[1:]:
+        print(row[0], end=' & ')
+        for i in row[1:]:
+            print('{:.1f}'.format(i * 100), end=' & ')
+        print('\b\b', end='')
+        print(r'\\')
+def aaai_table_cifar():
+    # retest these
+    advae_json = 'images/test-result-CIFAR10-resnet29-dunet-C0_A2_2.json'
+    nodef_json = 'images/nodef-cifar.json'
+    hgd_json = 'images/test-result-CIFAR10-resnet29-dunet-B2.json'
+    itadv_json = 'images/test-result-CIFAR10-resnet29-identityAE-ItAdv.json'
+    with open(nodef_json, 'r') as fp:
+        nodef = json.load(fp)
+    with open(advae_json, 'r') as fp:
+        advae = json.load(fp)
+    with open(hgd_json, 'r') as fp:
+        hgd = json.load(fp)
+    with open(itadv_json, 'r') as fp:
+        itadv = json.load(fp)
+
+    rows = []
+    data = [nodef, hgd, advae, itadv]
+    # header
+    rows.append(['attacks', 'no def', 'HGD', 'AdvAE', 'ItAdv'])
+    # data
+    # FIXME atttack
+    rows.append(['no attack'] + [d['no atttack AE'] for d in data])
+    rows.append([r'FGSM $\ell_\infty$'] + [d['FGSM'][3] for d in data])
+    rows.append([r'PGD $\epsilon=8/255$'] + [d['PGD'][3] for d in data])
+    rows.append([r'PGD $\epsilon=14/255$'] + [d['PGD'][6] for d in data])
+    rows.append([r'PGD $\epsilon=20/255$'] + [d['PGD'][9] for d in data])
+    rows.append([r'CW $\ell_2$'] + [d['CW'] for d in data])
+    rows.append(['HSJA $\epsilon=8/255$'] + [d['Hop'][3] for d in data])
+    rows.append(['HSJA $\epsilon=14/255$'] + [d['Hop'][6] for d in data])
+    rows.append(['HSJA $\epsilon=20/255$'] + [d['Hop'][9] for d in data])
+
+    for row in rows[1:]:
+        print(row[0], end=' & ')
+        for i in row[1:]:
+            print('{:.1f}'.format(i * 100), end=' & ')
+        print('\b\b', end='')
+        print(r'\\')
+def aaai_table_transfer():
+    jsons = ['images/test-result-MNIST-mnistcnn-cnn1AE-C0_A2_1.json',
+             # 'images/test-result-MNIST-mnistcnn-cnn1AE-C0_A2_1-TO-DefenseGAN_a.json',
+             # 'images/test-result-MNIST-mnistcnn-cnn1AE-C0_A2_1-TO-DefenseGAN_b.json',
+             # 'images/test-result-MNIST-mnistcnn-cnn1AE-C0_A2_1-TO-DefenseGAN_c.json',
+             # 'images/test-result-MNIST-mnistcnn-cnn1AE-C0_A2_1-TO-DefenseGAN_d.json',
+             # 'images/test-result-MNIST-[mnistcnn-DefenseGAN_a-DefenseGAN_b]-cnn1AE-C0_A2_1-ENSEMBLE-DefenseGAN_a.json',
+             # 'images/test-result-MNIST-[mnistcnn-DefenseGAN_a-DefenseGAN_b]-cnn1AE-C0_A2_1-ENSEMBLE-DefenseGAN_b.json',
+             # 'images/test-result-MNIST-[mnistcnn-DefenseGAN_a-DefenseGAN_b]-cnn1AE-C0_A2_1-ENSEMBLE-DefenseGAN_c.json',
+             # 'images/test-result-MNIST-[mnistcnn-DefenseGAN_a-DefenseGAN_b]-cnn1AE-C0_A2_1-ENSEMBLE-DefenseGAN_d.json',
+             'images/test-result-MNIST-[mnistcnn-DefenseGAN_a-DefenseGAN_b-DefenseGAN_c-DefenseGAN_d]-cnn1AE-C0_A2_1-ENSEMBLE-DefenseGAN_a.json',
+             'images/test-result-MNIST-[mnistcnn-DefenseGAN_a-DefenseGAN_b-DefenseGAN_c-DefenseGAN_d]-cnn1AE-C0_A2_1-ENSEMBLE-DefenseGAN_b.json',
+             'images/test-result-MNIST-[mnistcnn-DefenseGAN_a-DefenseGAN_b-DefenseGAN_c-DefenseGAN_d]-cnn1AE-C0_A2_1-ENSEMBLE-DefenseGAN_c.json',
+             'images/test-result-MNIST-[mnistcnn-DefenseGAN_a-DefenseGAN_b-DefenseGAN_c-DefenseGAN_d]-cnn1AE-C0_A2_1-ENSEMBLE-DefenseGAN_d.json'
+             
+    ]
+    data = []
+    for fname in jsons:
+        with open(fname, 'r') as fp:
+            j = json.load(fp)
+            data.append(j)
+    rows = []
+    # header
+    rows.append(['attacks', 'X/X', 'X/A', 'X/B', 'X/C', 'X/D'])
+    # data
+    # FIXME atttack
+    rows.append(['no attack'] + [d['no atttack AE'] for d in data])
+    rows.append([r'FGSM $\ell_\infty$'] + [d['FGSM'][7] for d in data])
+    rows.append([r'PGD $\ell_\infty$'] + [d['PGD'][7] for d in data])
+    rows.append([r'CW $\ell_2$'] + [d['CW'] for d in data])
+    # rows.append(['HSJA'] + [d['Hop'][7] for d in data])
+
+    for row in rows[1:]:
+        print(row[0], end=' & ')
+        for i in row[1:]:
+            print('{:.1f}'.format(i * 100), end=' & ')
+        print('\b\b', end='')
+        print(r'\\')
+
+def aaai_plot():
+    pass
+
 def __test():
     # this is the main lambda plot
     plot_lambda_onto_epsilon()
     # plot_onto_lambda()
     plot_aesize_onto_epsilon()
     plot_defense_onto_epsilon()
+    plot_defense_onto_epsilon_cifar()
     # plot_train_process()
+    aaai_table()
+    aaai_table_cifar()
+    aaai_table_transfer()

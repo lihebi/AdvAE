@@ -73,6 +73,47 @@ class MyCallback(keras.callbacks.Callback):
 
         print({'advacc': aa, 'acc': bb, 'cnnacc': cc, 'obliacc': dd})
 
+class DefGanAdvAE(cleverhans.model.Model):
+    """This class exists merely for testing."""
+    # I need to have
+    # - a place to put CNN
+    # - CNN_accuracy
+    # .x, .y
+    # .accuracy
+    # should inherit Cleverhans model
+    # should provide interface for BPDA attacks
+    def __init__(self, cnn_model, defgan):
+        self.cnn_model = cnn_model
+        self.defgan = defgan
+        # CAUTION loading of defgan
+        self.sess = defgan.sess
+        self.x = keras.layers.Input(shape=(28,28,1), dtype='float32')
+        self.y = keras.layers.Input(shape=(10,), dtype='float32')
+        self.ae_model = None
+        # CAUTION the batchsize must be fixed
+        self.batch_size = 50
+        CNN_logits = self.cnn_model.predict(self.x)
+        self.CNN_accuracy = my_accuracy_wrapper(CNN_logits, self.y)
+        self.rec = self.reconstruct(self.x)
+        logits = self.cnn_model.predict(self.rec)
+        self.accuracy = my_accuracy_wrapper(logits, self.y)
+        tf_init_uninitialized(self.sess)
+    def purify_np(self, npx):
+        return self.sess.run(self.rec, feed_dict={self.x: npx})
+    def reconstruct(self, x):
+        rec = self.defgan.reconstruct(x, batch_size=self.batch_size)
+        tf_init_uninitialized(self.sess)
+        return rec
+    # cleverhans
+    def predict(self, x):
+        return self.cnn_model.predict(self.reconstruct(x))
+    # cleverhans
+    def fprop(self, x, **kwargs):
+        logits = self.predict(x)
+        return {self.O_LOGITS: logits,
+                self.O_PROBS: tf.nn.softmax(logits=logits)}
+
+
 class AdvAEModel(cleverhans.model.Model):
     """Implement a denoising auto encoder.
     """

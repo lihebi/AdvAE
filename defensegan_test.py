@@ -130,15 +130,24 @@ def __test():
 
 
 class MyDefGan():
+    # I need to have
+    # - a place to put CNN
+    # - CNN_accuracy
+    # .x, .y
+    # .accuracy
+    # should inherit Cleverhans model
+    # should provide interface for BPDA attacks
     def __init__(self, defgan):
         self.defgan = defgan
         self.sess = defgan.sess
         self.x = keras.layers.Input(shape=(28,28,1), dtype='float32')
+        self.y = keras.layers.Input(shape=(10,), dtype='float32')
         self.batch_size = 50
         self.rec = self.defgan.reconstruct(self.x, batch_size=self.batch_size)
         tf_init_uninitialized(self.sess)
-    def purify_np(self, npx):
-        return self.sess.run(self.rec, feed_dict={self.x: npx})
+    def purify_np(self, sess, npx):
+        # FIXME using sess instead of self.sess
+        return sess.run(self.rec, feed_dict={self.x: npx})
     def __call__(self, x):
         rec = self.defgan.reconstruct(x, batch_size=self.batch_size)
         tf_init_uninitialized(self.sess)

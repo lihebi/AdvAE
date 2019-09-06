@@ -240,7 +240,10 @@ def test_model_impl(sess, model, test_x, test_y, dataset_name):
 
     # I probably need to use the same set of tests to evaluate these
     # DEBUG number of samples
-    indices = random.sample(range(test_x.shape[0]), 100)
+    num_samples = 500
+    indices = random.sample(range(test_x.shape[0]), num_samples)
+    res['epsilon'] = eps
+    res["num_samples"] = num_samples
 
     print('testing no atttack CNN ..')
     res["no atttack CNN"] = evaluate_no_attack_CNN(sess, model,
@@ -251,9 +254,6 @@ def test_model_impl(sess, model, test_x, test_y, dataset_name):
     res["no atttack AE"] = evaluate_no_attack_AE(sess, model,
                                                  test_x[indices], test_y[indices])
     print("no atttack AE", res["no atttack AE"])
-    # res["num_samples"] = 50
-    
-    res['epsilon'] = eps
     
     print('Running whitebox FGSM ..')
     fgsm_res = evaluate_attack(sess, model, 'FGSM',
@@ -277,7 +277,7 @@ def test_model_impl(sess, model, test_x, test_y, dataset_name):
 
     print('Running blackbox Hop ..')
     hop_res = evaluate_attack(sess, model, 'Hop',
-                              test_x[indices][:20], test_y[indices][:20],
+                              test_x[indices][:50], test_y[indices][:50],
                               eps=eps)
     res["Hop"] = hop_res
 

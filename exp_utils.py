@@ -395,9 +395,13 @@ def test_ensemble(cnn_clses, ae_cls, advae_cls,
         model.ae_model.load_weights(sess, pAdvAE)
         
         print('testing {} ..'.format(plot_prefix))
-        model.test_all(sess, test_x, test_y,
-                       attacks=['CW', 'FGSM', 'PGD'],
-                       save_prefix=save_prefix)
+        # model.test_all(sess, test_x, test_y,
+        #                attacks=['CW', 'FGSM', 'PGD'],
+        #                save_prefix=save_prefix)
+        res = test_model_impl(sess, model, test_x, test_y, dataset_name)
+        print('Saving to {} ..'.format(filename))
+        with open(filename, 'w') as fp:
+            json.dump(res, fp, indent=4)
     else:
         print('Already tested, see {}'.format(filename))
     

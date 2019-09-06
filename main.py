@@ -302,15 +302,88 @@ def test_defgan():
     # idx = shuffle_idx[:num_samples]
     acc = sess.run(model.accuracy, feed_dict={model.x: test_x[:50], model.y: test_y[:50]})
     
-    res = test_model_impl(sess, model, test_x, test_y)
+    res = test_model_impl(sess, model, test_x, test_y, 'MNIST')
 
 def new_mnist_exp():
-    run_exp_model(MNISTModel, CNN1AE, get_lambda_model(0), dataset_name='MNIST', run_test=True)
     # rerun these two
-    run_exp_model(MNISTModel, CNN1AE, get_lambda_model(0), dataset_name='MNIST', run_test=True)
+    # run_exp_model(MNISTModel, CNN1AE, get_lambda_model(0), dataset_name='MNIST', run_test=True)
     run_exp_model(MNISTModel, CNN1AE, get_lambda_model(0.2), dataset_name='MNIST', run_test=True)
     run_exp_model(MNISTModel, CNN1AE, C2_A2_Model, dataset_name='MNIST', run_test=True)
 
+def load_model_nodef(cnn_cls, ae_cls, advae_cls,
+                     saved_folder='saved_models',
+                     dataset_name='',
+                     load_advae=True):
+    """If load_adv = False, try to load ae instead.
+
+    cnnorig: the transfer model for CNN to be loaded.
+    """
+    pCNN, pAdvAE, _ = compute_names(cnn_cls, ae_cls, advae_cls,
+                                    dataset_name=dataset_name)
+    sess = create_tf_session()
+
+    # This load model should be for testing, not training
+    cnn = cnn_cls(training=False)
+    ae = ae_cls(cnn)
+    adv = advae_cls(cnn, ae)
+
+    tf_init_uninitialized(sess)
+
+    print('loading {} ..'.format(pCNN))
+    cnn.load_weights(sess, pCNN)
+    if load_advae:
+        print('loading {} ..'.format(pAdvAE))
+        ae.load_weights(sess, pAdvAE)
+    return adv, sess
+
+
+def test_model_nodef():
+    (train_x, train_y), (test_x, test_y) = load_dataset('MNIST')
+    filename = 'images/nodef-mnist.json'
+    if not os.path.exists(filename):
+        sess = create_tf_session()
+        cnn = MNISTModel(training=False)
+        ae = IdentityAEModel(cnn)
+        model = A2_Model(cnn, ae)
+        tf_init_uninitialized(sess)
+
+        cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
+        print('testing {} ..'.format(filename))
+        res = test_model_impl(sess, model, test_x, test_y, 'MNIST')
+
+        print('Saving to {} ..'.format(filename))
+        with open(filename, 'w') as fp:
+            json.dump(res, fp, indent=4)
+def test_model_nodef_cifar():
+    (train_x, train_y), (test_x, test_y) = load_dataset('CIFAR10')
+    filename = 'images/nodef-cifar.json'
+    if not os.path.exists(filename):
+        sess = create_tf_session()
+        cnn = MyResNet29(training=False)
+        ae = IdentityAEModel(cnn)
+        model = A2_Model(cnn, ae)
+        tf_init_uninitialized(sess)
+
+        cnn.load_weights(sess, 'saved_models/CIFAR10-resnet29-CNN.hdf5')
+        print('testing {} ..'.format(filename))
+        res = test_model_impl(sess, model, test_x, test_y, 'CIFAR10')
+
+        print('Saving to {} ..'.format(filename))
+        with open(filename, 'w') as fp:
+            json.dump(res, fp, indent=4)
+
+def table_rerun():
+    # run_exp_model(MNISTModel, CNN1AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
+    # run_exp_model(MNISTModel, CNN1AE, B2_Model, dataset_name='MNIST', run_test=True)
+    # run_exp_model(MNISTModel, IdentityAEModel, ItAdv_Model, dataset_name='MNIST', run_test=True)
+    # test_model_nodef()
+    
+    test_model_nodef_cifar()
+    run_exp_model(MyResNet29, DunetModel, get_lambda_model(2), dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, DunetModel, B2_Model, dataset_name='CIFAR10', run_test=True)
+    run_exp_model(MyResNet29, IdentityAEModel, ItAdv_Model, dataset_name='CIFAR10', run_test=True)
+    
+    
 if __name__ == '__main__':
     with warnings.catch_warnings():
         # I'm suppressing cleverhans's deprecated usage of reduce_sum

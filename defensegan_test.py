@@ -12,12 +12,15 @@ from models import *
 from tf_utils import *
 
 
-sys.path.append('/home/XXX/github/reading/')
+sys.path.append('/home/hebi/github/reading/')
 
 import defensegan
 from defensegan.utils import config
 from defensegan import whitebox
 from defensegan.models.gan import MnistDefenseGAN
+
+from pgd_bpda import my_PGD_BPDA
+from attacks import my_CW_BPDA
 
 
 if 'simple-prompt' not in tf.app.flags.FLAGS:
@@ -59,7 +62,7 @@ def setup_flags():
                          "Train the classifier on the reconstructed samples "
                          "using Defense-GAN.")
 
-def load_defgan(sess, cfgpath='/home/XXX/github/reading/defensegan/gans/mnist/'):
+def load_defgan(sess, cfgpath='/home/hebi/github/reading/defensegan/gans/mnist/'):
     # setup_flags()
     # cfg = config.load_config('/home/XXX/tmp/defensegan_tmp/output/gans/mnist/')
     cfg = config.load_config(cfgpath)
@@ -208,12 +211,12 @@ def test_defgan(filename):
     _defgan = load_defgan(sess)
     mydefgan = MyDefGan(_defgan)
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
-    cnn = MNISTModel()
+    cnn = MNISTModel(training=False)
     cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
 
     # random sample test
     # FIXME use 1000 during production
-    indices = random.sample(range(test_x.shape[0]), 1000)
+    indices = random.sample(range(test_x.shape[0]), 500)
     test_x = test_x[indices]
     test_y = test_y[indices]
 
@@ -221,26 +224,61 @@ def test_defgan(filename):
     # clean
     print('Testing clean data ..')
     adv_x = cnn.x
-    res['CNN clean'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
+
+    # TODO NOW HEBI use different epsilons
+
+    # preds = cnn.predict(cnn.x)
+    # acc = my_accuracy_wrapper(logits=preds, labels=cnn.y)
+    # sess.run(acc, feed_dict={cnn.x: test_x, cnn.y: test_y})
     
-    # FGSM
-    print('Testing FGSM ..')
-    # FIXME whether the method purify_np can be used like this, e.g. as first class function
-    adv_x = my_PGD_BPDA(sess, mydefgan.purify_np, cnn, cnn.x, cnn.y,
-                        loss_func='xent', epsilon=0.3, max_steps=1, step_size=0.3, rand=False)
-    res['FGSM'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
-    print('Testing PGD ..')
-    # PGD
-    adv_x = my_PGD_BPDA(sess, mydefgan.purify_np, cnn, cnn.x, cnn.y, loss_func='xent')
-    res['PGD'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
-    print('Testing CW l2 ..')
-    # CW l2
-    adv_x = my_CW_BPDA(sess, mydefgan.purify_np, cnn, cnn.x, cnn.y, params={'max_iterations': 30})
-    res['CW'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
+    # res['CNN clean'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
+    # # FGSM
+    # print('Testing FGSM ..')
+    # # FIXME whether the method purify_np can be used like this, e.g. as first class function
+    # adv_x = my_PGD_BPDA(sess, mydefgan.purify_np, cnn, cnn.x, cnn.y,
+    #                     loss_func='xent', epsilon=0.3, max_steps=1, step_size=0.3, rand=False)
+    # res['FGSM'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
+    # print('Testing PGD ..')
+    # # PGD
+    # adv_x = my_PGD_BPDA(sess, mydefgan.purify_np, cnn, cnn.x, cnn.y,
+    #                     epsilon=0.3, loss_func='xent')
+    # res['PGD'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
+    # adv_x = my_PGD_BPDA(sess, mydefgan.purify_np, cnn, cnn.x, cnn.y,
+    #                     epsilon=0.38, loss_func='xent')
+    # res['PGD 0.38'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
+    # adv_x = my_PGD_BPDA(sess, mydefgan.purify_np, cnn, cnn.x, cnn.y,
+    #                     epsilon=0.46, loss_func='xent')
+    # res['PGD 0.46'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
+    # print('Testing CW l2 ..')
+    # # CW l2
+    # adv_x = my_CW_BPDA(sess, mydefgan, cnn, cnn.x, cnn.y, params={'max_iterations': 30})
+    # res['CW'] = eval_defgan(sess, mydefgan, cnn, cnn.x, cnn.y, adv_x, test_x, test_y)
+
+    # I have no idea how to run Hop
+    
+    # Hop
+    # using a smaller number
+    indices = random.sample(range(test_x.shape[0]), 1)
+    test_x = test_x[indices]
+    test_y = test_y[indices]
+    print('evaluating hop ..')
+    print(eval_hop(sess, mydefgan, cnn, test_x, test_y))
 
     with open(filename, 'w') as fp:
         json.dump(res, fp, indent=4)
+
+def eval_hop(sess, mydefgan, cnn, test_x, test_y):
+    def model():
+        pass
+    model.x = mydefgan.x
+    model.y = mydefgan.y
     
+    model.CNN_accuracy = my_accuracy_wrapper(cnn(model.x), model.y)
+    model.logits = cnn.predict(mydefgan.rec)
+    model.accuracy = my_accuracy_wrapper(model.logits, model.y)
+
+    eps = np.arange(0.02,0.6,0.04).tolist()
+    return evaluate_attack_Hop(sess, model, 'Hop', test_x, test_y, eps)
 
 def __test():
     """Test CW L2 BPDA attack."""
@@ -252,7 +290,7 @@ def __test():
 
     (train_x, train_y), (test_x, test_y) = load_mnist_data()
 
-    cnn = MNISTModel()
+    cnn = MNISTModel(training=False)
 
     cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
 
@@ -279,5 +317,4 @@ def __test():
 if __name__ == '__main__':
     # train_defgan()
     test_defgan('images/defgan.json')
-    pass
 

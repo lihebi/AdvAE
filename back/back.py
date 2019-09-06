@@ -2093,11 +2093,6 @@ def main_exp(run_test=True):
         run_exp_model(MNISTModel, AEModel, m, dataset_name='MNIST', run_test=run_test)
     run_exp_model(MNISTModel, IdentityAEModel, A2_Model, dataset_name='MNIST', run_test=run_test)
 
-    run_exp_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b],
-                     AEModel, A2_Model,
-                     to_cnn_clses=[MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
-                     dataset_name='MNIST',
-                     run_test=run_test)
     run_exp_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
                      AEModel, A2_Model,
                      to_cnn_clses=[MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],

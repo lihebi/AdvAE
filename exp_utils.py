@@ -332,7 +332,7 @@ def test_model_transfer(cnn_cls, ae_cls, advae_cls, test_x, test_y,
             json.dump(res, fp, indent=4)
     else:
         print('Already tested, see {}'.format(filename))
-    
+
 def train_ensemble(cnn_clses, ae_cls, advae_cls,
                    train_x, train_y,
                    saved_folder='saved_models',

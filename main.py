@@ -291,7 +291,7 @@ def test_defgan():
 
     from defensegan_test import load_defgan
     defgan = load_defgan(sess)
-    cnn = MNISTModel()
+    cnn = MNISTModel(training=False)
     
     cnn.load_weights(sess, 'saved_models/MNIST-mnistcnn-CNN.hdf5')
     model = DefGanAdvAE(cnn, defgan)
@@ -394,18 +394,30 @@ if __name__ == '__main__':
         # test_model(MNISTModel, CNN1AE, get_lambda_model(1),
         #            test_x, test_y, dataset_name='MNIST', force=True)
 
+        # run_exp_model(MNISTModel, CNN1AE, get_lambda_model(1), dataset_name='MNIST', run_test=True)
+        
+
+        # table_rerun()
+        # run_exp_ensemble([MNISTModel, DefenseGAN_a, DefenseGAN_b, DefenseGAN_c, DefenseGAN_d],
+        #                  CNN1AE, get_lambda_model(1),
+        #                  to_cnn_clses=[MNISTModel,
+        #                                DefenseGAN_a, DefenseGAN_b,
+        #                                DefenseGAN_c, DefenseGAN_d],
+        #                  dataset_name='MNIST',
+        #                  run_test=True)
+
         # main_transfer_exp()
         # main_cifar_transfer()
-        run_exp_ensemble([MyResNet29, MyResNet56],
-                         DunetModel, get_lambda_model(1),
-                         to_cnn_clses=[MyResNet110],
-                         dataset_name='CIFAR10')
+        # run_exp_ensemble([MyResNet29, MyResNet56],
+        #                  DunetModel, get_lambda_model(1),
+        #                  to_cnn_clses=[MyResNet110, MyResNet29, MyResNet56],
+        #                  dataset_name='CIFAR10')
 
         # main_new_cifar10()
         # main_new_cifar10_2()
         # new_mnist_exp()
         # main_epsilon_exp()
-        # main_ae_size()
+        main_ae_size()
         # main_lambda_exp()
     
     # main_mnist_exp()

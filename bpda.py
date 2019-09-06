@@ -16,6 +16,9 @@ tf_dtype = tf.as_dtype('float32')
 bpda_logger = utils.create_logger("cleverhans.attacks.bpda")
 bpda_logger.setLevel(logging.INFO)
 
+def ZERO():
+  return np.asarray(0., dtype=np_dtype)
+
 class CarliniWagnerL2_BPDA(Attack):
   """
   This attack was originally proposed by Carlini and Wagner. It is an

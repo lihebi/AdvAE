@@ -50,6 +50,16 @@ Also, I'm running more CIFAR models using 30 epochs this time.
 
 - 0904_1PM: all MNIST and remaining CIFAR experiments, 30 epoch
 
+* AAAI Table
+
+| attacks   | AdvAE | HGD | DefGAN | ItAdvTrain |
+|-----------+-------+-----+--------+------------|
+| No attack |       |     |        |            |
+| FGSM      |       |     |        |            |
+| PGD       |       |     |        |            |
+| CW        |       |     |        |            |
+| HJSA      |       |     |        |            |
+
 
 * TODOs for AAAI
 ** STARTED [#A] new results on transfer and ensemble

@@ -167,7 +167,6 @@ def my_CW_BPDA(sess, pre_model, post_model, x, y, params=dict()):
     return tf.stop_gradient(adv_x)
 
 
-    
 def evaluate_attack_PGD(sess, model, attack_name, xval, yval, eps):
     """PGD likes. The attack will take eps as argument."""
     accs = []
@@ -225,13 +224,14 @@ def evaluate_attack_Hop(sess, model, attack_name, xval, yval, eps):
     for e in eps:
         # The problem of np.linalg.norm is that, it sum the row/column for 2D matrix
         # np.linalg.norm(diff, ord=np.inf, axis=(1,2))
-
-        diffnorm = np.max(np.abs(diff), axis=(1,2))
+        diffnorm = np.max(np.abs(diff), axis=(1,2,3))
         # round because PGD is giving 0.3000004
         # .round(decimals=4)
         # print(diffnorm)
         idx = diffnorm <= e
         idx = idx.reshape(-1)
+        # print(idx.shape)
+        # print(adv_val.shape)
 
         print('All: {}, valid: {}'.format(idx.shape[0], np.sum(idx)))
 

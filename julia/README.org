@@ -2,3 +2,25 @@
 
 * TODO-list
 
+** DONE @progress
+   CLOSED: [2019-10-17 Thu 16:17]
+
+ProgressMeter.jl https://github.com/timholy/ProgressMeter.jl
+
+Very easy to use:
+
+#+BEGIN_SRC julia
+@showprogress 1 "Computing..." for i in 1:50
+    sleep(0.1)
+end
+#+END_SRC
+
+** TODO CIFAR10 models
+*** ResNet
+*** VGG
+
+** TODO GAN
+** TODO VAE
+** TODO InfoGAN
+** TODO NOTEARS
+** TODO Causal

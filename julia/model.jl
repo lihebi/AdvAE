@@ -1,22 +1,6 @@
-using Flux
-using Flux.Data.MNIST
-using Flux: @epochs
-using Flux: throttle
-using Flux: onehotbatch, onecold, crossentropy, throttle
-using Base.Iterators: repeated
-using Random
-using Statistics
-
-using Images: channelview
-using Base.Iterators: partition
-
-using CuArrays
-
-using Metalhead
-
-using EmacsREPL
-
 using Revise
+
+using ProgressMeter
 
 include("data.jl")
 CuArrays.allowscalar(false)
@@ -32,6 +16,37 @@ function sample_and_view(X, Y)
     @show labels
     nothing
 end
+
+""" Drop-in replacement for Flux.train!. The @showprogress prints on
+stderr by default. Thus, I cannot nicely show callbacks.
+
+TODO Maybe output to a file and show that file in Emacs? But I lose
+the nice @showprogress macro.
+
+"""
+call(f, xs...) = f(xs...)
+runall(f) = f
+runall(fs::AbstractVector) = () -> foreach(call, fs)
+function mytrain!(loss, ps, data, opt; cb = () -> ())
+    ps = Flux.Tracker.Params(ps)
+    cb = runall(cb)
+    @showprogress 0.1 "Training..." for d in data
+        try
+            gs = Flux.Tracker.gradient(ps) do
+                loss(d...)
+            end
+            Flux.Tracker.update!(opt, ps, gs)
+            cb()
+        catch ex
+            if ex isa Flux.StopException
+                break
+            else
+                rethrow(ex)
+            end
+        end
+    end
+end
+
 
 function test_FC()
     (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST();
@@ -52,13 +67,13 @@ function test_FC()
     loss(x, y) = crossentropy(model(x), y)
     accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
 
-    evalcb = throttle(() -> @show(loss(valX[1], valY[1])) , 1);
+    evalcb = throttle(() -> @show(loss(valX[1], valY[1])) , 5);
     opt = ADAM();
 
     # TODO early stopping
     # TODO learning rate decay
 
-    @epochs 10 Flux.train!(loss, params(model), zip(trainX, trainY), opt, cb = evalcb)
+    @epochs 10 mytrain!(loss, params(model), zip(trainX, trainY), opt, cb=evalcb)
 
     # TODO print out training details, e.g. accuracy
     @show accuracy(trainX[1], trainY[1])
@@ -73,11 +88,6 @@ function test_FC()
     sample_and_view(trainX, trainY)
     sample_and_view(testX, testY)
 end
-
-# x = rand(Float32, 10, 3) |> gpu;
-# y = Flux.onehotbatch(1:3, 1:10) |> gpu;
-# accuracy(x, y) = Flux.onecold(x) .== Flux.onecold(y);
-# accuracy(x, y)
 
 
 function test_Conv()
@@ -119,11 +129,11 @@ function test_Conv()
     
     accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
     
-    evalcb = throttle(() -> @show(loss(valX[1], valY[1])) , 1);
+    evalcb = throttle(() -> @show(loss(valX[1], valY[1])) , 5);
     opt = ADAM(0.001)
 
     # training
-    @epochs 10 Flux.train!(loss, params(model), zip(trainX, trainY), opt, cb=evalcb)
+    @epochs 10 mytrain!(loss, params(model), zip(trainX, trainY), opt, cb=evalcb)
 
     # test accuracy
     @show accuracy(trainX[1], trainY[1])

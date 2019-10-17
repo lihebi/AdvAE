@@ -291,3 +291,12 @@ function test_BatchNorm()
     @time bn(testimg);
     @time gpu(bn)(gpu(testimg));
 end
+
+function test_allowscalar()
+    CuArrays.allowscalar(false)
+    x = rand(Float32, 10, 3) |> gpu;
+    y = Flux.onehotbatch(1:3, 1:10) |> gpu;
+    accuracy(x, y) = Flux.onecold(x) .== Flux.onecold(y);
+    accuracy(x, y)
+    CuArrays.allowscalar(true)
+end

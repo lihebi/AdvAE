@@ -52,7 +52,7 @@ function test_FC()
     (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST();
 
     # TODO input dimension matters?
-    
+
     model = Chain(
         # (28,28,N)
         x -> reshape(x, :, size(x, 4)),
@@ -63,7 +63,7 @@ function test_FC()
         softmax) |> gpu;
 
     model(trainX[1]);
-    
+
     loss(x, y) = crossentropy(model(x), y)
     accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
 
@@ -116,9 +116,9 @@ function test_Conv()
         # Finally, softmax to get nice probabilities
         softmax,
     ) |> gpu;
-    
+
     model(trainX[1]);
-    
+
     function loss(x, y)
         # We augment `x` a little bit here, adding in random noise
         x_aug = x .+ 0.1f0*gpu(randn(eltype(x), size(x)))
@@ -126,9 +126,9 @@ function test_Conv()
         y_hat = model(x_aug)
         return crossentropy(y_hat, y)
     end
-    
+
     accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
-    
+
     evalcb = throttle(() -> @show(loss(valX[1], valY[1])) , 5);
     opt = ADAM(0.001)
 
@@ -145,12 +145,50 @@ function test_Conv()
     sample_and_view(testX, testY)
 end
 
-
 """
-CIFAR raw CNN models
+CIFAR raw CNN models. Training acc 0.43, val 0.55, testing 0.4
 """
 function test_cifar_Conv()
-    
+    (trainX, trainY), (valX, valY), (testX, testY) = load_CIFAR10();
+    model = Chain(
+        Conv((5,5), 3=>16, relu),
+        MaxPool((2,2)),
+        Conv((5,5), 16=>8, relu),
+        MaxPool((2,2)),
+        x -> reshape(x, :, size(x, 4)),
+        # Dense(200, 120),
+        # Dense(120, 84),
+        # Dense(84, 10),
+        Dense(200, 10),
+        softmax) |> gpu;
+    model(trainX[1]);
+
+    # Conv((5,5), 3=>16, relu)(trainX[1])
+
+    function loss(x, y)
+        # We augment `x` a little bit here, adding in random noise
+        x_aug = x .+ 0.1f0*gpu(randn(eltype(x), size(x)))
+        y_hat = model(x_aug)
+        return crossentropy(y_hat, y)
+    end
+
+    accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
+
+    evalcb = throttle(() -> @show(loss(valX[1], valY[1])) , 5);
+    opt = ADAM(0.001)
+
+    # training
+    @epochs 10 mytrain!(loss, params(model), zip(trainX, trainY), opt, cb=evalcb)
+
+    # test accuracy
+    @show accuracy(trainX[1], trainY[1])
+    @show accuracy(valX[1], valY[1])
+    @show accuracy(testX[1], testY[1])
+
+
+    # visualize the dataset
+    sample_and_view(trainX, trainY)
+    sample_and_view(testX, testY)
 end
 
 """

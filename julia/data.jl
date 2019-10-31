@@ -174,7 +174,6 @@ function load_MNIST(; use_batch=true, val_split=0.1)
 end
 
 function test_load_MNIST()
-    data = load_MNIST();
     (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST();
     size(trainX)
     size(trainX[1])

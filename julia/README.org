@@ -18,7 +18,8 @@ end
 ** TODO CIFAR10 models
 
 *** TODO data augmentation
-*** TODO batchnorm layer
+*** DONE batchnorm layer
+    CLOSED: [2019-10-31 Thu 16:03]
 *** TODO densenet
 https://github.com/FluxML/Metalhead.jl/
 *** TODO learning rate schedule/decay
@@ -30,10 +31,10 @@ https://github.com/FluxML/Metalhead.jl/
 *** CANCELED VGG
     CLOSED: [2019-10-31 Thu 12:15]
 
-** adversarial attacks
+** STARTED adversarial attacks
 https://github.com/jaypmorgan/Adversarial.jl
 
-** adversarial training
+** STARTED adversarial training
 *** AdvAE
 *** HGD
 

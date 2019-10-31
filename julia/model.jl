@@ -246,6 +246,9 @@ function test_CIFAR_model(model)
     # training
     @epochs 10 mytrain!(loss, params(model), zip(trainX, trainY), opt, cb=evalcb)
 
+    # into testing mode
+    Flux.testmode!(model)
+
     # test accuracy
     @show accuracy(trainX[1], trainY[1])
     @show accuracy(valX[1], valY[1])
@@ -254,12 +257,16 @@ function test_CIFAR_model(model)
     # visualize the dataset
     sample_and_view(trainX, trainY)
     sample_and_view(testX, testY)
+
+    # back into training node
+    Flux.testmode!(model, false)
 end
 
 function test_CIFAR()
     cnn = get_CIFAR_CNN_model()
     test_CIFAR_model(cnn)
     resnet20 = resnet(3) |> gpu;
+    # 0.87, 0.74, 0.7
     resnet32 = resnet(5) |> gpu;
     resnet56 = resnet(9) |> gpu;
     resnet68 = resnet(11) |> gpu;

@@ -57,18 +57,18 @@ function load_CIFAR10(; use_batch=true, val_split=0.1)
     
     if use_batch
         # TODO fixed batch_num 100 here
-        trainX = [cat(X[i]..., dims = 4) for i in partition(1:mid, 100)];
-        trainY = [Y[:,i] for i in partition(1:mid, 100)];
+        trainX = gpu.([cat(X[i]..., dims = 4) for i in partition(1:mid, 100)]);
+        trainY = gpu.([Y[:,i] for i in partition(1:mid, 100)]);
 
-        size(trainX)            # (490,)
-        size(trainX[1])         # (32, 32, 3, 100)
-        size(trainY[1])         # (10, 100)
+        # size(trainX)            # (490,)
+        # size(trainX[1])         # (32, 32, 3, 100)
+        # size(trainY[1])         # (10, 100)
         
-        valX = [cat(X[i]..., dims = 4) for i in partition(mid+1:N, 100)];
-        valY = [Y[:,i] for i in partition(mid+1:N, 100)];
+        valX = gpu.([cat(X[i]..., dims = 4) for i in partition(mid+1:N, 100)]);
+        valY = gpu.([Y[:,i] for i in partition(mid+1:N, 100)]);
 
-        testX = [cat(X2[i]..., dims = 4) for i in partition(1:N2, 100)];
-        testY = [Y2[:,i] for i in partition(1:N2, 100)];
+        testX = gpu.([cat(X2[i]..., dims = 4) for i in partition(1:N2, 100)]);
+        testY = gpu.([Y2[:,i] for i in partition(1:N2, 100)]);
     else
         trainX = X[1:mid]
         trainY = Y[1:mid]

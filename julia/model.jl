@@ -47,12 +47,7 @@ function mytrain!(loss, ps, data, opt; cb = () -> ())
     end
 end
 
-
-function test_FC()
-    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST();
-
-    # TODO input dimension matters?
-
+function get_MNIST_FC_model()
     model = Chain(
         # (28,28,N)
         x -> reshape(x, :, size(x, 4)),
@@ -61,37 +56,10 @@ function test_FC()
         Dense(28^2, 32, relu),
         Dense(32, 10),
         softmax) |> gpu;
-
-    model(trainX[1]);
-
-    loss(x, y) = crossentropy(model(x), y)
-    accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
-
-    evalcb = throttle(() -> @show(loss(valX[1], valY[1])) , 5);
-    opt = ADAM();
-
-    # TODO early stopping
-    # TODO learning rate decay
-
-    @epochs 10 mytrain!(loss, params(model), zip(trainX, trainY), opt, cb=evalcb)
-
-    # TODO print out training details, e.g. accuracy
-    @show accuracy(trainX[1], trainY[1])
-    @show accuracy(valX[1], valY[1])
-    @show accuracy(testX[1], testY[1])
-
-    # TODO Test set accuracy
-    # tX = hcat(float.(reshape.(MNIST.images(:test), :))...) |> gpu
-    # tY = onehotbatch(MNIST.labels(:test), 0:9) |> gpu
-    # accuracy(tX, tY)
-
-    sample_and_view(trainX, trainY)
-    sample_and_view(testX, testY)
+    return model
 end
 
-
-function test_Conv()
-    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST();
+function get_MNIST_CNN_model()
     model = Chain(
         # First convolution, operating upon a 28x28 image
         Conv((3, 3), 1=>16, pad=(1,1), relu),
@@ -116,40 +84,51 @@ function test_Conv()
         # Finally, softmax to get nice probabilities
         softmax,
     ) |> gpu;
+    return model
+end
+
+
+function test_MNIST_model(model)
+    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST();
 
     model(trainX[1]);
 
-    function loss(x, y)
+    function alternative_loss(x, y)
         # We augment `x` a little bit here, adding in random noise
         x_aug = x .+ 0.1f0*gpu(randn(eltype(x), size(x)))
-
         y_hat = model(x_aug)
         return crossentropy(y_hat, y)
     end
 
+    loss(x, y) = crossentropy(model(x), y)
     accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
 
     evalcb = throttle(() -> @show(loss(valX[1], valY[1])) , 5);
-    opt = ADAM(0.001)
+    opt = ADAM(0.001);
 
-    # training
+    # TODO early stopping
+    # TODO learning rate decay
+
     @epochs 10 mytrain!(loss, params(model), zip(trainX, trainY), opt, cb=evalcb)
 
-    # test accuracy
+    # print out training details, e.g. accuracy
     @show accuracy(trainX[1], trainY[1])
     @show accuracy(valX[1], valY[1])
+    # Test set accuracy
     @show accuracy(testX[1], testY[1])
 
-    # visualize the dataset
     sample_and_view(trainX, trainY)
     sample_and_view(testX, testY)
 end
 
-"""
-CIFAR raw CNN models. Training acc 0.43, val 0.55, testing 0.4
-"""
-function test_cifar_Conv()
-    (trainX, trainY), (valX, valY), (testX, testY) = load_CIFAR10();
+function test_MNIST()
+    fc = get_MNIST_FC_model()
+    test_MNIST_model(fc)
+    cnn = get_MNIST_CNN_model()
+    test_MNIST_model(cnn)
+end
+
+function get_CIFAR_CNN_model()
     model = Chain(
         Conv((5,5), 3=>16, relu),
         MaxPool((2,2)),
@@ -161,9 +140,23 @@ function test_cifar_Conv()
         # Dense(84, 10),
         Dense(200, 10),
         softmax) |> gpu;
-    model(trainX[1]);
+    return model
+end
 
-    # Conv((5,5), 3=>16, relu)(trainX[1])
+"""
+TODO CIFAR using ResNet models
+"""
+function get_CIFAR_ResNet_model()
+end
+
+
+
+"""
+CIFAR raw CNN models. Training acc 0.43, val 0.55, testing 0.4
+"""
+function test_CIFAR_model(model)
+    (trainX, trainY), (valX, valY), (testX, testY) = load_CIFAR10();
+    model(trainX[1]);
 
     function loss(x, y)
         # We augment `x` a little bit here, adding in random noise
@@ -185,14 +178,15 @@ function test_cifar_Conv()
     @show accuracy(valX[1], valY[1])
     @show accuracy(testX[1], testY[1])
 
-
     # visualize the dataset
     sample_and_view(trainX, trainY)
     sample_and_view(testX, testY)
 end
 
-"""
-CIFAR using ResNet models
-"""
-function test_cifar_Resnet()
+function test_CIFAR()
+    cnn = get_CIFAR_CNN_model()
+    test_CIFAR_model(cnn)
+    resnet = get_CIFAR_ResNet_model()
+    test_CIFAR_model(resnet)
 end
+

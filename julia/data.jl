@@ -17,86 +17,7 @@ using Metalhead
 
 using EmacsREPL
 
-export load_CIFAR10, load_MNIST
-
-"""
-    load_CIFAR10()
-
-Return trainX, trainY, valX, valY, testX, testY
-
-Each trainX is batch of 100.
-
-TODO I'm not going to move it onto GPU yet.
-
-"""
-function load_CIFAR10(; use_batch=true, val_split=0.1)
-    getarray(X) = Float32.(permutedims(channelview(X), (2, 3, 1)))
-
-    function toXY(imgs)
-        let N = length(imgs),
-            X = [getarray(imgs[i].img) for i in 1:N],
-            # FIXME this has to be 1:10, not 0:9. Take care about the
-            # consistency
-            Y = onehotbatch([imgs[i].ground_truth.class for i in 1:N],1:10)
-            
-            X, Y
-        end
-    end
-
-    X, Y = toXY(trainimgs(CIFAR10));
-
-    N = length(X)
-    # TODO use random index
-    mid = round(Int, N * (1 - val_split))
-    # println("N=$(N), mid=$(mid)")
-
-    # There is no testimgs. the valimgs is the test.
-    # imgs3 = testimgs(CIFAR10);
-    X2, Y2 = toXY(valimgs(CIFAR10));
-    N2 = length(X2);
-    
-    if use_batch
-        # TODO fixed batch_num 100 here
-        trainX = gpu.([cat(X[i]..., dims = 4) for i in partition(1:mid, 100)]);
-        trainY = gpu.([Y[:,i] for i in partition(1:mid, 100)]);
-
-        # size(trainX)            # (490,)
-        # size(trainX[1])         # (32, 32, 3, 100)
-        # size(trainY[1])         # (10, 100)
-        
-        valX = gpu.([cat(X[i]..., dims = 4) for i in partition(mid+1:N, 100)]);
-        valY = gpu.([Y[:,i] for i in partition(mid+1:N, 100)]);
-
-        testX = gpu.([cat(X2[i]..., dims = 4) for i in partition(1:N2, 100)]);
-        testY = gpu.([Y2[:,i] for i in partition(1:N2, 100)]);
-    else
-        trainX = X[1:mid]
-        trainY = Y[1:mid]
-        valX = X[mid+1:N]
-        valY = Y[mid+1:N]
-        testX = X2
-        testY = Y2
-        # FIXME ??
-        # val_indices = collect(mid+1:N);
-        # valX = cat(X[val_indices]..., dims = 4);
-        # valY = Y[:, val_indices];
-    end
-    
-    return (trainX, trainY), (valX, valY), (testX, testY)
-end
-
-
-function test_load_CIFAR10()
-    data = load_CIFAR10();
-    (trainX, trainY), (valX, valY), (testX, testY) = data;
-
-    (trainX, trainY), (valX, valY), (testX, testY) = load_CIFAR10();
-    (trainX, trainY), (valX, valY), (testX, testY) = load_CIFAR10(use_batch=true);
-    size(trainX)
-    size(trainY)
-    size(testY)
-end
-
+export load_MNIST, load_CIFAR10
 
 function make_minibatch(X, Y, idxs)
     X_batch = Array{Float32}(undef, size(X[1])..., 1, length(idxs))
@@ -179,3 +100,83 @@ function test_load_MNIST()
     size(trainX[1])
     size(testX)
 end
+
+
+"""
+    load_CIFAR10()
+
+Return trainX, trainY, valX, valY, testX, testY
+
+Each trainX is batch of 100.
+
+TODO I'm not going to move it onto GPU yet.
+
+"""
+function load_CIFAR10(; use_batch=true, val_split=0.1)
+    getarray(X) = Float32.(permutedims(channelview(X), (2, 3, 1)))
+
+    function toXY(imgs)
+        let N = length(imgs),
+            X = [getarray(imgs[i].img) for i in 1:N],
+            # FIXME this has to be 1:10, not 0:9. Take care about the
+            # consistency
+            Y = onehotbatch([imgs[i].ground_truth.class for i in 1:N],1:10)
+            
+            X, Y
+        end
+    end
+
+    X, Y = toXY(trainimgs(CIFAR10));
+
+    N = length(X)
+    # TODO use random index
+    mid = round(Int, N * (1 - val_split))
+    # println("N=$(N), mid=$(mid)")
+
+    # There is no testimgs. the valimgs is the test.
+    # imgs3 = testimgs(CIFAR10);
+    X2, Y2 = toXY(valimgs(CIFAR10));
+    N2 = length(X2);
+    
+    if use_batch
+        # TODO fixed batch_num 100 here
+        trainX = gpu.([cat(X[i]..., dims = 4) for i in partition(1:mid, 100)]);
+        trainY = gpu.([Y[:,i] for i in partition(1:mid, 100)]);
+
+        # size(trainX)            # (490,)
+        # size(trainX[1])         # (32, 32, 3, 100)
+        # size(trainY[1])         # (10, 100)
+        
+        valX = gpu.([cat(X[i]..., dims = 4) for i in partition(mid+1:N, 100)]);
+        valY = gpu.([Y[:,i] for i in partition(mid+1:N, 100)]);
+
+        testX = gpu.([cat(X2[i]..., dims = 4) for i in partition(1:N2, 100)]);
+        testY = gpu.([Y2[:,i] for i in partition(1:N2, 100)]);
+    else
+        trainX = X[1:mid]
+        trainY = Y[1:mid]
+        valX = X[mid+1:N]
+        valY = Y[mid+1:N]
+        testX = X2
+        testY = Y2
+        # FIXME ??
+        # val_indices = collect(mid+1:N);
+        # valX = cat(X[val_indices]..., dims = 4);
+        # valY = Y[:, val_indices];
+    end
+    
+    return (trainX, trainY), (valX, valY), (testX, testY)
+end
+
+
+function test_load_CIFAR10()
+    data = load_CIFAR10();
+    (trainX, trainY), (valX, valY), (testX, testY) = data;
+
+    (trainX, trainY), (valX, valY), (testX, testY) = load_CIFAR10();
+    (trainX, trainY), (valX, valY), (testX, testY) = load_CIFAR10(use_batch=true);
+    size(trainX)
+    size(trainY)
+    size(testY)
+end
+

@@ -34,15 +34,17 @@ function load_CIFAR10(; use_batch=true, val_split=0.1)
 
     function toXY(imgs)
         let N = length(imgs),
-            X = [getarray(imgs[i].img) for i in 1:N], 
-            Y = onehotbatch([imgs[i].ground_truth.class for i in 1:N],0:9)
+            X = [getarray(imgs[i].img) for i in 1:N],
+            # FIXME this has to be 1:10, not 0:9. Take care about the
+            # consistency
+            Y = onehotbatch([imgs[i].ground_truth.class for i in 1:N],1:10)
             
             X, Y
         end
     end
 
     X, Y = toXY(trainimgs(CIFAR10));
-    
+
     N = length(X)
     # TODO use random index
     mid = round(Int, N * (1 - val_split))

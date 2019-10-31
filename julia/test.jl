@@ -43,7 +43,7 @@ function test_array()
     size(vcat([[1 2 3] for i in  1:20]...))
     size(hcat([[1, 2, 3] for i in  1:20]...))
     size(hcat([[1, 2, 3] for i in  1:20]))
-    
+
     typeof(collect([[1,2,3] for i in  1:20]))
 end
 
@@ -67,7 +67,7 @@ function test_resnet()
     # size(X[1])
     X[1].img
     viewrepl(X[3].img)
-    
+
     getarray(X[1].img)
     imgs = [getarray(X[i].img) for i in 1:50000];
     labels = onehotbatch([X[i].ground_truth.class for i in 1:50000],1:10);
@@ -75,8 +75,8 @@ function test_resnet()
     valset = collect(49001:50000);
     valX = cat(imgs[valset]..., dims = 4) |> gpu;
     valY = labels[:, valset] |> gpu;
-    
-    
+
+
     # construct resnet
     # run
 end
@@ -189,7 +189,7 @@ function test_random()
 
     # adversarial training
     # advAE
-    
+
 end
 
 
@@ -236,7 +236,7 @@ function test_CIFAR10()
     # addition, Julia uses column-major, and put N at the end,
     # i.e. WHCN.
     size(Y)                     # (10, 50000)
-    
+
     # cat(A...; dims=dims): Concatenate the input arrays along the
     # specified dimensions in the iterable dims. Seems that dims can
     # also be a integer like in this case.
@@ -274,7 +274,7 @@ function test_MNIST()
     size(cat(float.(imgs)..., dims=3))
 
     # X = hcat(float.(reshape.(imgs, :))...) |> gpu;
-    
+
     labels = MNIST.labels();
     Y = Flux.onehotbatch(labels, 0:9) |> gpu;
     size(X)                     # (784, 60000)
@@ -299,4 +299,74 @@ function test_allowscalar()
     accuracy(x, y) = Flux.onecold(x) .== Flux.onecold(y);
     accuracy(x, y)
     CuArrays.allowscalar(true)
+end
+
+function test_ResNet()
+    testimg = randn(Float32, 32,32, 16,1) |> gpu;
+    size(testimg)
+    net = conv_block((3,3), 16=>32, 2) |> gpu
+    size(net(testimg))
+
+    net = Conv((3,3), 16=>32, pad=1, stride=2) |> gpu
+
+
+    testimg = randn(Float32, 32,32, 16,1) |> gpu;
+    size(testimg)
+    # FIXME ResidualBlock does not work on GPU
+    conv_block((3,3), 16=>16, 1)
+    identity_block((3,3), 16=>16) |> gpu
+    net = conv_block((3,3), 16=>16, 1) |> gpu
+    net(testimg)
+    gpu(net.conv_layers[1])(testimg)
+    gpu(net).conv_layers[1](testimg)
+
+    typeof(net.conv_layers[1])
+    typeof(gpu(net.conv_layers[1]))
+
+    CuArrays.cu(net)
+    net
+end
+
+"""
+TODO CIFAR using ResNet models
+"""
+function get_CIFAR_ResNet_model()
+    resnet20 = resnet(3) |> gpu;
+    resnet32 = resnet(5) |> gpu;
+    resnet56 = resnet(9)
+    resnet68 = resnet(11)
+
+    test_CIFAR_model(resnet20)
+
+    size(resnet32(trainX[1]))
+
+    m = Chain(
+        Conv((3,3), 3=>16, stride=(1,1), pad=1),
+        BatchNorm(16),
+        conv_block((3,3), 16=>16, 1),
+        res_block(5, (3,3), 16=>16),
+        # here should be 32,32,16
+        conv_block((3,3), 16=>32, 2),
+        res_block(5, (3,3), 32=>32),
+        conv_block((3,3), 32=>64, 2),
+        res_block(5, (3,3), 64=>64),
+        MeanPool((8,8)),
+        x -> reshape(x, :, size(x,4)),
+        Dense(64,10),
+        softmax
+    ) |> gpu;
+
+    size(trainX[1])
+    size(m(trainX[1]))
+
+    MeanPool((64))
+
+
+    testimg = randn(Float32, 32,32, 16,1) |> gpu;
+    size(testimg)
+    net = conv_block((3,3), 16=>32, 2) |> gpu
+    net(testimg)
+
+    gpu(conv_block((3,3), 16=>16, 1))(m(trainX[1]))
+
 end

@@ -143,13 +143,86 @@ function get_CIFAR_CNN_model()
     return model
 end
 
-"""
-TODO CIFAR using ResNet models
-"""
-function get_CIFAR_ResNet_model()
+struct ResidualBlock
+  conv_layers
+  norm_layers
+  shortcut
+end
+Flux.@treelike ResidualBlock
+
+function (block::ResidualBlock)(input)
+    local value = copy.(input)
+    for i in 1:length(block.conv_layers)-1
+        value = relu.((block.norm_layers[i])((block.conv_layers[i])(value)))
+    end
+    relu.(((block.norm_layers[end])((block.conv_layers[end])(value)))
+          + block.shortcut(input))
 end
 
+"""Identity block, consisting of Conv-BN-Conv-BN + input
+"""
+function identity_block(kernel_size, filters)
+    # conv BN RELU
+    local conv_layers = []
+    local norm_layers = []
+    push!(conv_layers, Conv(kernel_size, filters, pad=1, stride=1))
+    push!(conv_layers, Conv(kernel_size, filters, pad=1, stride=1))
+    push!(norm_layers, BatchNorm(filters[2]))
+    push!(norm_layers, BatchNorm(filters[2]))
+    ResidualBlock(Tuple(conv_layers), Tuple(norm_layers), identity)
+end
 
+function conv_block(kernel_size, filters, stride)
+    local conv_layers = []
+    local norm_layers = []
+    # half the feature map
+    push!(conv_layers, Conv(kernel_size, filters[1]=>filters[2], pad=1, stride=stride))
+    push!(conv_layers, Conv(kernel_size, filters[2]=>filters[2], pad=1))
+    push!(norm_layers, BatchNorm(filters[2]))
+    push!(norm_layers, BatchNorm(filters[2]))
+    shortcut = Chain(Conv((1,1), filters,
+                          pad = (0,0),
+                          stride = stride),
+                     BatchNorm(filters[2]))
+    return ResidualBlock(Tuple(conv_layers), Tuple(norm_layers), shortcut)
+end
+
+function res_block(num_blocks, kernel_size, filters)
+    local layers = []
+    # conv1 = conv_block(kernel_size, filters, stride=conv_stride)
+    # push!(layers, conv1)
+    for i = 1:num_blocks
+        id_layer = identity_block(kernel_size, filters)
+        push!(layers, id_layer)
+    end
+    return Chain(layers...)
+end
+
+function resnet(num_blocks)
+    # num_blocks: 3,5,9,11
+    # (6*num_blocks + 2)
+    # 20, 32, 56, 68
+    # USE 9, resnet56
+    Chain(
+        Conv((3,3), 3=>16, stride=(1,1), pad=1),
+        BatchNorm(16),
+        # 32,32,16
+
+        # 2n 32x32, 16
+        conv_block((3,3), 16=>16, 1),
+        res_block(num_blocks-1, (3,3), 16=>16),
+
+        conv_block((3,3), 16=>32, 2),
+        res_block(num_blocks-1, (3,3), 32=>32),
+
+        conv_block((3,3), 32=>64, 2),
+        res_block(num_blocks-1, (3,3), 64=>64),
+
+        MeanPool((8,8)),
+        x -> reshape(x, :, size(x,4)),
+        Dense(64,10),
+        softmax)
+end
 
 """
 CIFAR raw CNN models. Training acc 0.43, val 0.55, testing 0.4
@@ -186,7 +259,9 @@ end
 function test_CIFAR()
     cnn = get_CIFAR_CNN_model()
     test_CIFAR_model(cnn)
-    resnet = get_CIFAR_ResNet_model()
-    test_CIFAR_model(resnet)
+    resnet20 = resnet(3) |> gpu;
+    resnet32 = resnet(5) |> gpu;
+    resnet56 = resnet(9) |> gpu;
+    resnet68 = resnet(11) |> gpu;
+    test_CIFAR_model(resnet32)
 end
-

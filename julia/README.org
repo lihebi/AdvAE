@@ -16,11 +16,39 @@ end
 #+END_SRC
 
 ** TODO CIFAR10 models
+*** data augmentation
 *** ResNet
 *** VGG
 
-** TODO GAN
-** TODO VAE
-** TODO InfoGAN
-** TODO NOTEARS
-** TODO Causal
+** ResNet models on CIFAR
+*** batchnorm layer
+*** VGG DenseNet
+*** the Metalhead models
+
+https://github.com/FluxML/Metalhead.jl/tree/master/src
+
+
+- VGG: the VGG in flux-model-zoo is not working due to batch norm
+  layer error on CuArrays
+- ResNet
+- DenseNet
+
+However, these net seems to be for ImageNet, and does not seem to
+provide good interface for customize. I would read and understand them
+and adapt for my use.
+
+
+** MNIST adv attack
+*** Attacks
+
+https://github.com/jaypmorgan/Adversarial.jl
+*** adv training
+*** AdvAE
+
+** adversarial attacks
+** adversarial training
+** AdvAE
+
+** DefenseGAN
+** HGD
+

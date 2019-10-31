@@ -15,6 +15,8 @@ using Metalhead
 
 using EmacsREPL
 
+CuArrays.allowscalar(false)
+CuArrays.allowscalar(true)
 
 # I should probably control the environment explicitly, as julia seems
 # to be fragile for it.

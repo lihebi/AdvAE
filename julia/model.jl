@@ -3,15 +3,13 @@ using Revise
 using ProgressMeter
 
 include("data.jl")
-CuArrays.allowscalar(false)
-CuArrays.allowscalar(true)
 
 """
 Sample 10 images and show the image and label
 """
 function sample_and_view(X, Y)
-    imgs = cpu(hcat([X[1][:,:,:,i] for i in 1:10]...))
-    labels = onecold(Y[1][:,1:10], 0:9)
+    imgs = cpu(hcat([X[:,:,:,i] for i in 1:10]...))
+    labels = onecold(Y[:,1:10], 0:9)
     viewrepl(imgs)
     @show labels
     nothing
@@ -117,8 +115,8 @@ function test_MNIST_model(model)
     # Test set accuracy
     @show accuracy(testX[1], testY[1])
 
-    sample_and_view(trainX, trainY)
-    sample_and_view(testX, testY)
+    sample_and_view(trainX[1], trainY[1])
+    sample_and_view(testX[1], testY[1])
 end
 
 function test_MNIST()
@@ -255,8 +253,8 @@ function test_CIFAR_model(model)
     @show accuracy(testX[1], testY[1])
 
     # visualize the dataset
-    sample_and_view(trainX, trainY)
-    sample_and_view(testX, testY)
+    sample_and_view(trainX[1], trainY[1])
+    sample_and_view(testX[1], testY[1])
 
     # back into training node
     Flux.testmode!(model, false)

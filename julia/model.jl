@@ -5,11 +5,14 @@ using ProgressMeter
 include("data.jl")
 
 """
-Sample 10 images and show the image and label
+Sample up to 10 images and show the image and label. If less than 10, use all.
+
 """
 function sample_and_view(X, Y)
-    imgs = cpu(hcat([X[:,:,:,i] for i in 1:10]...))
-    labels = onecold(Y[:,1:10], 0:9)
+    num = min(size(X)[4], 10)
+    @info "Showing $num images .."
+    imgs = cpu(hcat([X[:,:,:,i] for i in 1:num]...))
+    labels = onecold(Y[:,1:num], 0:9)
     viewrepl(imgs)
     @show labels
     nothing

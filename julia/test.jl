@@ -15,9 +15,6 @@ using Metalhead
 
 using EmacsREPL
 
-CuArrays.allowscalar(false)
-CuArrays.allowscalar(true)
-
 # I should probably control the environment explicitly, as julia seems
 # to be fragile for it.
 #
@@ -372,3 +369,70 @@ function get_CIFAR_ResNet_model()
     gpu(conv_block((3,3), 16=>16, 1))(m(trainX[1]))
 
 end
+
+function test_tracker()
+    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST();
+    cnn = get_MNIST_CNN_model()
+
+    size(trainX[1])
+    # param(trainX[1]).grad[:,:,:,1]
+
+    model = cnn
+    x = trainX[1];
+    y = trainY[1];
+    # but this will clear it as well
+    px = Flux.param(x);
+
+    sum(px.grad)
+    sum(px.tracker.grad)
+
+    typeof(px.grad)
+    typeof(px.data)
+
+    loss(x, y) = crossentropy(model(x), y)
+
+    grad = Flux.Tracker.extract_grad!(px)
+
+    typeof(grad[1])
+    grad.grad
+
+    sign(grad.data)
+    px.grad .= 0;
+
+    theta = Flux.params(model);
+    typeof(theta)
+    typeof(px)
+
+    newtheta = params(theta..., px)
+
+    g = Flux.Tracker.gradient(() -> loss(px, y));
+    g = Flux.Tracker.gradient(() -> loss(px, y), theta);
+    g = Flux.Tracker.gradient(() -> loss(px, y), newtheta);
+
+    for t in theta
+        # @show typeof(t)
+        @show sum(t.grad)
+        @show sum(g[t])
+    end
+
+    sum(g[px])
+end
+
+
+
+"""This is the same function used in mnist_challenge
+"""
+function adv_MNIST_CNN()
+    model = Chain(
+        Conv((5, 5), 1=>32, relu, pad=(2,2)),
+        MaxPool((2,2)),
+        Conv((5,5), 32=>64, relu, pad=(2,2)),
+        MaxPool((2,2)),
+        x -> reshape(x, :, size(x, 4)),
+        Dense(7 * 7 * 64, 1024, relu),
+        Dense(1024, 10),
+        softmax,
+    ) |> gpu;
+    return model
+end
+

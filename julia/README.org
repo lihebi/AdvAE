@@ -2,6 +2,49 @@
 
 * TODO-list
 
+** TODO CIFAR10 models
+
+*** TODO data augmentation
+*** TODO densenet
+https://github.com/FluxML/Metalhead.jl/
+*** TODO learning rate schedule/decay
+*** TODO early stopping
+
+
+*** DONE batchnorm layer
+    CLOSED: [2019-10-31 Thu 16:03]
+*** DONE ResNet
+    CLOSED: [2019-10-31 Thu 12:15]
+*** CANCELED VGG
+    CLOSED: [2019-10-31 Thu 12:15]
+
+** TODO adversarial attacks
+https://github.com/jaypmorgan/Adversarial.jl
+
+*** DONE PGD
+    CLOSED: [2019-11-01 Fri 16:27]
+*** DONE FGSM
+    CLOSED: [2019-11-01 Fri 16:27]
+*** TODO CW
+*** TODO black-box substitute model
+*** TODO BoundaryAttack, BAPP
+*** TODO BPDA
+
+** TODO adversarial training
+*** DONE itadvtrain
+    CLOSED: [2019-11-01 Fri 16:27]
+*** STARTED AdvAE
+*** HGD
+
+** STARTED fix the local package version problem
+
+** STARTED GAN
+*** GAN
+*** DefenseGAN
+
+
+* DONE-list
+
 ** DONE @progress
    CLOSED: [2019-10-17 Thu 16:17]
 
@@ -14,30 +57,4 @@ Very easy to use:
     sleep(0.1)
 end
 #+END_SRC
-
-** TODO CIFAR10 models
-
-*** TODO data augmentation
-*** DONE batchnorm layer
-    CLOSED: [2019-10-31 Thu 16:03]
-*** TODO densenet
-https://github.com/FluxML/Metalhead.jl/
-*** TODO learning rate schedule/decay
-*** TODO early stopping
-
-
-*** DONE ResNet
-    CLOSED: [2019-10-31 Thu 12:15]
-*** CANCELED VGG
-    CLOSED: [2019-10-31 Thu 12:15]
-
-** STARTED adversarial attacks
-https://github.com/jaypmorgan/Adversarial.jl
-
-** STARTED adversarial training
-*** AdvAE
-*** HGD
-
-** GAN
-*** DefenseGAN
 

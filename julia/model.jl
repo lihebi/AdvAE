@@ -35,7 +35,10 @@ the nice @showprogress macro.
 call(f, xs...) = f(xs...)
 runall(f) = f
 runall(fs::AbstractVector) = () -> foreach(call, fs)
+"""FIXME replace Tracker with Zygote
+"""
 function mytrain!(loss, ps, data, opt; cb = () -> ())
+    # FIXME maybe this is used to reset the gradients?
     ps = Flux.Tracker.Params(ps)
     cb = runall(cb)
     @showprogress 0.1 "Training..." for d in data
@@ -87,7 +90,7 @@ function get_MNIST_CNN_model()
         # Reshape 3d tensor into a 2d one, at this point it should be (3, 3, 32, N)
         # which is where we get the 288 in the `Dense` layer below:
         x -> reshape(x, :, size(x, 4)),
-        Dense(288, 10),
+        Dense(3*3*32, 10),
 
         # Finally, softmax to get nice probabilities
         softmax,
@@ -117,7 +120,7 @@ function test_MNIST_model(model)
     # TODO early stopping
     # TODO learning rate decay
 
-    @epochs 10 mytrain!(loss, params(model), zip(trainX, trainY), opt, cb=evalcb)
+    @epochs 10 mytrain!(loss, Flux.params(model), zip(trainX, trainY), opt, cb=evalcb)
 
     # print out training details, e.g. accuracy
     @show accuracy(trainX[1], trainY[1])
@@ -252,7 +255,7 @@ function test_CIFAR_model(model)
     opt = ADAM(0.001)
 
     # training
-    @epochs 10 mytrain!(loss, params(model), zip(trainX, trainY), opt, cb=evalcb)
+    @epochs 10 mytrain!(loss, Flux.params(model), zip(trainX, trainY), opt, cb=evalcb)
 
     # into testing mode
     Flux.testmode!(model)

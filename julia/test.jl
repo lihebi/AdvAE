@@ -419,20 +419,94 @@ function test_tracker()
 end
 
 
+function test_MSE()
 
-"""This is the same function used in mnist_challenge
-"""
-function adv_MNIST_CNN()
-    model = Chain(
-        Conv((5, 5), 1=>32, relu, pad=(2,2)),
-        MaxPool((2,2)),
-        Conv((5,5), 32=>64, relu, pad=(2,2)),
-        MaxPool((2,2)),
-        x -> reshape(x, :, size(x, 4)),
-        Dense(7 * 7 * 64, 1024, relu),
-        Dense(1024, 10),
-        softmax,
-    ) |> gpu;
-    return model
+    # x = trainX[1];
+    # size(x)
+    # flat = reshape(x, :, size(x,4));
+    # size(flat)
+    # size(reshape(flat, 28, 28, :))
+    # size(ae(x))
+
+    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST();
+    ae = dense_AE()
+    model = ae
+
+    # Flux.params(model);
+
+    # size(trainX)
+
+    # FIXME mse broke forward diff on cuarray. Needs CuArrays
+    # master. https://github.com/FluxML/Flux.jl/issues/848
+    loss(x) = Flux.mse(model(x), x)
+    loss(x) = Flux.crossentropy(model(x), x)
+    loss(trainX[1]);
+
+    mycrossentropy(ŷ, y; ϵ=eps(ŷ)) = -y*log(ŷ + ϵ) - (1 - y)*log(1 - ŷ + ϵ)
+
+    mycrossentropy(ŷ, y; ϵ=eps()) = -sum(y .* log.(ŷ.+ϵ) .* 1) * 1 // size(y)[end]
+    mycrossentropy(trainX[1], trainX[1])
+
+    size(trainY[1],2)
+    size(trainX[1])[end]
+    eps(trainX[1])
+    eps(typeof(trainY[1]))
+    eps(cnn(trainX[1]))
+    eps(Float32)
+    eps()
+
+
+    Flux.crossentropy(trainX[1], trainX[1]);
+    crossentropy(model(trainX[1]), model(trainX[1]));
+    crossentropy(cnn(trainX[1]), trainY[1]);
+    crossentropy(trainY[1], trainY[1]);
+
+    -sum(y .* log.(ŷ) .* weight) * 1 // size(y, 2)
+
+    size(trainX[1], 2)
+
+    -sum(cnn(trainX[1]) .* log.(trainY[1]) .* 1);
+
+    sum(log.(trainX[1]))
+
+    log.(cnn(trainX[1]))
+    log.(trainX[1])
+    trainX[1]
+
+    sample_and_view(trainX[1], trainY[1])
+
+    -sum(y .* log.(ŷ) .* weight) * 1 // size(y, 2)
+
+    typeof(cnn(trainX[1]))
+    typeof(trainY[1])
+
+    evalcb = throttle(() -> @show(loss(valX[1])), 5)
+    opt = ADAM()
+
+    Flux.train!(loss, Flux.params(model), zip(trainX), opt, cb = evalcb)
+
+    # decoder = Dense(32, 28^2, relu)
+    # model = Chain(encoder, decoder) |> gpu
+    # model(trainX[1]);
+    # encoder(trainX[1]);
 end
 
+
+function CNN3_AE()
+    encoder = Chain(Conv((3,3), 1=>16, pad=(1,1), relu),
+                    MaxPool((2,2)),
+                    Conv((3,3), 16=>8, pad=(1,1), relu),
+                    MaxPool((2,2)),
+                    # FIMXE this is from 7 to 3, not good
+                    Conv((3,3), 8=>8, pad=(1,1), relu),
+                    MaxPool((2,2)))
+    decoder = Chain(Conv((3,3), 8=>8, pad=(1,1), relu),
+                    upsample,
+                    Conv((3,3), 8=>8, pad=(1,1), relu),
+                    upsample,
+                    Conv((3,3), 8=>16, pad=(1,1), relu),
+                    upsample,
+                    Conv((3,3), 16=>1, pad=(1,1)),
+                    x -> σ.(x))
+    Chain(encoder, decoder) |> gpu
+end

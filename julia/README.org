@@ -33,14 +33,32 @@ https://github.com/jaypmorgan/Adversarial.jl
 ** TODO adversarial training
 *** DONE itadvtrain
     CLOSED: [2019-11-01 Fri 16:27]
-*** STARTED AdvAE
-*** HGD
 
-** STARTED fix the local package version problem
+**** TODO convergency problem
+There seems to be some problems: when directly using 20-PGD or 40-PGD, it does
+not converge. Two ways:
+- use 7-PGD, then 20-PGD, then 40-PGD
+- use 40-PGD directly, but train with both adv_x and x
+- first train clean CNN for 1 epoch, then adv train
+- weights initialization and regularization?
+
+**** TODO consistency with python code
+- speed seems to be a lot slower
+- accuracy does not seem to be equal at each epoch
+- convergency (or not) rate
+
+*** STARTED AdvAE
+**** auto encoder
+***** Dunet
+*** HGD
 
 ** STARTED GAN
 *** GAN
 *** DefenseGAN
+
+
+** CANCELED fix the local package version problem
+   CLOSED: [2019-11-02 Sat 13:28]
 
 
 * DONE-list

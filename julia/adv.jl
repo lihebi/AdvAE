@@ -15,7 +15,7 @@ function train_MNIST_model(model, trainX, trainY, valX, valY)
 
     evalcb = throttle(() -> @show(loss(valX[1], valY[1])) , 5);
     opt = ADAM(0.001);
-    @epochs 10 mytrain!(loss, params(model), zip(trainX, trainY), opt, cb=evalcb)
+    @epochs 10 mytrain!(loss, Flux.params(model), zip(trainX, trainY), opt, cb=evalcb)
 end
 
 """Not using, the same as Adversarial.jl's FGSM.
@@ -177,7 +177,25 @@ function advtrain(model, trainX, trainY, valX, valY)
 
     # train
     opt = ADAM(0.001);
-    @epochs 5 advtrain!(model, loss, params(model), zip(trainX, trainY), opt, cb=evalcb)
+    @epochs 5 advtrain!(model, loss, Flux.params(model), zip(trainX, trainY), opt, cb=evalcb)
+end
+
+
+
+"""This is the same CNN used in mnist_challenge
+"""
+function adv_MNIST_CNN()
+    model = Chain(
+        Conv((5, 5), 1=>32, relu, pad=(2,2)),
+        MaxPool((2,2)),
+        Conv((5,5), 32=>64, relu, pad=(2,2)),
+        MaxPool((2,2)),
+        x -> reshape(x, :, size(x, 4)),
+        Dense(7 * 7 * 64, 1024, relu),
+        Dense(1024, 10),
+        softmax,
+    ) |> gpu;
+    return model
 end
 
 
@@ -192,6 +210,7 @@ function test_attack()
 
     # a new cnn
     cnn = get_MNIST_CNN_model()
+    # FIXME it does not seem to have the same level of security
     advtrain(cnn, trainX, trainY, valX, valY)
     evaluate_attack(cnn, attack_FGSM, trainX, trainY, testX, testY)
     evaluate_attack(cnn, attack_PGD, trainX, trainY, testX, testY)

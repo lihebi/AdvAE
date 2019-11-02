@@ -1,0 +1,9 @@
+#!/bin/sh
+
+xrdb $HOME/.Xresources
+vncconfig -nowin&
+
+# I also need to source the profile
+source $HOME/.profile
+
+exec openbox-session

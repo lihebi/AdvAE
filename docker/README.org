@@ -1,0 +1,41 @@
+#+TITLE: Docker VM
+
+On arch, you need to install
+[[https://aur.archlinux.org/packages/nvidia-container-toolkit/][nvidia-container-toolkit]]
+
+Restart docker daemon, and test if that succeeds:
+
+#+begin_example
+docker run --gpus all --rm nvidia/cuda nvidia-smi
+#+end_example
+
+To run the tensorflow image:
+
+#+begin_example
+docker run --gpus all -it tensorflow/tensorflow:latest-gpu bash
+#+end_example
+
+To run this:
+
+#+begin_example
+docker run --gpus all -itd advae
+#+end_example
+
+It will print out the container id. You can also list all running
+containers via:
+
+#+begin_example
+docker ps
+#+end_example
+
+The IP address is printed, you can view the it via:
+
+#+begin_example
+docker logs <container_id>
+#+end_example
+
+Connecting to the VM via VNC (with openbox window manager):
+
+#+begin_example
+your-vnc-viewer <ip>:1
+#+end_example

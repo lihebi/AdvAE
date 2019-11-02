@@ -69,6 +69,7 @@ end
 """Attack the model, get adversarial inputs, and evaluate accuracy
 
 TODO different attack methods
+FIXME use all test data to test
 """
 function evaluate_attack(model, attack_fn, trainX, trainY, testX, testY)
     accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
@@ -101,11 +102,26 @@ function evaluate_attack(model, attack_fn, trainX, trainY, testX, testY)
     @show accuracy(x_adv, y)
 
     sample_and_view(x_adv, model(x_adv))
+
+    # all test data
+    accs = []
+    @showprogress 0.1 "testing all data .." for d in zip(testX, testY)
+        x, y = d
+        loss(x, y) = crossentropy(model(x), y)
+        x_adv = attack_fn(model, loss, x, y)
+        acc = accuracy(x_adv, y)
+        push!(accs, acc)
+    end
+    @show mean(accs)
+    nothing
 end
+
 
 """TODO use model and ps in attack? This follows the flux train tradition, but
 is this better? I think using model and loss is better, where loss should accept
 model, not x and y.
+
+TODO full adv evaluation at the end of each epoch
 
 """
 function advtrain!(model, loss, ps, data, opt; cb = () -> ())
@@ -151,6 +167,8 @@ function advtrain(model, trainX, trainY, valX, valY)
         accuracy(x_adv, y)
     end
     cb_fn() = begin
+        # add a new line so that it plays nicely with progress bar
+        println("")
         @show(loss(valX[1], valY[1]))
         @show(accuracy(valX[1], valY[1]))
         @show(adv_accuracy(valX[1], valY[1]))

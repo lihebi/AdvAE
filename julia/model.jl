@@ -8,13 +8,20 @@ include("data.jl")
 Sample up to 10 images and show the image and label. If less than 10, use all.
 
 """
-function sample_and_view(X, Y)
+function sample_and_view(X, Y=nothing)
+    if length(size(X)) < 4
+        X = X[:,:,:,:]
+    end
+    size(X)[1] in [28,32,56] ||
+        error("Image size $(size(X)[1]) not correct size. Currently support 28 or 32.")
     num = min(size(X)[4], 10)
     @info "Showing $num images .."
     imgs = cpu(hcat([X[:,:,:,i] for i in 1:num]...))
-    labels = onecold(Y[:,1:num], 0:9)
     viewrepl(imgs)
-    @show labels
+    if Y != nothing
+        labels = onecold(Y[:,1:num], 0:9)
+        @show labels
+    end
     nothing
 end
 

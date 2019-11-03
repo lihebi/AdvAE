@@ -17,3 +17,8 @@ back/images-*
 data/
 results
 
+
+*.pt
+*.gz
+*-ubyte
+*.pth

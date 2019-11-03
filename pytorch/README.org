@@ -1,0 +1,7 @@
+#+TITLE: PyTorch implementation
+
+* Install
+
+#+begin_example
+pip3 install torch torchvision
+#+end_example

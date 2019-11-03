@@ -1,0 +1,44 @@
+#+TITLE: Implementation notes
+
+Pytorch version. What's disappointing about tensorflow:
+- tf internal code quality is bad
+- tf1.0 2.0 issue
+- keras is bad: the functional API is good, but there are problems here and
+  there. The most recent problem I encounter is when replacing keras with
+  tf.keras, I have to have import keras in train.py to avoid a lock, otherwise
+  program just hangs. WTF. Please be functional.
+
+
+And julia is not yet a good option, the runtime overhead is big, but that's not
+the killing reason. The correctness does not seem to be there
+either. Adversarial training struggles to converge.
+
+What's potentially bad about pytorch?
+- the biggest one I see is object oriented style
+
+* TODO-list
+
+** DONE Basic models
+   CLOSED: [2019-11-03 Sun 11:52]
+*** DONE data loading
+    CLOSED: [2019-11-03 Sun 11:52]
+*** DONE FC models
+    CLOSED: [2019-11-03 Sun 11:52]
+*** DONE CNN models
+    CLOSED: [2019-11-03 Sun 11:52]
+*** DONE training
+    CLOSED: [2019-11-03 Sun 11:52]
+*** DONE evaluation
+    CLOSED: [2019-11-03 Sun 11:52]
+
+** adversarial examples
+*** attacks
+*** adversarial training
+
+** advae
+
+** GAN
+*** GAN
+*** defense GAN
+*** InfoGAN
+*** causal GAN

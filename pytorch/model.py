@@ -95,7 +95,20 @@ def train(model, opt, loss_fn, dl, cb=None):
 
             running_loss += loss.item()
             if cb:
-                cb(i, running_loss)
+                # FIXME would this affect correctness?
+                with torch.no_grad():
+                    cb(i, running_loss)
+
+def accuracy(model, dl):
+    correct = 0
+    total = 0
+    for data in dl:
+        images, labels = data
+        outputs = model(images)
+        _, predicted = torch.max(outputs.data, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+    return correct / total
 
 def evaluate(model, dl):
     """Run model and compute accuracy."""
@@ -135,14 +148,16 @@ def test():
     train_dl, valid_dl, test_dl = get_mnist()
 
     # TODO throttle
-    # TODO run validation data
     def cb(i, loss):
         # print statistics
         if i % 100 == 99:
-            print('\n[step %5d] loss: %.3f' % (i + 1, loss / i))
+            acc = accuracy(model, valid_dl)
+            print('\n[step {:5d}] loss: {:.3f}, valid_acc: {:.3f}'
+                  .format(i + 1, loss / i, acc))
 
     # FIXME tqdm show bar
     train(model, opt, loss_fn, train_dl, cb)
+    # train(model, opt, loss_fn, train_dl)
 
     # TODO save net.state_dict()
     # PATH = './cifar_net.pth'

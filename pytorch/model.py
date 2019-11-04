@@ -12,44 +12,13 @@ import time
 
 from data_utils import imrepl, get_mnist
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-# device = torch.device("cpu")
-# def gpu(data):
-#     return map(lambda x: x.to(device), data)
-
-
-class MNIST_FC(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.fc1 = nn.Linear(28*28, 32)
-        self.fc2 = nn.Linear(32, 10)
-    def forward(self, xb):
-        xb = xb.view(-1, 28*28)
-        xb = F.relu(self.fc1(xb))
-        xb = F.softmax(self.fc2(xb))
-        return xb.view(-1, 10)
-
-class MNIST_CNN(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1)
-        self.conv2 = nn.Conv2d(16, 16, kernel_size=3, stride=2, padding=1)
-        self.conv3 = nn.Conv2d(16, 10, kernel_size=3, stride=2, padding=1)
-
-    def forward(self, xb):
-        xb = xb.view(-1, 1, 28, 28)
-        xb = F.relu(self.conv1(xb))
-        xb = F.relu(self.conv2(xb))
-        xb = F.relu(self.conv3(xb))
-        xb = F.avg_pool2d(xb, 4)
-        return xb.view(-1, xb.size(1))
-
-
-def get_MNIST_CNN_model():
-    model = MNIST_CNN()
-    return model.to(device)
 
 def get_MNIST_FC_model():
-    model = MNIST_FC()
+    model = nn.Sequential(
+        Lambda(lambda x: x.view(x.size(0), -1)),
+        nn.Linear(28*28, 32),
+        nn.ReLU(),
+        nn.Linear(32, 10))
     return model.to(device)
 
 class Lambda(nn.Module):
@@ -60,27 +29,28 @@ class Lambda(nn.Module):
     def forward(self, x):
         return self.func(x)
 
-def get_MNIST_Seq_model():
-    # TODO this is a test of nn.Sequential API
+def get_MNIST_CNN_model():
     model = nn.Sequential(
-        # FIXME I might not need reshape
-        # Lambda(lambda x: x.view(-1, 1, 28, 28)),
-        nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1),
+        nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1),
         nn.ReLU(),
-        nn.Conv2d(16, 16, kernel_size=3, stride=2, padding=1),
+        nn.MaxPool2d(kernel_size=(2,2)),
+        nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
         nn.ReLU(),
-        nn.Conv2d(16, 10, kernel_size=3, stride=2, padding=1),
+        nn.MaxPool2d(kernel_size=(2,2)),
+        nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
         nn.ReLU(),
+        nn.MaxPool2d(kernel_size=(2,2)),
         # nn.AvgPool2d(4),
-        nn.AdaptiveAvgPool2d(1),
-        Lambda(lambda x: x.view(x.size(0), -1)))
+        # nn.AdaptiveAvgPool2d(1),
+        Lambda(lambda x: x.view(x.size(0), -1)),
+        nn.Linear(3*3*32, 10))
     return model.to(device)
 
-def train(model, opt, loss_fn, dl, cb=None):
+def train(model, opt, loss_fn, dl, cb=None, epoch=10):
     """
     cb(iter, loss)
     """
-    for epoch in range(2):  # loop over the dataset multiple times
+    for _ in range(epoch):  # loop over the dataset multiple times
         running_loss = 0.0
         tqdm._instances.clear()
         for i, data in enumerate(tqdm(dl), 0):
@@ -138,7 +108,6 @@ def evaluate(model, dl):
 def test():
     model = get_MNIST_FC_model()
     model = get_MNIST_CNN_model()
-    model = get_MNIST_Seq_model()
     
     opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
     # this (and NLLLoss in general) expects label as target, thus no need to
@@ -156,7 +125,8 @@ def test():
                   .format(i + 1, loss / i, acc))
 
     # FIXME tqdm show bar
-    train(model, opt, loss_fn, train_dl, cb)
+    train(model, opt, loss_fn, train_dl,
+          cb=cb, epoch=5)
     # train(model, opt, loss_fn, train_dl)
 
     # TODO save net.state_dict()
@@ -164,6 +134,7 @@ def test():
     # torch.save(net.state_dict(), PATH)
 
     evaluate(model, test_dl)
+    evaluate(model, train_dl)
 
 if __name__ == '__main__':
     test()

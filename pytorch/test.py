@@ -94,3 +94,36 @@ class Net(nn.Module):
         for s in size:
             num_features *= s
         return num_features
+
+class MNIST_FC(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(28*28, 32)
+        self.fc2 = nn.Linear(32, 10)
+    def forward(self, xb):
+        xb = xb.view(-1, 28*28)
+        xb = F.relu(self.fc1(xb))
+        xb = F.softmax(self.fc2(xb))
+        return xb.view(-1, 10)
+
+class MNIST_CNN(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(16, 16, kernel_size=3, stride=2, padding=1)
+        self.conv3 = nn.Conv2d(16, 10, kernel_size=3, stride=2, padding=1)
+
+    def forward(self, xb):
+        xb = xb.view(-1, 1, 28, 28)
+        xb = F.relu(self.conv1(xb))
+        xb = F.relu(self.conv2(xb))
+        xb = F.relu(self.conv3(xb))
+        xb = F.avg_pool2d(xb, 4)
+        return xb.view(-1, xb.size(1))
+
+def get_MNIST_CNN_model():
+    model = MNIST_CNN()
+    return model.to(device)
+# device = torch.device("cpu")
+# def gpu(data):
+#     return map(lambda x: x.to(device), data)

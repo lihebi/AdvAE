@@ -4,14 +4,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 
+from torchvision.utils import make_grid
+
 # tqdm has too many bugs
-# from tqdm import tqdm
-# from tqdm.notebook import tqdm
-from tqdm.autonotebook import tqdm
+from tqdm import tqdm
+# from tqdm.autonotebook import tqdm
 import time
 
 from data_utils import imrepl, get_mnist
+
+__all__ = ['get_MNIST_FC_model', 'get_MNIST_CNN_model', 'train_MNIST_model', 'evaluate']
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+def clear_tqdm():
+    if '_instances' in dir(tqdm):
+        tqdm._instances.clear()
 
 def get_MNIST_FC_model():
     model = nn.Sequential(
@@ -52,16 +60,17 @@ def train(model, opt, loss_fn, dl, cb=None, epoch=10):
     """
     for _ in range(epoch):  # loop over the dataset multiple times
         running_loss = 0.0
-        tqdm._instances.clear()
+        clear_tqdm()
         for i, data in enumerate(tqdm(dl), 0):
             inputs, labels = data
 
             outputs = model(inputs)
             loss = loss_fn(outputs, labels)
 
+            # FIXME should I zero grad before or after? Or both for safety?
+            opt.zero_grad()
             loss.backward()
             opt.step()
-            opt.zero_grad()
 
             running_loss += loss.item()
             if cb:
@@ -80,12 +89,32 @@ def accuracy(model, dl):
         correct += (predicted == labels).sum().item()
     return correct / total
 
+def train_MNIST_model(model, train_dl, valid_dl):
+    opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+    # this (and NLLLoss in general) expects label as target, thus no need to
+    # one-hot encoding
+    loss_fn = nn.CrossEntropyLoss()
+
+    # TODO throttle
+    def cb(i, loss):
+        # print statistics
+        if i % 100 == 99:
+            acc = accuracy(model, valid_dl)
+            print('\n[step {:5d}] loss: {:.3f}, valid_acc: {:.3f}'
+                  .format(i + 1, loss / i, acc))
+
+    # FIXME tqdm show bar
+    train(model, opt, loss_fn, train_dl,
+          cb=cb, epoch=5)
+    # train(model, opt, loss_fn, train_dl)
+    return None
+
 def evaluate(model, dl):
     """Run model and compute accuracy."""
     correct = 0
     total = 0
     with torch.no_grad():
-        tqdm._instances.clear()
+        clear_tqdm()
         for data in tqdm(dl):
             images, labels = data
             outputs = model(images)
@@ -104,30 +133,16 @@ def evaluate(model, dl):
     # TODO labels is tensor object, not one-hot encoded. It can be direclty
     # printed out, or convert to list like this
     print('labels:', list(map(int, labels[:10])))
+    preds = torch.argmax(model(images[:10]), 1)
+    print('preds: ', list(map(int, preds)))
 
 def test():
     model = get_MNIST_FC_model()
     model = get_MNIST_CNN_model()
     
-    opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
-    # this (and NLLLoss in general) expects label as target, thus no need to
-    # one-hot encoding
-    loss_fn = nn.CrossEntropyLoss()
-
     train_dl, valid_dl, test_dl = get_mnist()
 
-    # TODO throttle
-    def cb(i, loss):
-        # print statistics
-        if i % 100 == 99:
-            acc = accuracy(model, valid_dl)
-            print('\n[step {:5d}] loss: {:.3f}, valid_acc: {:.3f}'
-                  .format(i + 1, loss / i, acc))
-
-    # FIXME tqdm show bar
-    train(model, opt, loss_fn, train_dl,
-          cb=cb, epoch=5)
-    # train(model, opt, loss_fn, train_dl)
+    train_MNIST_model(model, train_dl, valid_dl)
 
     # TODO save net.state_dict()
     # PATH = './cifar_net.pth'

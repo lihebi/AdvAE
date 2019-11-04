@@ -33,6 +33,8 @@ What's potentially bad about pytorch?
 
 ** adversarial examples
 *** attacks
+advertorch https://github.com/BorealisAI/advertorch
+
 *** adversarial training
 
 ** advae

@@ -11,17 +11,13 @@ from tqdm.autonotebook import tqdm
 import time
 
 from data_utils import imrepl, get_mnist
-
-__all__ = ['Net', 'train']
-
-# import os
-# dirname = os.path.dirname(__file__)
-# filename = os.path.join(dirname, 'relative/path/to/file/you/want')
-
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # device = torch.device("cpu")
+# def gpu(data):
+#     return map(lambda x: x.to(device), data)
 
-class Mnist_FC(nn.Module):
+
+class MNIST_FC(nn.Module):
     def __init__(self):
         super().__init__()
         self.fc1 = nn.Linear(28*28, 32)
@@ -32,7 +28,7 @@ class Mnist_FC(nn.Module):
         xb = F.softmax(self.fc2(xb))
         return xb.view(-1, 10)
 
-class Mnist_CNN(nn.Module):
+class MNIST_CNN(nn.Module):
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1)
@@ -48,34 +44,67 @@ class Mnist_CNN(nn.Module):
         return xb.view(-1, xb.size(1))
 
 
-def train(model, opt, loss, trainloader):
+def get_MNIST_CNN_model():
+    model = MNIST_CNN()
+    return model.to(device)
+
+def get_MNIST_FC_model():
+    model = MNIST_FC()
+    return model.to(device)
+
+class Lambda(nn.Module):
+    def __init__(self, func):
+        super().__init__()
+        self.func = func
+
+    def forward(self, x):
+        return self.func(x)
+
+def get_MNIST_Seq_model():
+    # TODO this is a test of nn.Sequential API
+    model = nn.Sequential(
+        # FIXME I might not need reshape
+        # Lambda(lambda x: x.view(-1, 1, 28, 28)),
+        nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(16, 16, kernel_size=3, stride=2, padding=1),
+        nn.ReLU(),
+        nn.Conv2d(16, 10, kernel_size=3, stride=2, padding=1),
+        nn.ReLU(),
+        # nn.AvgPool2d(4),
+        nn.AdaptiveAvgPool2d(1),
+        Lambda(lambda x: x.view(x.size(0), -1)))
+    return model.to(device)
+
+def train(model, opt, loss_fn, dl, cb=None):
+    """
+    cb(iter, loss)
+    """
     for epoch in range(2):  # loop over the dataset multiple times
         running_loss = 0.0
-        for i, data in enumerate(tqdm(trainloader), 0):
-            inputs, labels = data[0].to(device), data[1].to(device)
+        tqdm._instances.clear()
+        for i, data in enumerate(tqdm(dl), 0):
+            inputs, labels = data
 
-            opt.zero_grad()
             outputs = model(inputs)
-            l = loss(outputs, labels)
-            l.backward()
+            loss = loss_fn(outputs, labels)
+
+            loss.backward()
             opt.step()
+            opt.zero_grad()
 
-            # print statistics
-            running_loss += l.item()
-            if i % 2000 == 1999:    # print every 2000 mini-batches
-                print('\n[%d, %5d] loss: %.3f' %
-                      (epoch + 1, i + 1, running_loss / 2000))
-                running_loss = 0.0
+            running_loss += loss.item()
+            if cb:
+                cb(i, running_loss)
 
-def evaluate(model, testloader):
+def evaluate(model, dl):
     """Run model and compute accuracy."""
     correct = 0
     total = 0
     with torch.no_grad():
-        for data in tqdm(testloader):
+        tqdm._instances.clear()
+        for data in tqdm(dl):
             images, labels = data
-            images = images.to(device)
-            labels = labels.to(device)
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
@@ -85,30 +114,41 @@ def evaluate(model, testloader):
         100 * correct / total))
 
     # TODO visualize
-    # dataiter = iter(testloader)
-    # images, labels = dataiter.next()
+    dataiter = iter(dl)
+    images, labels = next(dataiter)
     # print images
-    # imrepl(torchvision.utils.make_grid(images))
-    # print('GroundTruth: ', ' '.join('%5s' % classes[labels[j]] for j in range(4)))
+    imrepl(torchvision.utils.make_grid(images[:10], nrow=12))
+    # TODO labels is tensor object, not one-hot encoded. It can be direclty
+    # printed out, or convert to list like this
+    print('labels:', list(map(int, labels[:10])))
 
 def test():
-    model = Mnist_CNN()
-    model = Mnist_FC()
-
-    model.to(device)
+    model = get_MNIST_FC_model()
+    model = get_MNIST_CNN_model()
+    model = get_MNIST_Seq_model()
     
     opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
-    loss = nn.CrossEntropyLoss()
+    # this (and NLLLoss in general) expects label as target, thus no need to
+    # one-hot encoding
+    loss_fn = nn.CrossEntropyLoss()
 
-    trainloader, testloader = get_mnist()
+    train_dl, valid_dl, test_dl = get_mnist()
 
-    train(model, opt, loss, trainloader)
+    # TODO throttle
+    # TODO run validation data
+    def cb(i, loss):
+        # print statistics
+        if i % 100 == 99:
+            print('\n[step %5d] loss: %.3f' % (i + 1, loss / i))
+
+    # FIXME tqdm show bar
+    train(model, opt, loss_fn, train_dl, cb)
 
     # TODO save net.state_dict()
     # PATH = './cifar_net.pth'
     # torch.save(net.state_dict(), PATH)
 
-    evaluate(model, testloader)
+    evaluate(model, test_dl)
 
 if __name__ == '__main__':
     test()

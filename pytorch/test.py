@@ -2,6 +2,10 @@ import torch
 import torchvision
 import torch.nn.functional as F
 
+# import os
+# dirname = os.path.dirname(__file__)
+# filename = os.path.join(dirname, 'relative/path/to/file/you/want')
+
 
 def test_manual_data():
     from pathlib import Path

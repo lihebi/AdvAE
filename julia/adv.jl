@@ -3,7 +3,6 @@
 # I'm specifically not using PGD, but myPGD instead.
 using Adversarial: FGSM
 using Images
-using Plots
 
 include("model.jl")
 
@@ -58,9 +57,18 @@ function attack_PGD(model, loss, x, y)
     x_adv = myPGD(model, loss, x, y;
                   ϵ = 0.3,
                   step_size = 0.01,
-                  # try 7, 20, 40, and maybe different in training and testing
-                  iters = 20)
+                  iters = 40)
 end
+
+function attack_PGD_k(k)
+    (model, loss, x, y) -> begin
+        x_adv = myPGD(model, loss, x, y;
+                      ϵ = 0.3,
+                      step_size = 0.01,
+                      iters = k)
+    end
+end
+
 
 function attack_FGSM(model, loss, x, y)
     x_adv = FGSM(model, loss, x, y; ϵ = 0.3)
@@ -124,20 +132,35 @@ model, not x and y.
 TODO full adv evaluation at the end of each epoch
 
 """
-function advtrain!(model, loss, ps, data, opt; cb = () -> ())
+function advtrain!(model, attack_fn, loss, ps, data, opt; cb = () -> ())
     ps = Flux.Tracker.Params(ps)
     cb = runall(cb)
     @showprogress 0.1 "Training..." for d in data
         try
             # x_adv = FGSM(model, loss, x, y; ϵ = 0.3)
-            x_adv = attack_PGD(model, loss, d...)
-            # FIXME do I want to reset the gradients?
+            # x_adv = attack_PGD(model, loss, d...)
+            x_adv = attack_fn(model, loss, d...)
+
+            # FIXME do I want to reset the gradients?  attack_PGD should already
+            # reset the gradients for model parameters. I probably want to
+            # verify that.
+            for t in ps
+                sum(t.grad) == 0 || error("Grad not reset!!!")
+            end
+            # check whether x_adv is indeed inside epsilon ball
+            ep = maximum(x_adv - d[1])
+            # NOTE I cannot use 0.3, otherwise 0.3<=0.3 gives false
+            ep <= 0.3001 || error("epsilon $(ep) larger than 0.3")
+
+
+            # train xent loss using adv data
             gs = Flux.Tracker.gradient(ps) do
                 loss(x_adv, d[2])
             end
             Flux.Tracker.update!(opt, ps, gs)
 
             # TODO Another round with clean image.
+            # FIXME does it matter for the order of clean and adv training
             # gs = Flux.Tracker.gradient(ps) do
             #     loss(d...)
             # end
@@ -154,7 +177,7 @@ function advtrain!(model, loss, ps, data, opt; cb = () -> ())
     end
 end
 
-function advtrain(model, trainX, trainY, valX, valY)
+function advtrain(model, attack_fn, trainX, trainY, valX, valY)
     model(trainX[1]);
 
     loss(x, y) = crossentropy(model(x), y)
@@ -163,23 +186,35 @@ function advtrain(model, trainX, trainY, valX, valY)
     # I should probably monitor the adv accuracy
     accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
     adv_accuracy(x, y) = begin
-        x_adv = attack_PGD(model, loss, x, y)
+        x_adv = attack_fn(model, loss, x, y)
         accuracy(x_adv, y)
+    end
+    adv_loss(x, y) = begin
+        x_adv = attack_fn(model, loss, x, y)
+        loss(x_adv, y)
     end
     cb_fn() = begin
         # add a new line so that it plays nicely with progress bar
-        println("")
-        @show(loss(valX[1], valY[1]))
-        @show(accuracy(valX[1], valY[1]))
-        @show(adv_accuracy(valX[1], valY[1]))
+        @time begin
+            println("")
+            @show loss(valX[1], valY[1])
+            @show adv_loss(valX[1], valY[1])
+            @show accuracy(valX[1], valY[1])
+            @show adv_accuracy(valX[1], valY[1])
+            @show accuracy(trainX[1], trainY[1])
+            @show adv_accuracy(trainX[1], trainY[1])
+        end
     end
-    evalcb = throttle(cb_fn , 5);
+    evalcb = throttle(cb_fn , 10);
 
     # train
+    # FIXME would this be 0.001 * 0.001?
+    # FIXME decay on pleau
+    # FIXME print out information when decayed
+    # opt = Flux.Optimiser(Flux.ExpDecay(0.001, 0.5, 1000, 1e-4), ADAM(0.001))
     opt = ADAM(0.001);
-    @epochs 5 advtrain!(model, loss, Flux.params(model), zip(trainX, trainY), opt, cb=evalcb)
+    @epochs 3 advtrain!(model, attack_fn, loss, Flux.params(model), zip(trainX, trainY), opt, cb=evalcb)
 end
-
 
 
 """This is the same CNN used in mnist_challenge
@@ -200,18 +235,21 @@ end
 
 
 function test_attack()
-    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST();
-    cnn = get_MNIST_CNN_model()
-    train_MNIST_model(cnn, trainX, trainY, valX, valY)
-    # 0.17
-    evaluate_attack(cnn, attack_FGSM, trainX, trainY, testX, testY)
-    # 0.03
-    evaluate_attack(cnn, attack_PGD, trainX, trainY, testX, testY)
+    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST(batch_size=128);
 
-    # a new cnn
+    # cnn = adv_MNIST_CNN()
     cnn = get_MNIST_CNN_model()
+
+    train_MNIST_model(cnn, trainX, trainY, valX, valY)
+
     # FIXME it does not seem to have the same level of security
-    advtrain(cnn, trainX, trainY, valX, valY)
+    advtrain(cnn, attack_PGD_k(7), trainX, trainY, valX, valY)
+    advtrain(cnn, attack_PGD_k(20), trainX, trainY, valX, valY)
+    advtrain(cnn, attack_PGD_k(40), trainX, trainY, valX, valY)
+
     evaluate_attack(cnn, attack_FGSM, trainX, trainY, testX, testY)
     evaluate_attack(cnn, attack_PGD, trainX, trainY, testX, testY)
+    evaluate_attack(cnn, attack_PGD_k(7), trainX, trainY, testX, testY)
+    evaluate_attack(cnn, attack_PGD_k(20), trainX, trainY, testX, testY)
+    evaluate_attack(cnn, attack_PGD_k(40), trainX, trainY, testX, testY)
 end

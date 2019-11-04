@@ -2,7 +2,7 @@ using Statistics
 using Distributions
 import Distributions: logpdf
 
-include("model.jl")
+include("adv.jl")
 
 
 function dense_AE()
@@ -108,7 +108,7 @@ function CNN2_AE()
 end
 
 function test_AE()
-    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST();
+    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST(batch_size=128);
     cnn = get_MNIST_CNN_model()
     # FIXME this is in adv.jl
     train_MNIST_model(cnn, trainX, trainY, valX, valY)
@@ -121,4 +121,74 @@ function test_AE()
 
     # test accuracy
     evaluate_AE(ae, cnn, trainX, trainY, testX, testY)
+end
+
+
+function AdvAE_train(ae, cnn, attack_fn, trainX, trainY, valX, valY)
+    model = Chain(ae, cnn)
+    model(trainX[1]);
+
+    loss(x, y) = crossentropy(model(x), y)
+    # how about try add regularizer
+    # loss(x, y) = crossentropy(cnn(ae(x)), y) + mymse(ae(x), x)
+
+    accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
+    adv_accuracy(x, y) = begin
+        x_adv = attack_fn(model, loss, x, y)
+        accuracy(x_adv, y)
+    end
+    adv_loss(x, y) = begin
+        x_adv = attack_fn(model, loss, x, y)
+        loss(x_adv, y)
+    end
+    cb_fn() = begin
+        # add a new line so that it plays nicely with progress bar
+        @time begin
+            println("")
+            @show loss(valX[1], valY[1])
+            @show adv_loss(valX[1], valY[1])
+            @show accuracy(valX[1], valY[1])
+            @show adv_accuracy(valX[1], valY[1])
+            @show accuracy(trainX[1], trainY[1])
+            @show adv_accuracy(trainX[1], trainY[1])
+        end
+    end
+    evalcb = throttle(cb_fn, 10)
+
+    # train
+    # opt = Flux.Optimiser(Flux.ExpDecay(0.001, 0.5, 1000, 1e-4), ADAM(0.001))
+    opt = ADAM(0.001);
+    @epochs 3 advtrain!(model, attack_fn, loss, Flux.params(ae), zip(trainX, trainY), opt, cb=evalcb)
+
+    # DEBUG testing gc time
+    # @time advtrain!(model, attack_fn, loss, Flux.params(ae), zip(trainX, trainY), opt, cb=evalcb)
+
+    # DEBUG testing the trainning of AE using clean image CNN
+    # @epochs 3 mytrain!(loss, Flux.params(ae), zip(trainX, trainY), opt, cb=evalcb)
+end
+
+function AdvAE()
+    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST(batch_size=64);
+    # cnn
+    cnn = get_MNIST_CNN_model()
+    # FIXME this is in adv.jl
+    train_MNIST_model(cnn, trainX, trainY, valX, valY)
+
+    # ae
+    ae = CNN_AE()
+    train_AE(ae, trainX, trainY, valX, valY)
+
+    # test accuracy
+    evaluate_AE(ae, cnn, trainX, trainY, testX, testY)
+
+    # adv train of ae
+    AdvAE_train(ae, cnn, attack_PGD_k(7), trainX, trainY, valX, valY)
+    AdvAE_train(ae, cnn, attack_PGD_k(20), trainX, trainY, valX, valY)
+    AdvAE_train(ae, cnn, attack_PGD_k(40), trainX, trainY, valX, valY)
+
+    # evaluate attack
+    evaluate_attack(Chain(ae, cnn), attack_FGSM, trainX, trainY, testX, testY)
+    evaluate_attack(Chain(ae, cnn), attack_PGD_k(20), trainX, trainY, testX, testY)
+    evaluate_attack(Chain(ae, cnn), attack_PGD_k(40), trainX, trainY, testX, testY)
+    evaluate_attack(cnn, attack_PGD_k(40), trainX, trainY, testX, testY)
 end

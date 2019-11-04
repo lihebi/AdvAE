@@ -37,7 +37,7 @@ https://github.com/jaypmorgan/Adversarial.jl
 **** TODO convergency problem
 There seems to be some problems: when directly using 20-PGD or 40-PGD, it does
 not converge. Two ways:
-- use 7-PGD, then 20-PGD, then 40-PGD
+- use 7-PGD, then 20-PGD, then 40-PGD. This seems to be the best strategy
 - use 40-PGD directly, but train with both adv_x and x
 - first train clean CNN for 1 epoch, then adv train
 - weights initialization and regularization?
@@ -46,6 +46,12 @@ not converge. Two ways:
 - speed seems to be a lot slower
 - accuracy does not seem to be equal at each epoch
 - convergency (or not) rate
+- the final performance, 40-iter PGD, 0.8033, while should be 0.95
+
+I'm going to use docker container to run the python code. For that I'd build a
+machine with VNC support, via either:
+- build ontop of tf official images
+- see how tf official images are built, and build on top of ubuntu from scratch
 
 *** STARTED AdvAE
 **** auto encoder

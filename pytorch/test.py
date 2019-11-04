@@ -127,3 +127,58 @@ def get_MNIST_CNN_model():
 # device = torch.device("cpu")
 # def gpu(data):
 #     return map(lambda x: x.to(device), data)
+
+
+# from advertorch.context import ctx_noparamgrad_and_eval
+# from advertorch.attacks import LinfPGDAttack
+# from advertorch.test_utils import LeNet5
+
+def evaluate_attack(model, dl):
+    advcorrect = 0
+    total = 0
+    adversary = LinfPGDAttack(
+        model, loss_fn=nn.CrossEntropyLoss(reduction="sum"), eps=0.3,
+        nb_iter=40, eps_iter=0.01, rand_init=True, clip_min=0.0,
+        clip_max=1.0, targeted=False)
+    clear_tqdm()
+    for data in tqdm(dl):
+        x, y = data
+        adv = adversary.perturb(x, y)
+        with torch.no_grad():
+            output = model(adv)
+        # test_advloss += F.cross_entropy(
+        #     output, y, reduction='sum').item()
+        pred = output.max(1, keepdim=True)[1]
+        advcorrect += pred.eq(y.view_as(pred)).sum().item()
+        total += len(x)
+    advacc = advcorrect / total
+    print('advacc: ', advacc)
+
+
+
+def get_MNIST_FC_model():
+    """DO NOT USE THIS."""
+    model = nn.Sequential(
+        Lambda(lambda x: x.view(x.size(0), -1)),
+        nn.Linear(28*28, 32),
+        nn.ReLU(),
+        nn.Linear(32, 10))
+    return model.to(device)
+
+def get_MNIST_CNN_model():
+    """DO NOT USE THIS."""
+    model = nn.Sequential(
+        nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.MaxPool2d(kernel_size=(2,2)),
+        nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.MaxPool2d(kernel_size=(2,2)),
+        # nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+        # nn.ReLU(),
+        # nn.MaxPool2d(kernel_size=(2,2)),
+        Lambda(lambda x: x.view(x.size(0), -1)),
+        nn.Linear(7*7*64, 200),
+        nn.Linear(200, 10))
+    return model.to(device)
+

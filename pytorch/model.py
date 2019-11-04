@@ -6,28 +6,15 @@ import torchvision
 
 from torchvision.utils import make_grid
 
-# tqdm has too many bugs
 from tqdm import tqdm
-# from tqdm.autonotebook import tqdm
 import time
 
+from utils import clear_tqdm
 from data_utils import imrepl, get_mnist
 
-__all__ = ['get_MNIST_FC_model', 'get_MNIST_CNN_model', 'train_MNIST_model', 'evaluate']
+__all__ = ['get_Madry_model', 'get_LeNet5', 'train_MNIST_model', 'evaluate']
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-def clear_tqdm():
-    if '_instances' in dir(tqdm):
-        tqdm._instances.clear()
-
-def get_MNIST_FC_model():
-    model = nn.Sequential(
-        Lambda(lambda x: x.view(x.size(0), -1)),
-        nn.Linear(28*28, 32),
-        nn.ReLU(),
-        nn.Linear(32, 10))
-    return model.to(device)
 
 class Lambda(nn.Module):
     def __init__(self, func):
@@ -37,22 +24,36 @@ class Lambda(nn.Module):
     def forward(self, x):
         return self.func(x)
 
-def get_MNIST_CNN_model():
+def get_Madry_model():
+    """The MNIST CNN used in my tf code. This is also the Madry model used in MNIST
+challenge."""
     model = nn.Sequential(
-        nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1),
+        nn.Conv2d(1, 32, kernel_size=5, stride=1, padding=2),
         nn.ReLU(),
         nn.MaxPool2d(kernel_size=(2,2)),
-        nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
+        nn.Conv2d(32, 64, kernel_size=5, stride=1, padding=2),
         nn.ReLU(),
         nn.MaxPool2d(kernel_size=(2,2)),
-        nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
-        nn.ReLU(),
-        nn.MaxPool2d(kernel_size=(2,2)),
-        # nn.AvgPool2d(4),
-        # nn.AdaptiveAvgPool2d(1),
         Lambda(lambda x: x.view(x.size(0), -1)),
-        nn.Linear(3*3*32, 10))
+        nn.Linear(7*7*64, 1024),
+        nn.Linear(1024, 10))
     return model.to(device)
+
+
+def get_LeNet5():
+    model = nn.Sequential(
+        nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.MaxPool2d(kernel_size=(2,2)),
+        nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.MaxPool2d(kernel_size=(2,2)),
+        Lambda(lambda x: x.view(x.size(0), -1)),
+        nn.Linear(7*7*64, 200),
+        nn.ReLU(),
+        nn.Linear(200, 10))
+    return model.to(device)
+
 
 def train(model, opt, loss_fn, dl, cb=None, epoch=10):
     """
@@ -137,8 +138,8 @@ def evaluate(model, dl):
     print('preds: ', list(map(int, preds)))
 
 def test():
-    model = get_MNIST_FC_model()
-    model = get_MNIST_CNN_model()
+    model = get_Madry_model()
+    model = get_LeNet5()
     
     train_dl, valid_dl, test_dl = get_mnist()
 

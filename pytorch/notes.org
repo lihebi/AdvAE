@@ -32,12 +32,18 @@ What's potentially bad about pytorch?
     CLOSED: [2019-11-03 Sun 11:52]
 
 ** adversarial examples
-*** attacks
+*** DONE attacks
+    CLOSED: [2019-11-04 Mon 17:40]
 advertorch https://github.com/BorealisAI/advertorch
 
-*** adversarial training
+*** DONE adversarial training
+    CLOSED: [2019-11-04 Mon 17:40]
 
 ** advae
+
+*** DONE auto encoders
+    CLOSED: [2019-11-04 Mon 18:13]
+*** STARTED AdvAE
 
 ** GAN
 *** GAN

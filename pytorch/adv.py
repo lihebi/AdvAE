@@ -10,7 +10,7 @@ from torchvision.utils import make_grid
 
 from tqdm import tqdm
 
-from model import get_Madry_model, get_LeNet5, evaluate
+from model import get_Madry_model, get_LeNet5, evaluate, train_MNIST_model
 from data_utils import imrepl, get_mnist
 from utils import clear_tqdm
 

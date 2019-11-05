@@ -12,7 +12,7 @@ import time
 from utils import clear_tqdm
 from data_utils import imrepl, get_mnist
 
-__all__ = ['get_Madry_model', 'get_LeNet5', 'train_MNIST_model', 'evaluate']
+__all__ = ['get_Madry_model', 'get_LeNet5', 'train_MNIST_model', 'evaluate', 'Lambda']
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

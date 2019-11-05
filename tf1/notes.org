@@ -1,0 +1,3 @@
+#+TITLE: Implementation notes
+
+Attempt to clean up previous code. This is the TF1 version.

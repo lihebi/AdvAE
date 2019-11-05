@@ -93,43 +93,64 @@ def do_advtrain(model, train_dl):
     loss_fn = nn.CrossEntropyLoss()
     advtrain(model, opt, loss_fn, train_dl, epoch=1)
 
-def evaluate_attack(model, dl):
+def evaluate_attack(model, attack_fn, dl, full=False):
     advcorrect = 0
     total = 0
-    # first show some examples
 
     # FIXME nll_loss?
     # loss = F.nll_loss(output, target)
     loss_fn = nn.CrossEntropyLoss()
-    xs, ys = next(iter(train_dl))
-    print('evaluting clean model ..')
-    evaluate(model, [(xs, ys)])
-    print('evaluating FGSM ..')
-    x_adv = FGSM(model, loss_fn, xs, ys)
+    xs, ys = next(iter(dl))
+    x_adv = attack_fn(model, loss_fn, xs, ys)
+    evaluate(model, [(x_adv, ys)])
     # imrepl(make_grid(x_adv[:10], nrow=10))
-    evaluate(model, [(x_adv, ys)])
-    print('evaluating PGD ..')
-    x_adv = PGD(model, loss_fn, xs, ys)
-    evaluate(model, [(x_adv, ys)])
 
-    print('evaluting all test data on PGD ..')
-    clear_tqdm()
-    for data in tqdm(dl):
-        x, y = data
-        adv = PGD(model, nn.CrossEntropyLoss(), x, y)
-        with torch.no_grad():
-            output = model(adv)
-        pred = output.max(1, keepdim=True)[1]
-        advcorrect += pred.eq(y.view_as(pred)).sum().item()
-        total += len(x)
-    advacc = advcorrect / total
-    print('advacc: ', advacc)
+    if full:
+        print('evaluting all test data on PGD ..')
+        clear_tqdm()
+        for data in tqdm(dl):
+            x, y = data
+            adv = PGD(model, nn.CrossEntropyLoss(), x, y)
+            with torch.no_grad():
+                output = model(adv)
+            pred = output.max(1, keepdim=True)[1]
+            advcorrect += pred.eq(y.view_as(pred)).sum().item()
+            total += len(x)
+        advacc = advcorrect / total
+        print('advacc: ', advacc)
+
+def do_evaluate_attack(model, dl):
+    print('evaluting clean model ..')
+    evaluate_attack(model,
+                    lambda m,l,x,y: x,
+                    dl)
+    print('evaluating FGSM ..')
+    evaluate_attack(model,
+                    lambda m,l,x,y: FGSM(m,l,x,y),
+                    dl)
+    print('evaluating PGD ..')
+    evaluate_attack(model,
+                    lambda m,l,x,y: PGD(m,l,x,y),
+                    dl)
+    print('evaluating advertorch\'s PGD ..')
+    evaluate_attack(model,
+                    lambda m,l,x,y: attack_LinfPGD(m,l,x,y),
+                    dl)
+
+from advertorch.attacks import LinfPGDAttack
+def attack_LinfPGD(model, loss_fn, x, y):
+    adversary = LinfPGDAttack(
+        # NOTE: loss_fn is not used
+        model, loss_fn=nn.CrossEntropyLoss(reduction="sum"), eps=0.3,
+        nb_iter=40, eps_iter=0.01, rand_init=True, clip_min=0.0,
+        clip_max=1.0, targeted=False)
+    return adversary.perturb(x, y)
 
 def test():
     torch.manual_seed(0)
 
     model = get_Madry_model()
-    # model = get_LeNet5()
+    model = get_LeNet5()
 
     train_dl, valid_dl, test_dl = get_mnist(batch_size=50)
 
@@ -138,4 +159,4 @@ def test():
     do_advtrain(model, train_dl)
 
     evaluate(model, test_dl)
-    evaluate_attack(model, test_dl)
+    do_evaluate_attack(model, test_dl)

@@ -8,6 +8,8 @@ import numpy as np
 
 from data_utils import load_mnist, sample_and_view
 
+__all__ = ['get_Madry_model', 'get_LeNet5', 'dense_AE', 'train_CNN', 'train_AE']
+
 def get_Madry_model():
     model = Sequential([Conv2D(32, 5, padding='same'),
                         ReLU(),
@@ -38,7 +40,7 @@ def get_LeNet5():
                         Softmax()])
     return model
 
-def train(model, data):
+def train_CNN(model, data):
     x, y = data
     model.compile(
         loss=tf.keras.losses.CategoricalCrossentropy(),
@@ -55,6 +57,11 @@ def dense_AE():
                           Reshape((28,28,1)),
                           Activation('sigmoid')])
     return Sequential([encoder, decoder])
+
+def train_AE(model, x):
+    ae.compile(loss=tf.keras.losses.MSE,
+               optimizer=Adam(0.01))
+    ae.fit(train_x, train_x, epochs=3)
 
 def test_AE(model, x, y):
     # imrepl(torchvision.utils.make_grid(images))
@@ -73,18 +80,11 @@ def test():
     cnn = get_LeNet5()
     # cnn = get_Madry_model()
 
-    train(cnn, (train_x, train_y))
+    train_CNN(cnn, (train_x, train_y))
 
     # cnn.predict(val_x).shape
     cnn.evaluate(test_x, test_y)
 
     ae = dense_AE()
-    ae.compile(loss=tf.keras.losses.MSE,
-               optimizer=Adam(0.01))
-    ae.fit(train_x, train_x)
-
+    train_AE(ae, train_x)
     test_AE(ae, test_x, test_y)
-
-    ae.predict(test_x[:10])
-
-    imrepl(train_x[1])

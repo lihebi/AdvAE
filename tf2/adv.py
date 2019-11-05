@@ -18,8 +18,8 @@ def FGSM(model, x, y=None, params=dict()):
     # FGSM attack
     fgsm_params = {
         'eps': 0.3,
-        'clip_min': CLIP_MIN,
-        'clip_max': CLIP_MAX
+        'clip_min': 0.,
+        'clip_max': 1.
     }
     fgsm_params.update(params)
     # FIXME Cleverhans has a bug in Attack.get_or_guess_labels: it
@@ -45,8 +45,8 @@ def PGD(model, x, y=None, params=dict()):
                   'y': y,
                   'nb_iter': 40,
                   'eps_iter': 0.01,
-                  'clip_min': CLIP_MIN,
-                  'clip_max': CLIP_MAX}
+                  'clip_min': 0.,
+                  'clip_max': 1.}
     pgd_params.update(params)
     adv_x = pgd.generate(x, **pgd_params)
     # DEBUG do I need to stop gradients here?

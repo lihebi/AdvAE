@@ -60,7 +60,7 @@ def _advmodel(model):
     # FIXME maybe no need to stop gradients?
     adv = tf.stop_gradient(adv)
     y = model(adv)
-    return tf.keras.Model(inputs, y)
+    return tf.keras.Model(x, y)
 
 def advtrain(model, data):
     x, y = data

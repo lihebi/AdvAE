@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.layers import Input, Flatten, Dense, Activation
+from tensorflow.keras.layers import Input, Flatten, Dense, Activation, UpSampling2D
 from tensorflow.keras.layers import Conv2D, ReLU, MaxPool2D, Softmax, Reshape
 from tensorflow.keras import Sequential
 from tensorflow.keras.optimizers import Adam
@@ -58,10 +58,22 @@ def dense_AE():
                           Activation('sigmoid')])
     return Sequential([encoder, decoder])
 
+
+def CNN_AE():
+    encoder = Sequential([Conv2D(16, 3, padding='same'),
+                          ReLU(),
+                          MaxPool2D((2,2))])
+    decoder = Sequential([Conv2D(16, 3, padding='same'),
+                          ReLU(),
+                          UpSampling2D(),
+                          Conv2D(1, 3, padding='same'),
+                          Activation('sigmoid')])
+    return Sequential([encoder, decoder])
+
 def train_AE(model, x):
-    ae.compile(loss=tf.keras.losses.MSE,
-               optimizer=Adam(0.01))
-    ae.fit(train_x, train_x, epochs=3)
+    model.compile(loss=tf.keras.losses.MSE,
+                  optimizer=Adam(0.01))
+    model.fit(train_x, train_x, epochs=3)
 
 def test_AE(model, x, y):
     # imrepl(torchvision.utils.make_grid(images))
@@ -86,5 +98,6 @@ def test():
     cnn.evaluate(test_x, test_y)
 
     ae = dense_AE()
+    ae = CNN_AE()
     train_AE(ae, train_x)
     test_AE(ae, test_x, test_y)

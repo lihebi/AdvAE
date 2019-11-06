@@ -11,8 +11,8 @@ from tqdm import tqdm
 import time
 
 from data_utils import load_mnist, sample_and_view
-from model import get_Madry_model, get_LeNet5, dense_AE, train_AE, train_CNN
-from model import get_LeNet5_functional
+from model import get_Madry_model, get_LeNet5, dense_AE, CNN_AE, train_AE, train_CNN, test_AE
+
 
 def clear_tqdm():
     if '_instances' in dir(tqdm):
@@ -51,12 +51,13 @@ def PGD(model, x, y):
 def evaluate_model(model, ds):
     # Prepare the training dataset.
     batch_size = 64
+    tqdm_total = len(ds[0]) // batch_size
     ds = tf.data.Dataset.from_tensor_slices(ds)
     ds = ds.shuffle(buffer_size=1024).batch(batch_size)
 
     acc_metric = tf.keras.metrics.CategoricalAccuracy()
     clear_tqdm()
-    for step, (x, y) in enumerate(tqdm(ds)):
+    for step, (x, y) in enumerate(tqdm(ds, total=tqdm_total)):
         logits = model(x)
         acc_metric.update_state(y, logits)
         if step % 200 == 0:
@@ -148,7 +149,7 @@ def custom_train(model, ds):
         # print('Validation acc: %s' % (float(val_acc),))
 
 
-def custom_advtrain(model, ds, valid_ds):
+def custom_advtrain(model, params, ds, valid_ds):
     batch_size = 64
     tqdm_total = len(ds[0]) // batch_size
     ds = tf.data.Dataset.from_tensor_slices(ds)
@@ -185,8 +186,9 @@ def custom_advtrain(model, ds, valid_ds):
                 # adversarial training does not need that
                 loss = adv_loss + nat_loss
                 # loss = adv_loss
-            gradients = tape.gradient(loss, model.trainable_variables)
-            opt.apply_gradients(zip(gradients, model.trainable_variables))
+            # params = model.trainable_variables
+            gradients = tape.gradient(loss, params)
+            opt.apply_gradients(zip(gradients, params))
             # accumulate acc results
             train_acc_metric.update_state(y, nat_logits)
             train_advacc_metric.update_state(y, adv_logits)
@@ -235,10 +237,45 @@ def test():
     custom_train(cnn, (train_x, train_y))
     evaluate_model(cnn, (test_x, test_y))
 
-    custom_advtrain(cnn, (train_x, train_y), (val_x, val_y))
+    custom_advtrain(cnn, cnn.trainable_variables,
+                    (train_x, train_y), (val_x, val_y))
     do_evaluate_attack(cnn, (test_x, test_y))
     # on training data
     do_evaluate_attack(cnn, (train_x[:1000], train_y[:1000]))
+
+
+def test_advae():
+    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist()
+    sample_and_view(train_x)
+
+    cnn = get_LeNet5()
+    # cnn = get_Madry_model()
+
+    custom_train(cnn, (train_x, train_y))
+    evaluate_model(cnn, (test_x, test_y))
+
+    custom_advtrain(cnn, cnn.trainable_variables,
+                    (train_x, train_y), (val_x, val_y))
+    do_evaluate_attack(cnn, (test_x, test_y))
+    # on training data
+    do_evaluate_attack(cnn, (train_x[:1000], train_y[:1000]))
+
+    ae = dense_AE()
+    ae = CNN_AE()
+
+    train_AE(ae, train_x)
+    test_AE(ae, test_x, test_y)
+
+    # TODO
+    custom_advtrain(tf.keras.Sequential([ae, cnn]),
+                    ae.trainable_variables,
+                    (train_x, train_y), (val_x, val_y))
+
+    evaluate_model(cnn, (test_x, test_y))
+
+    evaluate_model(tf.keras.Sequential([ae, cnn]), (test_x, test_y))
+    do_evaluate_attack(tf.keras.Sequential([ae, cnn]), (test_x, test_y))
+
 
 if __name__ == '__main__':
     tfinit()

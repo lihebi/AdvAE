@@ -110,7 +110,7 @@ def evaluate_attack(model, attack_fn, dl, full=False):
         clear_tqdm()
         for data in tqdm(dl):
             x, y = data
-            adv = PGD(model, nn.CrossEntropyLoss(), x, y)
+            adv = attack_fn(model, nn.CrossEntropyLoss(), x, y)
             with torch.no_grad():
                 output = model(adv)
             pred = output.max(1, keepdim=True)[1]

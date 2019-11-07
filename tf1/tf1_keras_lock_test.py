@@ -5,8 +5,8 @@
 # Thus, I'm not going to continue develop on tf1.0 and old cleverhans API,
 # because keras is deprecating in favor of tf.keras, and thus I'm not using keras.
 
-import keras as KERAS
-from tensorflow import keras
+import keras
+import tensorflow as tf
 import cleverhans
 from cleverhans.model import Model
 from cleverhans.attacks import ProjectedGradientDescent, SaliencyMapMethod
@@ -48,10 +48,10 @@ def PGD(model, x, y=None, params=dict()):
 
 def test_keras_success():
     print('=== This should run through.')
-    x = KERAS.Input(shape=(28,28,1))
-    y = KERAS.layers.Flatten()(x)
-    y = KERAS.layers.Dense(10)(y)
-    m = KERAS.models.Model(x, y)
+    x = keras.Input(shape=(28,28,1))
+    y = keras.layers.Flatten()(x)
+    y = keras.layers.Dense(10)(y)
+    m = keras.models.Model(x, y)
     mm = Dummy(m)
     adv = PGD(mm, x)
     adv = tf.stop_gradient(adv)
@@ -59,10 +59,10 @@ def test_keras_success():
 
 def test_keras_block():
     print('=== This should block forever on a lock.')
-    x = keras.Input(shape=(28,28,1))
-    y = keras.layers.Flatten()(x)
-    y = keras.layers.Dense(10)(y)
-    m = keras.models.Model(x, y)
+    x = tf.keras.Input(shape=(28,28,1))
+    y = tf.keras.layers.Flatten()(x)
+    y = tf.keras.layers.Dense(10)(y)
+    m = tf.keras.models.Model(x, y)
     mm = Dummy(m)
     adv = PGD(mm, x)
     adv = tf.stop_gradient(adv)

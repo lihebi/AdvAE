@@ -1,0 +1,6 @@
+#+TITLE: Implementation notes
+
+This attempts to clean up previous tf1 implmenetation, and try to figure out
+what's the root cause of performance difference.
+
+

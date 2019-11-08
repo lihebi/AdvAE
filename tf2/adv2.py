@@ -9,6 +9,7 @@ from cleverhans.future.tf2.attacks import fast_gradient_method, projected_gradie
 
 from tqdm import tqdm
 import time
+import datetime
 
 from data_utils import load_mnist, sample_and_view
 from model import get_Madry_model, get_LeNet5, dense_AE, CNN_AE, train_AE, train_CNN, test_AE
@@ -107,7 +108,6 @@ def do_evaluate_attack(model, dl):
 
 
 def custom_train(model, ds):
-    # TODO use Dataset
     batch_size = 64
     tqdm_total = len(ds[0]) // batch_size
     ds = tf.data.Dataset.from_tensor_slices(ds)
@@ -148,125 +148,186 @@ def custom_train(model, ds):
         # val_acc_metric.reset_states()
         # print('Validation acc: %s' % (float(val_acc),))
 
+def test_time():
+    t = time.time()
+    time.sleep(1)
+    time.time() - t
 
-def custom_advtrain(model, params, ds, valid_ds):
-    batch_size = 64
+def train_step(model, params, opt, attack_fn, loss_fn, mixing_fn,
+               x, y,
+               train_loss, train_acc, train_time):
+    t = time.time()
+    adv = attack_fn(model, x, y)
+    with tf.GradientTape() as tape:
+        adv_logits = model(adv)
+        adv_loss = loss_fn(y, adv_logits)
+
+        nat_logits = model(x)
+        nat_loss = loss_fn(y, nat_logits)
+
+        # FIXME if mixing=0, will there be extra computation cost?
+        # TODO I want to monitor nat/adv loss and this lambda value
+        λ = mixing_fn(nat_loss, adv_loss)
+        loss = adv_loss + λ * nat_loss
+        # loss = adv_loss + nat_loss
+        # loss = adv_loss
+    # apply gradients
+    # params = model.trainable_variables
+    gradients = tape.gradient(loss, params)
+    opt.apply_gradients(zip(gradients, params))
+    # metrics
+    train_time.update_state(time.time() - t)
+    train_loss.update_state(loss)
+    train_acc.update_state(y, adv_logits)
+
+def test_step(model, attack_fn, loss_fn, x, y, loss_metric, acc_metric):
+    adv = attack_fn(model, x, y)
+    adv_logits = model(adv)
+    adv_loss = loss_fn(y, adv_logits)
+
+    loss_metric.update_state(adv_loss)
+    acc_metric.update_state(y, adv_logits)
+
+
+def custom_advtrain(model, params, ds, test_ds,
+                    lr=1e-3, mixing_fn=lambda nat, adv: 0, logname=''):
+    # TODO different batch size
+    batch_size = 50
     tqdm_total = len(ds[0]) // batch_size
     ds = tf.data.Dataset.from_tensor_slices(ds)
-    ds = ds.shuffle(buffer_size=1024).batch(batch_size)
+    ds = ds.shuffle(buffer_size=1024).batch(batch_size).repeat()
 
-    vx, vy = valid_ds
-    vx = vx[:50]
-    vy = vy[:50]
-
-    opt = Adam(0.003)
+    # TODO learning rate decay?
+    opt = Adam(lr)
 
     attack_fn = PGD
     loss_fn = tf.keras.losses.CategoricalCrossentropy()
-    train_acc_metric = tf.keras.metrics.CategoricalAccuracy()
-    train_advacc_metric = tf.keras.metrics.CategoricalAccuracy()
-    val_acc_metric = tf.keras.metrics.CategoricalAccuracy()
 
-    acc_fn = tf.keras.metrics.categorical_accuracy
+    train_loss = tf.keras.metrics.Mean('train_loss', dtype=tf.float32)
+    train_acc = tf.keras.metrics.CategoricalAccuracy('train_accuracy')
+    train_time = tf.keras.metrics.Sum('train time', dtype=tf.float32)
+    test_loss = tf.keras.metrics.Mean('test_loss', dtype=tf.float32)
+    test_acc = tf.keras.metrics.CategoricalAccuracy('test_accuracy')
+    test_time = tf.keras.metrics.Sum('test time', dtype=tf.float32)
 
-    # FIXME NOW IMPORTANT why my previous keras training loop achieve high
-    # validation advacc so quickly? Why previous advae converges so quickly?
-    for epoch in range(3):
-        clear_tqdm()
-        for i, (x, y) in enumerate(tqdm(ds, total=tqdm_total)):
-            adv = attack_fn(model, x, y)
-            with tf.GradientTape() as tape:
-                adv_logits = model(adv)
-                adv_loss = loss_fn(y, adv_logits)
+    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    # add meaningful experimental setting in name
+    train_log_dir = 'logs/gradient_tape/' + logname + current_time + '/train'
+    test_log_dir = 'logs/gradient_tape/' + logname + current_time + '/test'
+    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+    test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
-                nat_logits = model(x)
-                nat_loss = loss_fn(y, nat_logits)
+    for i, (x,y) in enumerate(ds):
+        if i > 3000:
+            print('Finished {} steps. Returning ..'.format(i))
+            return
+        # about 40 seconds/100 step = 0.4
+        train_step(model, params, opt,
+                   attack_fn, loss_fn, mixing_fn,
+                   x, y,
+                   train_loss, train_acc, train_time)
 
-                # FIXME NOW IMPORTANT why I have to add nat_loss? The original
-                # adversarial training does not need that
-                loss = adv_loss + nat_loss
-                # loss = adv_loss
-            # params = model.trainable_variables
-            gradients = tape.gradient(loss, params)
-            opt.apply_gradients(zip(gradients, params))
-            # accumulate acc results
-            train_acc_metric.update_state(y, nat_logits)
-            train_advacc_metric.update_state(y, adv_logits)
-            if i % 20 == 0:
-                print('')
-                print('step {}, loss: {:.5f}'.format(i, loss))
-                nat_acc = train_acc_metric.result()
-                adv_acc = train_advacc_metric.result()
-                print('nat acc: {:.5f}, adv acc: {:.5f}'.format(nat_acc, adv_acc))
-                # reset here because I don't want the train loss to be delayed so much
-                train_acc_metric.reset_states()
-                train_advacc_metric.reset_states()
-                # I also want to monitor the validation accuracy
-                v_logits = model(vx)
-                valid_nat_acc = acc_fn(v_logits, vy)
-                adv_vx = attack_fn(model, vx, vy)
-                v_logits = model(adv_vx)
-                valid_adv_acc = acc_fn(v_logits, vy)
-                print('valid nat acc: {:.5f}, valid adv acc: {:.5f}'
-                      .format(valid_nat_acc.numpy().mean(), valid_adv_acc.numpy().mean()))
+        if i % 20 == 0:
+            print('[step {}] loss: {}, acc: {}'.format(i, train_loss.result(), train_acc.result()))
+        # FIXME about 0.0035, so I'm just logging all data
+        with train_summary_writer.as_default():
+            tf.summary.scalar('loss', train_loss.result(), step=i)
+            tf.summary.scalar('accuracy', train_acc.result(), step=i)
+            tf.summary.scalar('time', train_time.result(), step=i)
+        train_loss.reset_states()
+        train_acc.reset_states()
 
-        # Display metrics at the end of each epoch.
-        nat_acc = train_acc_metric.result()
-        adv_acc = train_advacc_metric.result()
-        print('nat acc: {:.5f}, adv acc: {:.5f}'.format(nat_acc, adv_acc))
-        train_acc_metric.reset_states()
-        train_advacc_metric.reset_states()
 
-        # TODO Run a validation loop at the end of each epoch.
-        # for x_batch_val, y_batch_val in val_dataset:
-        #     val_logits = model(x_batch_val)
-        #     # Update val metrics
-        #     val_acc_metric(y_batch_val, val_logits)
-        # val_acc = val_acc_metric.result()
-        # val_acc_metric.reset_states()
-        # print('Validation acc: %s' % (float(val_acc),))
+        if i % 200 == 0:
+            t = time.time()
+            # about 20 seconds
+            print('performing test phase ..')
+            for x,y in tf.data.Dataset.from_tensor_slices(test_ds).batch(500):
+                test_step(model, attack_fn, loss_fn,
+                          x, y, test_loss, test_acc)
+            test_time.update_state(time.time() - t)
+
+            with test_summary_writer.as_default():
+                tf.summary.scalar('loss', test_loss.result(), step=i)
+                tf.summary.scalar('accuracy', test_acc.result(), step=i)
+                # used only to monitor the time wasted
+                tf.summary.scalar('time', test_time.result(), step=i)
+            print('[test in step {}] loss: {}, acc: {}'.format(i, test_loss.result(), test_acc.result()))
+            test_loss.reset_states()
+            test_acc.reset_states()
+    return
+
+
+def exp_all():
+    mixing_fns = {
+        'f0': lambda nat, adv: 0,
+        # simply mixing
+        'f1': lambda nat, adv: 1,
+        # FIXME (σ(nat) - 0.5) * 2
+        'σ(nat)': lambda nat, adv: tf.math.sigmoid(nat),
+        # TODO linear. This function is essentially nat^2
+        'nat': lambda nat, adv: nat,
+        # relative value
+        # FIXME will this be slow to compute gradient?
+        # TODO σ(nat) * natloss + σ(adv) * advloss?
+        # FIXME divide by zero
+        # FIXME this should not be stable
+        'σ(nat/adv)': lambda nat, adv: tf.math.sigmoid(nat / adv)
+        # TODO functions other than σ?
+        # TODO use training iterations? This should be a bad idea.
+    }
+
+    lrs = [1e-4, 2e-4, 3e-4, 5e-4, 1e-3]
+
+    for fname in mixing_fns:
+        for lr in lrs:
+            # logname = '{}-{:.0e}'.format(fname, lr)
+            logname = '{}-{}'.format(fname, lr)
+            print('Exp:', logname)
+            fn = mixing_fns[fname]
+            # TODO set a step limit
+            exp_train(fn, lr, logname)
+
+def exp_train(mixing_fn, lr, logname):
+    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist()
+    sample_and_view(train_x)
+    cnn = get_Madry_model()
+    cnn(train_x[:10])
+    custom_advtrain(cnn, cnn.trainable_variables,
+                    (train_x, train_y), (test_x, test_y),
+                    lr=lr, mixing_fn=mixing_fn, logname=logname)
+
 
 
 def test():
+    # FIXME remove validation data
     (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist()
     sample_and_view(train_x)
 
-    cnn = get_LeNet5()
+    # DEBUG try lenet5
+    # cnn = get_LeNet5()
     cnn = get_Madry_model()
 
     custom_train(cnn, (train_x, train_y))
     evaluate_model(cnn, (test_x, test_y))
 
+    cnn(train_x[:10])
     custom_advtrain(cnn, cnn.trainable_variables,
-                    (train_x, train_y), (val_x, val_y))
+                    (train_x, train_y), (test_x, test_y))
+
     do_evaluate_attack(cnn, (test_x, test_y))
     # on training data
     do_evaluate_attack(cnn, (train_x[:1000], train_y[:1000]))
 
 
-def test_advae():
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist()
-    sample_and_view(train_x)
+    ## AdvAE
 
-    cnn = get_LeNet5()
-    # cnn = get_Madry_model()
-
-    custom_train(cnn, (train_x, train_y))
-    evaluate_model(cnn, (test_x, test_y))
-
-    custom_advtrain(cnn, cnn.trainable_variables,
-                    (train_x, train_y), (val_x, val_y))
-    do_evaluate_attack(cnn, (test_x, test_y))
-    # on training data
-    do_evaluate_attack(cnn, (train_x[:1000], train_y[:1000]))
-
-    ae = dense_AE()
+    # ae = dense_AE()
     ae = CNN_AE()
 
     train_AE(ae, train_x)
     test_AE(ae, test_x, test_y)
 
-    # TODO
     custom_advtrain(tf.keras.Sequential([ae, cnn]),
                     ae.trainable_variables,
                     (train_x, train_y), (val_x, val_y))
@@ -279,4 +340,5 @@ def test_advae():
 
 if __name__ == '__main__':
     tfinit()
-    test()
+    # test()
+    exp_all()

@@ -19,3 +19,51 @@ def get_wrapperd_adv_model(model):
     y = model(adv)
     return tf.keras.Model(inputs, y)
 
+
+
+def custom_advtrain_old():
+    # ...
+
+    train_acc_metric = tf.keras.metrics.CategoricalAccuracy()
+    train_advacc_metric = tf.keras.metrics.CategoricalAccuracy()
+    val_acc_metric = tf.keras.metrics.CategoricalAccuracy()
+
+    acc_fn = tf.keras.metrics.categorical_accuracy
+
+    for epoch in range(3):
+        clear_tqdm()
+        for i, (x, y) in enumerate(tqdm(ds, total=tqdm_total)):
+            train_step(model, params, opt, x, y, train_loss, train_acc)
+
+            with train_summary_writer.as_default():
+                # FIXME i + epoch * tqdm_total
+                tf.summary.scalar('loss', train_loss.result(), step=i)
+                tf.summary.scalar('accuracy', train_acc.result(), step=i)
+
+            train_acc_metric.update_state(y, nat_logits)
+            train_advacc_metric.update_state(y, adv_logits)
+            if i % 20 == 0:
+                print('')
+                print('step {}, loss: {:.5f}'.format(i, loss))
+                nat_acc = train_acc_metric.result()
+                adv_acc = train_advacc_metric.result()
+                print('nat acc: {:.5f}, adv acc: {:.5f}'.format(nat_acc, adv_acc))
+                # reset here because I don't want the train loss to be delayed so much
+                train_acc_metric.reset_states()
+                train_advacc_metric.reset_states()
+                # I also want to monitor the validation accuracy
+                v_logits = model(vx)
+                valid_nat_acc = acc_fn(v_logits, vy)
+                adv_vx = attack_fn(model, vx, vy)
+                v_logits = model(adv_vx)
+                valid_adv_acc = acc_fn(v_logits, vy)
+                print('valid nat acc: {:.5f}, valid adv acc: {:.5f}'
+                      .format(valid_nat_acc.numpy().mean(), valid_adv_acc.numpy().mean()))
+
+        # Display metrics at the end of each epoch.
+        nat_acc = train_acc_metric.result()
+        adv_acc = train_advacc_metric.result()
+        print('nat acc: {:.5f}, adv acc: {:.5f}'.format(nat_acc, adv_acc))
+        train_acc_metric.reset_states()
+        train_advacc_metric.reset_states()
+

@@ -22,3 +22,5 @@ results
 *.gz
 *-ubyte
 *.pth
+
+events.out.tfevents*

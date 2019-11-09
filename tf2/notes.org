@@ -1,3 +1,30 @@
 #+TITLE: Implementation notes
 
 Attempt to clean up previous code. This is the TF1 version.
+
+
+* TODO-list
+
+** dynamic data mixing
+
+*** log different loss values
+
+*** DONE model check point for later continue training
+    CLOSED: [2019-11-09 Sat 19:03]
+And I should
+- [X] keep the step number, and
+- [X] log into the same data directory.
+
+Since the data is shuffled, I probably can just load the weights and start
+training.
+
+**** FIXME does the Adam optimizer have states?
+*** multiple seeds
+*** FIXME the ratio should be sum to 1
+*** different functions
+Hopefully get better performance than using just f1. But f1 is already very
+good. Probably will have some difference for convergence value.
+
+*** learning rate decay
+
+** dynamic attacking strength

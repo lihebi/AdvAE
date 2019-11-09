@@ -139,15 +139,6 @@ def custom_train(model, ds):
         # Reset training metrics at the end of each epoch
         train_acc_metric.reset_states()
 
-        # TODO Run a validation loop at the end of each epoch.
-        # for x_batch_val, y_batch_val in val_dataset:
-        #     val_logits = model(x_batch_val)
-        #     # Update val metrics
-        #     val_acc_metric(y_batch_val, val_logits)
-        # val_acc = val_acc_metric.result()
-        # val_acc_metric.reset_states()
-        # print('Validation acc: %s' % (float(val_acc),))
-
 def test_time():
     t = time.time()
     time.sleep(1)
@@ -155,7 +146,7 @@ def test_time():
 
 def train_step(model, params, opt, attack_fn, loss_fn, mixing_fn,
                x, y,
-               train_loss, train_acc, train_time):
+               metrics):
     t = time.time()
     adv = attack_fn(model, x, y)
     with tf.GradientTape() as tape:
@@ -176,86 +167,128 @@ def train_step(model, params, opt, attack_fn, loss_fn, mixing_fn,
     gradients = tape.gradient(loss, params)
     opt.apply_gradients(zip(gradients, params))
     # metrics
-    train_time.update_state(time.time() - t)
-    train_loss.update_state(loss)
-    train_acc.update_state(y, adv_logits)
+    metrics['train_time'].update_state(time.time() - t)
+    metrics['train_loss'].update_state(loss)
+    metrics['train_acc'].update_state(y, adv_logits)
 
-def test_step(model, attack_fn, loss_fn, x, y, loss_metric, acc_metric):
+def test_step(model, attack_fn, loss_fn, x, y, metrics):
+    t = time.time()
+
     adv = attack_fn(model, x, y)
     adv_logits = model(adv)
     adv_loss = loss_fn(y, adv_logits)
 
-    loss_metric.update_state(adv_loss)
-    acc_metric.update_state(y, adv_logits)
+    metrics['test_loss'].update_state(adv_loss)
+    metrics['test_acc'].update_state(y, adv_logits)
+    metrics['test_time'].update_state(time.time() - t)
 
+def train_metric_step(step, metrics):
+    print('[step {}] loss: {}, acc: {}'.format(step,
+                                               metrics['train_loss'].result(),
+                                               metrics['train_acc'].result()))
+    # about 0.0035
+    tf.summary.scalar('loss', metrics['train_loss'].result(), step=step)
+    tf.summary.scalar('accuracy', metrics['train_acc'].result(), step=step)
+    tf.summary.scalar('time', metrics['train_time'].result(), step=step)
+    metrics['train_loss'].reset_states()
+    metrics['train_acc'].reset_states()
 
-def custom_advtrain(model, params, ds, test_ds,
-                    lr=1e-3, mixing_fn=lambda nat, adv: 0, logname=''):
+def test_metric_step(step, metrics):
+    tf.summary.scalar('loss', metrics['test_loss'].result(), step=step)
+    tf.summary.scalar('accuracy', metrics['test_acc'].result(), step=step)
+    # used only to monitor the time wasted
+    tf.summary.scalar('time', metrics['test_time'].result(), step=step)
+    print('[test in step {}] loss: {}, acc: {}'.format(step,
+                                                       metrics['test_loss'].result(),
+                                                       metrics['test_acc'].result()))
+    metrics['test_loss'].reset_states()
+    metrics['test_acc'].reset_states()
+
+def create_ckpt(model, opt, config):
+    # FIXME keyword arguments names are random?
+    ckpt = tf.train.Checkpoint(step=tf.Variable(1), optimizer=opt, model=model)
+    # use logname as path
+    manager = tf.train.CheckpointManager(ckpt, './tf_ckpts/' + config['logname'], max_to_keep=3)
+    # FIXME sanity check for optimizer state restore
+    ckpt.restore(manager.latest_checkpoint)
+    if manager.latest_checkpoint:
+        print("Restored from {}".format(manager.latest_checkpoint))
+    else:
+        print("Initializing from scratch.")
+    return ckpt, manager
+
+def create_metrics():
+    metrics = {
+        'train_loss': tf.keras.metrics.Mean('train_loss', dtype=tf.float32),
+        'train_acc': tf.keras.metrics.CategoricalAccuracy('train_accuracy'),
+        'train_time': tf.keras.metrics.Sum('train time', dtype=tf.float32),
+        'test_loss': tf.keras.metrics.Mean('test_loss', dtype=tf.float32),
+        'test_acc': tf.keras.metrics.CategoricalAccuracy('test_accuracy'),
+        'test_time': tf.keras.metrics.Sum('test time', dtype=tf.float32)}
+    return metrics
+
+def create_summary_writers(config):
+    # current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    # This will append instead of overwrite
+    train_log_dir = 'logs/gradient_tape/' + config['logname'] + '/train'
+    test_log_dir = 'logs/gradient_tape/' + config['logname'] + '/test'
+    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+    test_summary_writer = tf.summary.create_file_writer(test_log_dir)
+    return train_summary_writer, test_summary_writer
+
+def custom_advtrain(model, params, train_ds, test_ds, config):
     # TODO different batch size
-    batch_size = 50
-    tqdm_total = len(ds[0]) // batch_size
-    ds = tf.data.Dataset.from_tensor_slices(ds)
-    ds = ds.shuffle(buffer_size=1024).batch(batch_size).repeat()
+    batch_size = config['batch_size']
+    ds = tf.data.Dataset.from_tensor_slices(train_ds)\
+                        .shuffle(buffer_size=1024)\
+                        .batch(batch_size)\
+                        .repeat()
 
     # TODO learning rate decay?
-    opt = Adam(lr)
+    opt = Adam(config['lr'])
+
+    ckpt, manager = create_ckpt(model, opt, config)
 
     attack_fn = PGD
     loss_fn = tf.keras.losses.CategoricalCrossentropy()
+    metrics = create_metrics()
 
-    train_loss = tf.keras.metrics.Mean('train_loss', dtype=tf.float32)
-    train_acc = tf.keras.metrics.CategoricalAccuracy('train_accuracy')
-    train_time = tf.keras.metrics.Sum('train time', dtype=tf.float32)
-    test_loss = tf.keras.metrics.Mean('test_loss', dtype=tf.float32)
-    test_acc = tf.keras.metrics.CategoricalAccuracy('test_accuracy')
-    test_time = tf.keras.metrics.Sum('test time', dtype=tf.float32)
+    train_summary_writer, test_summary_writer = create_summary_writers(config)
 
-    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    # add meaningful experimental setting in name
-    train_log_dir = 'logs/gradient_tape/' + logname + current_time + '/train'
-    test_log_dir = 'logs/gradient_tape/' + logname + current_time + '/test'
-    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
-    test_summary_writer = tf.summary.create_file_writer(test_log_dir)
-
-    for i, (x,y) in enumerate(ds):
-        if i > 3000:
-            print('Finished {} steps. Returning ..'.format(i))
+    for x,y in ds:
+        if int(ckpt.step) > config['max_steps']:
+            print('Finished {} steps larger than max step {}. Returning ..'
+                  .format(ckpt.step, config['max_steps']))
             return
         # about 40 seconds/100 step = 0.4
         train_step(model, params, opt,
-                   attack_fn, loss_fn, mixing_fn,
+                   attack_fn, loss_fn, config['mixing_fn'],
                    x, y,
-                   train_loss, train_acc, train_time)
+                   metrics)
+        ckpt.step.assign_add(1)
 
-        if i % 20 == 0:
-            print('[step {}] loss: {}, acc: {}'.format(i, train_loss.result(), train_acc.result()))
-        # FIXME about 0.0035, so I'm just logging all data
-        with train_summary_writer.as_default():
-            tf.summary.scalar('loss', train_loss.result(), step=i)
-            tf.summary.scalar('accuracy', train_acc.result(), step=i)
-            tf.summary.scalar('time', train_time.result(), step=i)
-        train_loss.reset_states()
-        train_acc.reset_states()
+        # FIXME configure all the number of steps
+        if int(ckpt.step) % config['num_train_summary_step'] == 0:
+            with train_summary_writer.as_default():
+                train_metric_step(int(ckpt.step), metrics)
 
-
-        if i % 200 == 0:
-            t = time.time()
+        if int(ckpt.step) % config['num_test_summary_step'] == 0:
             # about 20 seconds
             print('performing test phase ..')
-            for x,y in tf.data.Dataset.from_tensor_slices(test_ds).batch(500):
+            # FIXME move batch size into configuration (and log name)
+            for x,y in tf.data.Dataset.from_tensor_slices(test_ds).batch(config['batch_size'] * 2):
                 test_step(model, attack_fn, loss_fn,
-                          x, y, test_loss, test_acc)
-            test_time.update_state(time.time() - t)
+                          x, y,
+                          metrics)
 
             with test_summary_writer.as_default():
-                tf.summary.scalar('loss', test_loss.result(), step=i)
-                tf.summary.scalar('accuracy', test_acc.result(), step=i)
-                # used only to monitor the time wasted
-                tf.summary.scalar('time', test_time.result(), step=i)
-            print('[test in step {}] loss: {}, acc: {}'.format(i, test_loss.result(), test_acc.result()))
-            test_loss.reset_states()
-            test_acc.reset_states()
-    return
+                test_metric_step(int(ckpt.step), metrics)
+        # save check point at the end, to make sure the above branches are
+        # always performed completely. If interrupted, it will get re-performed.
+        if int(ckpt.step) % config['num_ckpt_step'] == 0:
+            # FIXME the dataset status is not saved
+            save_path = manager.save()
+            print("Saved checkpoint for step {}: {}".format(int(ckpt.step), save_path))
 
 
 def exp_all():
@@ -279,29 +312,52 @@ def exp_all():
 
     lrs = [1e-4, 2e-4, 3e-4, 5e-4, 1e-3]
 
+    # default config
+    config = {
+        'lr': 1e-3,
+        'mixing_fn': lambda nat, adv: 0,
+        'logname': 'default',
+
+        # TODO run training incrementally
+        'max_steps': 2000,
+
+        # CAUTION: batch size will affect the scale of number of steps
+        'batch_size': 50,
+
+        # FIXME: setting this to 1000 because dataset state is not restored.
+        # 'num_ckpt_step': 1000,
+        'num_ckpt_step': 100,
+
+        'num_train_summary_step': 20,
+        # NOTE: running full loop of test data evaluation
+        'num_test_summary_step': 200,
+    }
+
     for fname in mixing_fns:
         for lr in lrs:
-            # logname = '{}-{:.0e}'.format(fname, lr)
-            logname = '{}-{}'.format(fname, lr)
-            print('Exp:', logname)
-            fn = mixing_fns[fname]
-            # TODO set a step limit
-            exp_train(fn, lr, logname)
+            config['logname'] = '{}-{}'.format(fname, lr)
+            print('=== Exp:', config['logname'])
+            config['mixing_fn'] = mixing_fns[fname]
+            config['lr'] = lr
+            exp_train(config)
 
-def exp_train(mixing_fn, lr, logname):
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist()
+def exp_train(config):
+    (train_x, train_y), (test_x, test_y) = load_mnist()
     sample_and_view(train_x)
+    # a bread new cnn
     cnn = get_Madry_model()
+    # dummy call to instantiate weights
     cnn(train_x[:10])
+    # do the training
     custom_advtrain(cnn, cnn.trainable_variables,
                     (train_x, train_y), (test_x, test_y),
-                    lr=lr, mixing_fn=mixing_fn, logname=logname)
+                    config)
 
 
 
 def test():
     # FIXME remove validation data
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist()
+    (train_x, train_y), (test_x, test_y) = load_mnist()
     sample_and_view(train_x)
 
     # DEBUG try lenet5
@@ -330,7 +386,7 @@ def test():
 
     custom_advtrain(tf.keras.Sequential([ae, cnn]),
                     ae.trainable_variables,
-                    (train_x, train_y), (val_x, val_y))
+                    (train_x, train_y), (test_x, test_y))
 
     evaluate_model(cnn, (test_x, test_y))
 

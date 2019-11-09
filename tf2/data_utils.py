@@ -7,15 +7,7 @@ from tensorflow.keras.utils import to_categorical
 
 __all__ = ['load_mnist', 'sample_and_view']
 
-def validation_split(train_x, train_y, valid_ratio):
-    nval = int(train_x.shape[0] * valid_ratio)
-    val_x = train_x[-nval:]
-    val_y = train_y[-nval:]
-    train_x = train_x[:-nval]
-    train_y = train_y[:-nval]
-    return (train_x, train_y), (val_x, val_y)
-
-def load_mnist(valid_ratio=0.1):
+def load_mnist():
     (train_x, train_y), (test_x, test_y) = datasets.mnist.load_data()
     # convert data
     train_x = train_x.astype('float32') / 255
@@ -28,8 +20,7 @@ def load_mnist(valid_ratio=0.1):
     train_y = to_categorical(train_y, 10)
     test_y = to_categorical(test_y, 10)
 
-    (train_x, train_y), (val_x, val_y) = validation_split(train_x, train_y, valid_ratio)
-    return (train_x, train_y), (val_x, val_y), (test_x, test_y)
+    return (train_x, train_y), (test_x, test_y)
 
 
 def sample_and_view(x, num=10):
@@ -46,6 +37,6 @@ def sample_and_view(x, num=10):
 
 
 def test():
-    (train_x, train_y), (val_x, val_y), (test_x, test_y) = load_mnist_data()
+    (train_x, train_y), (test_x, test_y) = load_mnist_data()
     x, y = train_x, train_y
     sample_and_view(train_x)

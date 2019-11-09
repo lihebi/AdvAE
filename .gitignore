@@ -24,3 +24,5 @@ results
 *.pth
 
 events.out.tfevents*
+checkpoint
+ckpt-*

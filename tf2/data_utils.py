@@ -1,6 +1,7 @@
 import numpy as np
 from PIL import Image
 import tempfile
+import tensorflow as tf
 import matplotlib.pyplot as plt
 from tensorflow.keras import datasets
 from tensorflow.keras.utils import to_categorical
@@ -32,10 +33,10 @@ def load_mnist_ds(batch_size):
     test_ds = tf.data.Dataset.from_tensor_slices((test_x, test_y))\
                              .shuffle(buffer_size=1024)\
                              .batch(batch_size, drop_remainder=True)\
-                             .repeat()
+                             .repeat(1)
     steps_per_epoch = train_x.shape[0] // batch_size
     test_steps_per_epoch = test_x.shape[0] // batch_size
-    return ds, test_ds
+    return ds, test_ds, steps_per_epoch, test_steps_per_epoch
 
 
 def load_cifar10():
@@ -95,7 +96,7 @@ def load_cifar10_ds(batch_size):
         drop_remainder=True)
 
     # test ds
-    eval_ds = cifar_preprocessing.input_fn(
+    test_ds = cifar_preprocessing.input_fn(
         is_training=False,
         data_dir=data_dir,
         batch_size=batch_size,
@@ -104,8 +105,14 @@ def load_cifar10_ds(batch_size):
         num_epochs=1,
         parse_record_fn=cifar_preprocessing.parse_record)
     steps_per_epoch = cifar_preprocessing.NUM_IMAGES['train'] // batch_size
-    test_steps_per_epoch = cifar_preprocessing.NUM_IMAGES['test'] // batch_size
-    return ds, eval_ds, steps_per_epoch, test_steps_per_epoch
+    test_steps_per_epoch = cifar_preprocessing.NUM_IMAGES['validation'] // batch_size
+
+    next(iter(ds))[1].shape
+    # TensorShape([128, 10])
+    next(iter(ds))[0].shape
+    # TensorShape([128, 32, 32, 3])
+    # so this is a iterable dataset
+    return ds, test_ds, steps_per_epoch, test_steps_per_epoch
 
 def sample_and_view(x, num=10):
     stacked = np.concatenate(x[:num], 1)
@@ -128,3 +135,10 @@ def test():
     (train_x, train_y), (test_x, test_y) = load_mnist()
     (train_x, train_y), (test_x, test_y) = load_cifar10()
     sample_and_view(train_x)
+
+    ds, test_ds, steps_per_epoch, test_steps_per_epoch = load_mnist_ds(50)
+    for i, d in enumerate(test_ds):
+        print(i)
+    ds, test_ds, steps_per_epoch, test_steps_per_epoch = load_cifar10_ds(50)
+    for i, d in enumerate(test_ds):
+        print(i)

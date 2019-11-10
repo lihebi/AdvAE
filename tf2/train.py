@@ -11,6 +11,8 @@ from tqdm import tqdm
 import time
 import datetime
 
+import functools
+
 import tensorflow.keras.backend as K
 
 from data_utils import load_mnist, sample_and_view, load_mnist_ds, load_cifar10_ds
@@ -79,6 +81,7 @@ def create_ckpt(model, opt, ID):
     return ckpt, manager
 
 def create_metrics():
+    # FIXME I need both clean and adversarial accuracy, for both train and test
     metrics = {
         'train_loss': tf.keras.metrics.Mean('train_loss', dtype=tf.float32),
         'train_acc': tf.keras.metrics.CategoricalAccuracy('train_accuracy'),
@@ -96,17 +99,21 @@ def create_summary_writers(ID):
     test_summary_writer = tf.summary.create_file_writer(test_log_dir)
     return train_summary_writer, test_summary_writer
 
-def FGSM(model, x, y):
+def FGSM(model, x, y, ε=0.3, clip_min=0., clip_max=1.):
     adv = fast_gradient_method(model, x,
-                               0.3, np.inf,
-                               clip_min=0., clip_max=1.,
+                               ε, np.inf,
+                               clip_min=clip_min,
+                               clip_max=clip_max,
                                y=np.argmax(y, 1))
     return adv
 
-def PGD(model, x, y):
+def PGD(model, x, y, ε=0.3, step_size=0.01, iters=40, clip_min=0., clip_max=1.):
     # FIXME rand_init rand_minmax
-    return projected_gradient_descent(model, x, 0.3, 0.01, 40, np.inf,
-                                      clip_min=0., clip_max=1.,
+    # FIXME parameters
+    return projected_gradient_descent(model, x, ε, step_size, iters,
+                                      np.inf,
+                                      clip_min=clip_min,
+                                      clip_max=clip_max,
                                       y=np.argmax(y, 1),
                                       # FIXME this is throwing errors
                                       sanity_checks=False)
@@ -133,8 +140,7 @@ def clean_test_step(model, loss_fn, x, y, metrics):
     metrics['test_acc'].update_state(y, logits)
     metrics['test_time'].update_state(time.time() - t)
 
-def get_adv_train_step():
-    attack_fn = PGD
+def get_adv_train_step(attack_fn):
     def step_fn(model, params, opt,
                 loss_fn, x, y, metrics):
         t = time.time()
@@ -153,12 +159,12 @@ def get_adv_train_step():
         gradients = tape.gradient(loss, params)
         opt.apply_gradients(zip(gradients, params))
         metrics['train_time'].update_state(time.time() - t)
+        # NOTE: This is adv loss/acc
         metrics['train_loss'].update_state(adv_loss)
         metrics['train_acc'].update_state(y, adv_logits)
     return step_fn
 
-def get_adv_test_step():
-    attack_fn = PGD
+def get_adv_test_step(attack_fn):
     def step_fn(model, loss_fn, x, y, metrics):
         t = time.time()
 
@@ -167,6 +173,7 @@ def get_adv_test_step():
             adv_logits = model(adv)
             adv_loss = loss_fn(y, adv_logits)
 
+        # NOTE: this is adv loss/acc
         metrics['test_loss'].update_state(adv_loss)
         metrics['test_acc'].update_state(y, adv_logits)
         metrics['test_time'].update_state(time.time() - t)
@@ -175,6 +182,8 @@ def get_adv_test_step():
 def free_train_stepS(model, params, opt, loss_fn, x, y, metrics):
     # CAUTION this updates opt model m=30 times, so technically it is m
     # steps. However, the running time cost is one step
+    #
+    # FIXME parameters
     m = 30
     step_size = 0.01
     ε = 0.3
@@ -270,8 +279,9 @@ def mnist_advtrain(model, ID, config):
     ds, eval_ds, train_steps, test_steps = load_mnist_ds(batch_size)
     # FIXME 1e-3 seems to work as well this time
     opt = Adam(1e-4)
+    attack_fn = functools.partial(PGD, ε=0.3, step_size=0.01, iters=40, clip_min=0., clip_max=1.)
     custom_train(model, model.trainable_variables, opt,
-                 get_adv_train_step(), get_adv_test_step(),
+                 get_adv_train_step(attack_fn), get_adv_test_step(attack_fn),
                  ds, eval_ds,
                  ID, config)
 
@@ -282,6 +292,7 @@ def cifar10_train(model, ID, config):
     # LR_SCHEDULE = [(0.1, 91), (0.01, 136), (0.001, 182)]
     # lr_schedule = [(0, 0.1), (40000, 0.01), (60000, 0.001)]
     # lr_schedule = [(0, 0.1), (10000, 0.01), (20000, 0.001)]
+    #
     boundaries = [10000, 20000]
     values = [0.1, 0.01, 0.001]
     learning_rate_fn = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
@@ -302,14 +313,17 @@ def cifar10_advtrain(model, ID, config):
     batch_size = config['batch_size']
     ds, eval_ds, train_steps, test_steps = load_cifar10_ds(batch_size)
 
+    # Madry:
+    # "step_size_schedule": [[0, 0.1], [40000, 0.01], [60000, 0.001]],
     boundaries = [10000, 20000]
     values = [0.1, 0.01, 0.001]
-    learning_rate_fn = keras.optimizers.schedules.PiecewiseConstantDecay(
+    learning_rate_fn = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
         boundaries, values)
     opt = tf.keras.optimizers.SGD(learning_rate=learning_rate_fn, momentum=0.9)
 
+    attack_fn = functools.partial(PGD, ε=8., step_size=2., iters=7, clip_min=0., clip_max=255.)
     custom_train(model, model.trainable_variables, opt,
-                 get_adv_train_step(), get_adv_test_step(),
+                 get_adv_train_step(attack_fn), get_adv_test_step(attack_fn),
                  ds, eval_ds,
                  ID, config)
 
@@ -392,13 +406,11 @@ def get_default_config():
         'num_test_summary_step': 200}
 
 def test_mnist():
-    # batch_size = 50
-    # ds, eval_ds, train_steps, test_steps = load_mnist_ds(batch_size)
-
     tfinit()
 
     model = get_Madry_model()
     model.build((None,28,28,1))
+
     config = get_default_config()
     config['batch_size'] = 50
 
@@ -406,6 +418,7 @@ def test_mnist():
     # - batch size
     # - learning rate. However, learning rate has schedule, so ...
     # - seed
+
     mnist_train(model, 'mnist_clean', config)
     mnist_advtrain(model, 'mnist_adv', config)
 
@@ -413,9 +426,6 @@ def test_mnist():
 
 
 def test_resnet():
-    # batch_size = 128
-    # ds, eval_ds, train_steps, test_steps = load_cifar10_ds(batch_size)
-
     tfinit()
 
     model = resnet_cifar_model.resnet20(training=None)
@@ -423,8 +433,11 @@ def test_resnet():
 
     config = get_default_config()
     config['batch_size'] = 128
+    config['num_test_summary_step'] = 500
 
-    cifar10_train(model, 'cifar10_clean', config)
-    cifar10_advtrain(model, 'cifar10_adv', config)
+    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    cifar10_train(model, 'cifar10_clean-{}'.format(current_time), config)
+    cifar10_advtrain(model, 'cifar10_adv-{}'.format(current_time), config)
 
     # evaluate_model(model, eval_ds)

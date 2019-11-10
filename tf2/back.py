@@ -67,3 +67,44 @@ def custom_advtrain_old():
         train_acc_metric.reset_states()
         train_advacc_metric.reset_states()
 
+def exp_all():
+    mixing_fns = {
+        # TODO linear. This function is essentially nat^2
+        'nat': lambda nat, adv: nat,
+
+        # simply mixing
+        'f1': lambda nat, adv: 1,
+
+        'f0': lambda nat, adv: 0,
+
+        # FIXME (σ(nat) - 0.5) * 2
+        # 'σ(nat)': lambda nat, adv: tf.math.sigmoid(nat),
+        # relative value
+        # FIXME will this be slow to compute gradient?
+        # TODO σ(nat) * natloss + σ(adv) * advloss?
+        # FIXME divide by zero
+        # FIXME this should not be stable
+        # 'σ(nat:adv)': lambda nat, adv: tf.math.sigmoid(nat / adv)
+        # TODO functions other than σ?
+        # TODO use training iterations? This should be a bad idea.
+    }
+
+    lrs = [1e-4, 2e-4, 3e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1]
+    # lrs = [1e-2, 1e-1, 5e-3]
+    # lrs = [5e-3, 3e-3]
+
+    # default config
+    config = get_default_config()
+
+    for fname in mixing_fns:
+        for lr in reversed(lrs):
+            # DEBUG using time in the logname
+            # current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            # config['logname'] = '{}-{}-{}'.format(fname, lr, current_time)
+
+            config['logname'] = '{}-{}'.format(fname, lr)
+
+            print('=== Exp:', config['logname'])
+            config['mixing_fn'] = mixing_fns[fname]
+            config['lr'] = lr
+            exp_train(config)

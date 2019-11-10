@@ -23,20 +23,37 @@ def load_mnist():
     return (train_x, train_y), (test_x, test_y)
 
 
+def load_cifar10():
+    # 32, 32, 3, uint8
+    (train_x, train_y), (test_x, test_y) = datasets.cifar10.load_data()
+    train_x = train_x.astype('float32') / 255
+    test_x = test_x.astype('float32') / 255
+
+    train_y = to_categorical(train_y, 10)
+    test_y = to_categorical(test_y, 10)
+
+    return (train_x, train_y), (test_x, test_y)
+
+
+
 def sample_and_view(x, num=10):
     stacked = np.concatenate(x[:num], 1)
-    arr = (np.reshape(stacked, (28,28*num)) * 255).astype(np.uint8)
-    img = Image.fromarray(arr, mode='L')
-
-    # rescale to 2 because it is a bit small
-    img = img.resize((img.width*3, img.height*3), Image.ANTIALIAS)
 
     tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-    img.save(tmp)
+
+    if train_x.shape[1] == 28:
+        arr = (np.reshape(stacked, (28,28*num)) * 255).astype(np.uint8)
+        img = Image.fromarray(arr, mode='L')
+        # rescale to 2 because it is a bit small
+        img = img.resize((img.width*3, img.height*3), Image.ANTIALIAS)
+        img.save(tmp)
+    elif train_x.shape[1] == 32:
+        # FIXME how to scale it?
+        plt.imsave(tmp, stacked, dpi=500)
     print('#<Image: ' + tmp.name + '>')
 
 
 def test():
-    (train_x, train_y), (test_x, test_y) = load_mnist_data()
-    x, y = train_x, train_y
+    (train_x, train_y), (test_x, test_y) = load_mnist()
+    (train_x, train_y), (test_x, test_y) = load_cifar10()
     sample_and_view(train_x)

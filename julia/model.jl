@@ -42,19 +42,11 @@ function mytrain!(loss, ps, data, opt; cb = () -> ())
     ps = Flux.Tracker.Params(ps)
     cb = runall(cb)
     @showprogress 0.1 "Training..." for d in data
-        try
-            gs = Flux.Tracker.gradient(ps) do
-                loss(d...)
-            end
-            Flux.Tracker.update!(opt, ps, gs)
-            cb()
-        catch ex
-            if ex isa Flux.StopException
-                break
-            else
-                rethrow(ex)
-            end
+        gs = Flux.Tracker.gradient(ps) do
+            loss(d...)
         end
+        Flux.Tracker.update!(opt, ps, gs)
+        cb()
     end
 end
 

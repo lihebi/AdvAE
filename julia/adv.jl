@@ -135,46 +135,48 @@ TODO full adv evaluation at the end of each epoch
 """
 function advtrain!(model, attack_fn, loss, ps, data, opt; cb = () -> ())
     ps = Flux.Tracker.Params(ps)
+    all_ps = Flux.params(model)
     cb = runall(cb)
     @showprogress 0.1 "Training..." for d in data
-        try
-            # x_adv = FGSM(model, loss, x, y; ϵ = 0.3)
-            # x_adv = attack_PGD(model, loss, d...)
-            x_adv = attack_fn(model, loss, d...)
+        # x_adv = FGSM(model, loss, x, y; ϵ = 0.3)
+        # x_adv = attack_PGD(model, loss, d...)
+        x_adv = attack_fn(model, loss, d...)
 
-            # FIXME do I want to reset the gradients?  attack_PGD should already
-            # reset the gradients for model parameters. I probably want to
-            # verify that.
-            for t in ps
-                sum(t.grad) == 0 || error("Grad not reset!!!")
-            end
-            # check whether x_adv is indeed inside epsilon ball
-            ep = maximum(x_adv - d[1])
-            # NOTE I cannot use 0.3, otherwise 0.3<=0.3 gives false
-            ep <= 0.3001 || error("epsilon $(ep) larger than 0.3")
-
-
-            # train xent loss using adv data
-            gs = Flux.Tracker.gradient(ps) do
-                loss(x_adv, d[2])
-            end
-            Flux.Tracker.update!(opt, ps, gs)
-
-            # TODO Another round with clean image.
-            # FIXME does it matter for the order of clean and adv training
-            # gs = Flux.Tracker.gradient(ps) do
-            #     loss(d...)
-            # end
-            # Flux.Tracker.update!(opt, ps, gs)
-
-            cb()
-        catch ex
-            if ex isa Flux.StopException
-                break
-            else
-                rethrow(ex)
-            end
+        # FIXME apart from ps's gradients, do I need to reset the other
+        # gradients of the model?
+        for t in all_ps
+            sum(abs.(t.grad)) > 0 && error("Grad not reset!!!")
         end
+
+        # FIXME do I want to reset the gradients?  attack_PGD should already
+        # reset the gradients for model parameters. I probably want to
+        # verify that.
+        for t in ps
+            sum(abs.(t.grad)) > 0 && error("Grad not reset!!!")
+        end
+        # check whether x_adv is indeed inside epsilon ball
+        ep = maximum(x_adv - d[1])
+        # NOTE I cannot use 0.3, otherwise 0.3<=0.3 gives false
+        ep <= 0.3001 || error("epsilon $(ep) larger than 0.3")
+
+        # train xent loss using adv data
+        gs = Flux.Tracker.gradient(ps) do
+            # addition works
+            # loss(x_adv, d[2]) + loss(d...)
+            loss(x_adv, d[2])
+
+            # FIXME concatenation works
+            # nx = cat(d[1], x_adv, dims=4)
+            # ny = gpu(cat(d[2], d[2], dims=2))
+            # loss(nx, ny)
+
+            # FIXME cannot run two loss sequentially. The last one seems to be in effect
+            # loss(d...)
+            # loss(x_adv, d[2])
+        end
+        Flux.Tracker.update!(opt, ps, gs)
+
+        cb()
     end
 end
 

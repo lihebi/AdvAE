@@ -98,6 +98,34 @@ function get_MNIST_CNN_model()
     return model
 end
 
+function get_LeNet5()
+    model = Chain(
+        Conv((3,3), 1=>32, relu, pad=(1,1)),
+        MaxPool((2,2)),
+        Conv((3,3), 32=>64, relu, pad=(1,1)),
+        MaxPool((2,2)),
+        x -> reshape(x, :, size(x, 4)),
+        Dense(7 * 7 * 64, 200, relu),
+        Dense(200, 10),
+        softmax,
+    ) |> gpu;
+    return model
+end
+
+function get_Madry_model()
+    model = Chain(
+        Conv((5,5), 1=>32, pad=(2,2), relu),
+        MaxPool((2,2)),
+        Conv((5,5), 32=>64, pad=(2,2), relu),
+        MaxPool((2,2)),
+        x -> reshape(x, :, size(x, 4)),
+        Dense(7*7*64, 1024),
+        Dense(1024, 10),
+        softmax,
+    ) |> gpu;
+    return model
+end
+
 
 function test_MNIST_model(model)
     (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST();

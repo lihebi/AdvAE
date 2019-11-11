@@ -157,7 +157,7 @@ function AdvAE_train(ae, cnn, attack_fn, trainX, trainY, valX, valY)
 
     # train
     # opt = Flux.Optimiser(Flux.ExpDecay(0.001, 0.5, 1000, 1e-4), ADAM(0.001))
-    opt = ADAM(0.001);
+    opt = ADAM(1e-3);
     @epochs 3 advtrain!(model, attack_fn, loss, Flux.params(ae), zip(trainX, trainY), opt, cb=evalcb)
 
     # DEBUG testing gc time
@@ -169,8 +169,10 @@ end
 
 function AdvAE()
     (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST(batch_size=64);
-    # cnn
-    cnn = get_MNIST_CNN_model()
+
+    # cnn = get_LeNet5()
+    cnn = get_Madry_model()
+
     # FIXME this is in adv.jl
     train_MNIST_model(cnn, trainX, trainY, valX, valY)
 

@@ -13,7 +13,7 @@ function train_MNIST_model(model, trainX, trainY, valX, valY)
     accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
 
     evalcb = throttle(() -> @show(loss(valX[1], valY[1])) , 5);
-    opt = ADAM(0.001);
+    opt = ADAM(1e-3);
     @epochs 10 mytrain!(loss, Flux.params(model), zip(trainX, trainY), opt, cb=evalcb)
 end
 
@@ -39,16 +39,17 @@ function myPGD(model, loss, x, y;
                ϵ = 10, step_size = 0.001,
                iters = 100, clamp_range = (0, 1))
     # start from the random point
-    x_adv = clamp.(x + (gpu(randn(Float32, size(x)...))
-                        * Float32(step_size)),
-                   clamp_range...);
-    iter = 1; while iter <= iters
-        x_adv = FGSM(model, loss, x_adv, y; ϵ = step_size, clamp_range = clamp_range)
+    r = clamp.(gpu(randn(Float32, size(x)...)), clamp_range...)
+    # DEBUG uniform sample
+    # r = gpu(rand(Float32, size(x)...)) .- 0.5 .* 2
+    x_adv = clamp.(x + (r * Float32(step_size)), clamp_range...)
+    for iter = 1:iters
+        x_adv = FGSM(model, loss, x_adv, y;
+                     ϵ = step_size, clamp_range = clamp_range)
         eta = x_adv - x
         eta = clamp.(eta, -ϵ, ϵ)
         x_adv = x + Float32.(eta)
         x_adv = clamp.(x_adv, clamp_range...)
-        iter += 1
     end
     return x_adv
 end
@@ -212,33 +213,17 @@ function advtrain(model, attack_fn, trainX, trainY, valX, valY)
     # FIXME decay on pleau
     # FIXME print out information when decayed
     # opt = Flux.Optimiser(Flux.ExpDecay(0.001, 0.5, 1000, 1e-4), ADAM(0.001))
-    opt = ADAM(0.001);
+    opt = ADAM(1e-4);
     @epochs 3 advtrain!(model, attack_fn, loss, Flux.params(model), zip(trainX, trainY), opt, cb=evalcb)
 end
 
 
-"""This is the same CNN used in mnist_challenge
-"""
-function adv_MNIST_CNN()
-    model = Chain(
-        Conv((5, 5), 1=>32, relu, pad=(2,2)),
-        MaxPool((2,2)),
-        Conv((5,5), 32=>64, relu, pad=(2,2)),
-        MaxPool((2,2)),
-        x -> reshape(x, :, size(x, 4)),
-        Dense(7 * 7 * 64, 1024, relu),
-        Dense(1024, 10),
-        softmax,
-    ) |> gpu;
-    return model
-end
-
-
 function test_attack()
-    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST(batch_size=128);
+    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST(batch_size=50);
 
-    # cnn = adv_MNIST_CNN()
-    cnn = get_MNIST_CNN_model()
+    cnn = get_Madry_model()
+    # FIXME LeNet5 is working, Madry is not working
+    # cnn = get_LeNet5()
 
     train_MNIST_model(cnn, trainX, trainY, valX, valY)
 

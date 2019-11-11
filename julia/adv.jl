@@ -135,29 +135,9 @@ TODO full adv evaluation at the end of each epoch
 """
 function advtrain!(model, attack_fn, loss, ps, data, opt; cb = () -> ())
     ps = Flux.Tracker.Params(ps)
-    all_ps = Flux.params(model)
     cb = runall(cb)
     @showprogress 0.1 "Training..." for d in data
-        # x_adv = FGSM(model, loss, x, y; ϵ = 0.3)
-        # x_adv = attack_PGD(model, loss, d...)
         x_adv = attack_fn(model, loss, d...)
-
-        # FIXME apart from ps's gradients, do I need to reset the other
-        # gradients of the model?
-        for t in all_ps
-            sum(abs.(t.grad)) > 0 && error("Grad not reset!!!")
-        end
-
-        # FIXME do I want to reset the gradients?  attack_PGD should already
-        # reset the gradients for model parameters. I probably want to
-        # verify that.
-        for t in ps
-            sum(abs.(t.grad)) > 0 && error("Grad not reset!!!")
-        end
-        # check whether x_adv is indeed inside epsilon ball
-        ep = maximum(x_adv - d[1])
-        # NOTE I cannot use 0.3, otherwise 0.3<=0.3 gives false
-        ep <= 0.3001 || error("epsilon $(ep) larger than 0.3")
 
         # train xent loss using adv data
         gs = Flux.Tracker.gradient(ps) do

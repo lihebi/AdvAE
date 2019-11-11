@@ -1,6 +1,96 @@
 #+TITLE: Implementation notes
 
-MNIST, lr=1e-4, MNISTCNN, ItAdv train, GTX 1070
+* Summary
+READ-ONLY, keep in sync with next sections, do NOT change this section.
+
+** MNIST itadv
+MNIST, lr=1e-4, MNISTCNN, ItAdv train, GTX 1070, 72s/epoch
+
+| epoch | adv acc | clean acc |
+|-------+---------+-----------|
+|     1 |  0.4988 |    0.9487 |
+|     2 |  0.6058 |    0.9629 |
+|     3 |  0.6188 |    0.9641 |
+|     4 |  0.7032 |    0.9721 |
+|     5 |  0.7401 |    0.9763 |
+|     6 |  0.7801 |    0.9733 |
+|    10 |  0.8585 |    0.9781 |
+|    15 |  0.9270 |    0.9821 |
+|    20 |  0.9455 |    0.9853 |
+
+** CIFAR10 clean training
+
+ResNet29, [0,1], lr=1e-3, CNN training. 25s/epoch
+
+|       epoch | val acc |
+|-------------+---------|
+|           1 |  0.5877 |
+|           2 |  0.6367 |
+|           3 |  0.6883 |
+|           4 |  0.7451 |
+|           5 |  0.7561 |
+|          19 |  0.8551 |
+|          32 |  0.8725 |
+|          36 |  0.8803 |
+|-------------+---------|
+|   41 (5e-4) |  0.8926 |
+| 47 (2.5e-4) |  0.8998 |
+
+** CIFAR10 itadv
+
+Resnet29, [0,1], lr=2e-3, itadv, trained until early stop, 88
+epochs. 160s/epoch. Note that 4e-4 is Madry's starting lr.
+
+
+|        epoch | adv acc | clean acc |
+|--------------+---------+-----------|
+|     1 (2e-3) |  0.2312 |    0.3425 |
+|            2 |  0.2698 |    0.3758 |
+|           10 |  0.3562 |    0.5401 |
+|           16 |  0.3846 |    0.5739 |
+|           23 |  0.3984 |    0.6170 |
+|--------------+---------+-----------|
+|    27 (1e-3) |  0.4139 |    0.6336 |
+|           33 |  0.4221 |    0.6430 |
+|--------------+---------+-----------|
+|    37 (5e-4) |  0.4353 |    0.6755 |
+|           43 |  0.4353 |    0.6863 |
+|--------------+---------+-----------|
+|  47 (2.5e-4) |  0.4471 |    0.7003 |
+|           60 |  0.4511 |    0.7047 |
+|--------------+---------+-----------|
+| 71 (6.25e-5) |  0.4573 |    0.7167 |
+|--------------+---------+-----------|
+|    76 (5e-5) |  0.4573 |    0.7133 |
+|    81 (best) |  0.4593 |    0.7200 |
+|           88 |  0.4565 |    0.7236 |
+
+
+* MNIST itadv train
+
+MNIST, lr=1e-4, MNISTCNN, ItAdv train, GTX 1070, 72s/epoch
+
+| epoch | adv acc | clean acc |
+|-------+---------+-----------|
+|     1 |  0.4988 |    0.9487 |
+|     2 |  0.6058 |    0.9629 |
+|     3 |  0.6188 |    0.9641 |
+|     4 |  0.7032 |    0.9721 |
+|     5 |  0.7401 |    0.9763 |
+|     6 |  0.7801 |    0.9733 |
+|    10 |  0.8585 |    0.9781 |
+|    15 |  0.9270 |    0.9821 |
+|    20 |  0.9455 |    0.9853 |
+
+1. 'advacc': 0.4988302139037433, 'acc': 0.9486965240641712
+2. 'advacc': 0.6057820855614974, 'acc': 0.9629010695187166
+3. 'advacc': 0.6188168449197861, 'acc': 0.9640708556149733
+4. 'advacc': 0.7032085561497327, 'acc': 0.9720922459893048
+5. 'advacc': 0.7401403743315508, 'acc': 0.9762700534759359
+6. 'advacc': 0.7800802139037433, 'acc': 0.9732620320855615
+10. 'advacc': 0.8584558823529411, 'acc': 0.9781082887700535
+15. 'advacc': 0.9269719251336899, 'acc': 0.9821189839572193
+20. 'advacc': 0.9455213903743316, 'acc': 0.9852941176470589
 
 #+begin_example
 Train on 54000 samples, validate on 6000 samples                                                                                                                                     [54/2860]
@@ -92,9 +182,24 @@ evaluating ..
 {'advacc': 0.9403409090909091, 'acc': 0.9883021390374331, 'cnnacc': 0.9883021390374331, 'obliacc': 0.9413435828877005}
 #+end_example
 
+* CIFAR10 clean training
 
+ResNet29, [0,1], lr=1e-3, CNN training. 25s/epoch
 
-ResNet29, [0,1], lr=1e-3, CNN training
+|       epoch | val acc |
+|-------------+---------|
+|           1 |  0.5877 |
+|           2 |  0.6367 |
+|           3 |  0.6883 |
+|           4 |  0.7451 |
+|           5 |  0.7561 |
+|          19 |  0.8551 |
+|          32 |  0.8725 |
+|          36 |  0.8803 |
+|-------------+---------|
+|   41 (5e-4) |  0.8926 |
+| 47 (2.5e-4) |  0.8998 |
+
 
 #+begin_example
 Training CNN ..
@@ -206,62 +311,36 @@ Epoch 50/100
 352/352 [==============================] - 25s 71ms/step - loss: 0.2991 - acc: 0.9644 - val_loss: 0.5061 - val_acc: 0.8959
 #+end_example
 
-Resnet29, [0,1], lr=1e-4, itadv. The lr is not a good one.
+* CIFAR10 itadv
 
-For lr=0.1 in [0,255], it is 0.1/255=4e-4
+Resnet29, [0,1], lr=2e-3, itadv, trained until early stop, 88
+epochs. 160s/epoch. Note that 4e-4 is Madry's starting lr.
 
-I probably try 2e-3, 4e-4
 
-#+begin_example
-Epoch 1/200
-2019-11-11 01:07:19.485215: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcublas.so.10.0
-2019-11-11 01:07:19.601530: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudnn.so.7
-352/352 [==============================] - 170s 482ms/step - loss: 3.0833 - val_loss: 2.8146
-evaluating ..
-{'advacc': 0.14743589743589744, 'acc': 0.2592147435897436, 'cnnacc': 0.2592147435897436, 'obliacc': 0.14703525641025642}
-Epoch 2/200
-352/352 [==============================] - 163s 464ms/step - loss: 2.7599 - val_loss: 2.7004
-evaluating ..
-{'advacc': 0.1872996794871795, 'acc': 0.28345352564102566, 'cnnacc': 0.28345352564102566, 'obliacc': 0.1875}
-Epoch 3/200
-352/352 [==============================] - 162s 462ms/step - loss: 2.6675 - val_loss: 2.6132
-evaluating ..
-{'advacc': 0.2033253205128205, 'acc': 0.31490384615384615, 'cnnacc': 0.31490384615384615, 'obliacc': 0.2029246794871795}
-Epoch 4/200
-352/352 [==============================] - 163s 464ms/step - loss: 2.5882 - val_loss: 2.5300
-evaluating ..
-{'advacc': 0.22576121794871795, 'acc': 0.3233173076923077, 'cnnacc': 0.3233173076923077, 'obliacc': 0.22536057692307693}
-Epoch 5/200
-352/352 [==============================] - 163s 462ms/step - loss: 2.5146 - val_loss: 2.4562
-evaluating ..
-{'advacc': 0.24358974358974358, 'acc': 0.36438301282051283, 'cnnacc': 0.36438301282051283, 'obliacc': 0.24358974358974358}
-Epoch 6/200
-352/352 [==============================] - 164s 465ms/step - loss: 2.4527 - val_loss: 2.3949
-evaluating ..
-{'advacc': 0.2532051282051282, 'acc': 0.38040865384615385, 'cnnacc': 0.38040865384615385, 'obliacc': 0.25220352564102566}
-Epoch 7/200
-352/352 [==============================] - 162s 461ms/step - loss: 2.4032 - val_loss: 2.3408
-evaluating ..
-{'advacc': 0.2598157051282051, 'acc': 0.38822115384615385, 'cnnacc': 0.38822115384615385, 'obliacc': 0.26061698717948717}
-Epoch 8/200
-352/352 [==============================] - 164s 465ms/step - loss: 2.3577 - val_loss: 2.3035
-evaluating ..
-{'advacc': 0.2718349358974359, 'acc': 0.41386217948717946, 'cnnacc': 0.41386217948717946, 'obliacc': 0.27283653846153844}
-Epoch 9/200
-352/352 [==============================] - 176s 500ms/step - loss: 2.3215 - val_loss: 2.2662
-evaluating ..
-{'advacc': 0.27123397435897434, 'acc': 0.42367788461538464, 'cnnacc': 0.42367788461538464, 'obliacc': 0.27163461538461536}
-Epoch 10/200
-352/352 [==============================] - 164s 466ms/step - loss: 2.2896 - val_loss: 2.2346
-evaluating ..
-{'advacc': 0.2796474358974359, 'acc': 0.42948717948717946, 'cnnacc': 0.42948717948717946, 'obliacc': 0.2800480769230769}
-Epoch 11/200
-352/352 [==============================] - 166s 471ms/step - loss: 2.2618 - val_loss: 2.2081
-evaluating ..
-{'advacc': 0.28685897435897434, 'acc': 0.4387019230769231, 'cnnacc': 0.4387019230769231, 'obliacc': 0.2876602564102564}
-#+end_example
+|        epoch | adv acc | clean acc |
+|--------------+---------+-----------|
+|     1 (2e-3) |  0.2312 |    0.3425 |
+|            2 |  0.2698 |    0.3758 |
+|           10 |  0.3562 |    0.5401 |
+|           16 |  0.3846 |    0.5739 |
+|           23 |  0.3984 |    0.6170 |
+|--------------+---------+-----------|
+|    27 (1e-3) |  0.4139 |    0.6336 |
+|           33 |  0.4221 |    0.6430 |
+|--------------+---------+-----------|
+|    37 (5e-4) |  0.4353 |    0.6755 |
+|           43 |  0.4353 |    0.6863 |
+|--------------+---------+-----------|
+|  47 (2.5e-4) |  0.4471 |    0.7003 |
+|           60 |  0.4511 |    0.7047 |
+|--------------+---------+-----------|
+| 71 (6.25e-5) |  0.4573 |    0.7167 |
+|--------------+---------+-----------|
+|    76 (5e-5) |  0.4573 |    0.7133 |
+|    81 (best) |  0.4593 |    0.7200 |
+|           88 |  0.4565 |    0.7236 |
 
-Resnet29, [0,1], lr=2e-3, itadv, trained until early stop, 88 epochs. 160s/epoch
+
 - epoch 1: 'advacc': 0.2311698717948718, 'acc': 0.3425480769230769
 - epoch 2: 'advacc': 0.2698317307692308, 'acc': 0.37580128205128205
 - epoch 10: 'advacc': 0.3561698717948718, 'acc': 0.5400641025641025
@@ -269,8 +348,6 @@ Resnet29, [0,1], lr=2e-3, itadv, trained until early stop, 88 epochs. 160s/epoch
 - epoch 23 (highest before lr reduce): 'advacc': 0.3984375, 'acc': 0.6169871794871795
 - epoch 27 (lr reduced to 1e-3): 'advacc': 0.41386217948717946, 'acc': 0.633613782051282
 - epoch 33: 'advacc': 0.42207532051282054, 'acc': 0.6430288461538461
-
-4e-4 is Madry's starting lr:
 - epoch 37 (lr reduced to 5e-4): 'advacc': 0.43529647435897434, 'acc': 0.6754807692307693
 - epoch 43: 'advacc': 0.43529647435897434, 'acc': 0.6862980769230769
 - epoch 47 (lr reduced to 2.5e-4): 'advacc': 0.44711538461538464, 'acc': 0.7003205128205128
@@ -279,6 +356,7 @@ Resnet29, [0,1], lr=2e-3, itadv, trained until early stop, 88 epochs. 160s/epoch
 - epoch 71 (lr reduced to 0.625e-4): 'advacc': 0.4573317307692308, 'acc': 0.7167467948717948
 - epoch 76 (lr reduced to 5e-5): 'advacc': 0.4573317307692308, 'acc': 0.7133413461538461
 - epoch 81 (best): 'advacc': 0.4593349358974359, 'acc': 0.7199519230769231
+- epoch 88: 'advacc': 0.45653044871794873, 'acc': 0.7235576923076923
 
 #+begin_example
 Trainng AdvAE saved_models/CIFAR10-resnet29-identityAE-ItAdv-AdvAE.hdf5 ..
@@ -654,4 +732,60 @@ Restoring model weights from the end of the best epoch
 Epoch 00088: early stopping
 Saving model to saved_models/CIFAR10-resnet29-CNN.hdf5-identityAE-ItAdvCNN.hdf5 ..
 saving to saved_models/CIFAR10-resnet29-identityAE-ItAdv-AdvAE.hdf5 ..
+#+end_example
+
+
+Resnet29, [0,1], lr=1e-4, itadv. The lr is not a good one.
+
+For lr=0.1 in [0,255], it is 0.1/255=4e-4
+
+I probably try 2e-3, 4e-4
+
+#+begin_example
+Epoch 1/200
+2019-11-11 01:07:19.485215: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcublas.so.10.0
+2019-11-11 01:07:19.601530: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudnn.so.7
+352/352 [==============================] - 170s 482ms/step - loss: 3.0833 - val_loss: 2.8146
+evaluating ..
+{'advacc': 0.14743589743589744, 'acc': 0.2592147435897436, 'cnnacc': 0.2592147435897436, 'obliacc': 0.14703525641025642}
+Epoch 2/200
+352/352 [==============================] - 163s 464ms/step - loss: 2.7599 - val_loss: 2.7004
+evaluating ..
+{'advacc': 0.1872996794871795, 'acc': 0.28345352564102566, 'cnnacc': 0.28345352564102566, 'obliacc': 0.1875}
+Epoch 3/200
+352/352 [==============================] - 162s 462ms/step - loss: 2.6675 - val_loss: 2.6132
+evaluating ..
+{'advacc': 0.2033253205128205, 'acc': 0.31490384615384615, 'cnnacc': 0.31490384615384615, 'obliacc': 0.2029246794871795}
+Epoch 4/200
+352/352 [==============================] - 163s 464ms/step - loss: 2.5882 - val_loss: 2.5300
+evaluating ..
+{'advacc': 0.22576121794871795, 'acc': 0.3233173076923077, 'cnnacc': 0.3233173076923077, 'obliacc': 0.22536057692307693}
+Epoch 5/200
+352/352 [==============================] - 163s 462ms/step - loss: 2.5146 - val_loss: 2.4562
+evaluating ..
+{'advacc': 0.24358974358974358, 'acc': 0.36438301282051283, 'cnnacc': 0.36438301282051283, 'obliacc': 0.24358974358974358}
+Epoch 6/200
+352/352 [==============================] - 164s 465ms/step - loss: 2.4527 - val_loss: 2.3949
+evaluating ..
+{'advacc': 0.2532051282051282, 'acc': 0.38040865384615385, 'cnnacc': 0.38040865384615385, 'obliacc': 0.25220352564102566}
+Epoch 7/200
+352/352 [==============================] - 162s 461ms/step - loss: 2.4032 - val_loss: 2.3408
+evaluating ..
+{'advacc': 0.2598157051282051, 'acc': 0.38822115384615385, 'cnnacc': 0.38822115384615385, 'obliacc': 0.26061698717948717}
+Epoch 8/200
+352/352 [==============================] - 164s 465ms/step - loss: 2.3577 - val_loss: 2.3035
+evaluating ..
+{'advacc': 0.2718349358974359, 'acc': 0.41386217948717946, 'cnnacc': 0.41386217948717946, 'obliacc': 0.27283653846153844}
+Epoch 9/200
+352/352 [==============================] - 176s 500ms/step - loss: 2.3215 - val_loss: 2.2662
+evaluating ..
+{'advacc': 0.27123397435897434, 'acc': 0.42367788461538464, 'cnnacc': 0.42367788461538464, 'obliacc': 0.27163461538461536}
+Epoch 10/200
+352/352 [==============================] - 164s 466ms/step - loss: 2.2896 - val_loss: 2.2346
+evaluating ..
+{'advacc': 0.2796474358974359, 'acc': 0.42948717948717946, 'cnnacc': 0.42948717948717946, 'obliacc': 0.2800480769230769}
+Epoch 11/200
+352/352 [==============================] - 166s 471ms/step - loss: 2.2618 - val_loss: 2.2081
+evaluating ..
+{'advacc': 0.28685897435897434, 'acc': 0.4387019230769231, 'cnnacc': 0.4387019230769231, 'obliacc': 0.2876602564102564}
 #+end_example

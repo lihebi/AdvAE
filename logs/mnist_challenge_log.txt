@@ -1,0 +1,924 @@
+
+2019-11-11 20:51:31.839829: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcublas.so.10.0
+2019-11-11 20:51:31.962028: I tensorflow/stream_executor/platform/default/dso_loader.cc:44] Successfully opened dynamic library libcudnn.so.7
+Step 0:    (2019-11-11 20:51:32.690595)
+    training nat accuracy 16.0%
+    training adv accuracy 0.0%
+Step 100:    (2019-11-11 20:51:44.440556)
+    training nat accuracy 58.0%
+    training adv accuracy 0.0%
+    399.99626396733186 examples per second
+Step 200:    (2019-11-11 20:51:56.517036)
+    training nat accuracy 70.0%
+    training adv accuracy 0.0%
+    414.2229733389788 examples per second
+Step 300:    (2019-11-11 20:52:07.959654)
+    training nat accuracy 82.0%
+    training adv accuracy 0.0%
+    437.1923520023852 examples per second
+Step 400:    (2019-11-11 20:52:19.292841)
+    training nat accuracy 74.0%
+    training adv accuracy 0.0%
+    443.2939455756147 examples per second
+Step 500:    (2019-11-11 20:52:30.437056)
+    training nat accuracy 78.0%
+    training adv accuracy 0.0%
+    448.8868383594054 examples per second
+Step 600:    (2019-11-11 20:52:42.036592)
+    training nat accuracy 68.0%
+    training adv accuracy 0.0%
+    431.2737927714627 examples per second
+Step 700:    (2019-11-11 20:52:58.487948)
+    training nat accuracy 86.0%
+    training adv accuracy 2.0%
+    304.95569338843467 examples per second
+Step 800:    (2019-11-11 20:53:13.086770)
+    training nat accuracy 68.0%
+    training adv accuracy 0.0%
+    342.65883125890116 examples per second
+Step 900:    (2019-11-11 20:53:27.409882)
+    training nat accuracy 78.0%
+    training adv accuracy 0.0%
+    349.24341584277744 examples per second
+WARNING:tensorflow:From /usr/local/lib/python3.6/dist-packages/tensorflow_core/python/training/saver.py:963: remove_checkpoint (from tensorflow.python.training.checkpoint_management) is deprecated and will be removed in a future version.
+Instructions for updating:
+Use standard file APIs to delete files with this prefix.
+Step 1000:    (2019-11-11 20:53:41.275422)
+    training nat accuracy 76.0%
+    training adv accuracy 2.0%
+    362.21573043294796 examples per second
+Step 1100:    (2019-11-11 20:53:54.847972)
+    training nat accuracy 74.0%
+    training adv accuracy 6.0%
+    369.45609455920885 examples per second
+Step 1200:    (2019-11-11 20:54:10.133432)
+    training nat accuracy 86.0%
+    training adv accuracy 14.0%
+    327.25231441418583 examples per second
+Step 1300:    (2019-11-11 20:54:24.382516)
+    training nat accuracy 76.0%
+    training adv accuracy 6.0%
+    352.935593432176 examples per second
+Step 1400:    (2019-11-11 20:54:38.496318)
+    training nat accuracy 74.0%
+    training adv accuracy 14.0%
+    354.4674066900292 examples per second
+Step 1500:    (2019-11-11 20:54:52.786786)
+    training nat accuracy 64.0%
+    training adv accuracy 22.0%
+    350.0825847918875 examples per second
+Step 1600:    (2019-11-11 20:55:07.328954)
+    training nat accuracy 74.0%
+    training adv accuracy 20.0%
+    345.30546695697103 examples per second
+Step 1700:    (2019-11-11 20:55:21.634904)
+    training nat accuracy 70.0%
+    training adv accuracy 20.0%
+    349.67127218159027 examples per second
+Step 1800:    (2019-11-11 20:55:35.407378)
+    training nat accuracy 62.0%
+    training adv accuracy 24.0%
+    363.2014811633508 examples per second
+Step 1900:    (2019-11-11 20:55:48.369009)
+    training nat accuracy 62.0%
+    training adv accuracy 20.0%
+    387.4382157823648 examples per second
+Step 2000:    (2019-11-11 20:56:00.712356)
+    training nat accuracy 66.0%
+    training adv accuracy 20.0%
+    405.2801534994581 examples per second
+Step 2100:    (2019-11-11 20:56:13.442728)
+    training nat accuracy 74.0%
+    training adv accuracy 14.0%
+    392.94468119507707 examples per second
+Step 2200:    (2019-11-11 20:56:25.682192)
+    training nat accuracy 72.0%
+    training adv accuracy 26.0%
+    411.3949439027839 examples per second
+Step 2300:    (2019-11-11 20:56:38.780985)
+    training nat accuracy 72.0%
+    training adv accuracy 28.0%
+    381.88743749886265 examples per second
+Step 2400:    (2019-11-11 20:56:52.559016)
+    training nat accuracy 66.0%
+    training adv accuracy 0.0%
+    363.06798607679883 examples per second
+Step 2500:    (2019-11-11 20:57:06.996851)
+    training nat accuracy 72.0%
+    training adv accuracy 30.0%
+    347.80897112225534 examples per second
+Step 2600:    (2019-11-11 20:57:18.896772)
+    training nat accuracy 84.0%
+    training adv accuracy 28.0%
+    420.3977689968139 examples per second
+Step 2700:    (2019-11-11 20:57:31.141800)
+    training nat accuracy 80.0%
+    training adv accuracy 36.0%
+    408.5487125537978 examples per second
+Step 2800:    (2019-11-11 20:57:43.240463)
+    training nat accuracy 52.0%
+    training adv accuracy 14.0%
+    415.28663292933237 examples per second
+Step 2900:    (2019-11-11 20:57:54.886789)
+    training nat accuracy 82.0%
+    training adv accuracy 26.0%
+    429.84587979063645 examples per second
+Step 3000:    (2019-11-11 20:58:06.452857)
+    training nat accuracy 90.0%
+    training adv accuracy 30.0%
+    432.51545540825686 examples per second
+Step 3100:    (2019-11-11 20:58:18.242708)
+    training nat accuracy 80.0%
+    training adv accuracy 20.0%
+    426.271454676689 examples per second
+Step 3200:    (2019-11-11 20:58:30.642278)
+    training nat accuracy 76.0%
+    training adv accuracy 20.0%
+    403.4623325406325 examples per second
+Step 3300:    (2019-11-11 20:58:42.898755)
+    training nat accuracy 74.0%
+    training adv accuracy 20.0%
+    409.111299897168 examples per second
+Step 3400:    (2019-11-11 20:58:56.078636)
+    training nat accuracy 86.0%
+    training adv accuracy 24.0%
+    380.984357709963 examples per second
+Step 3500:    (2019-11-11 20:59:07.553150)
+    training nat accuracy 76.0%
+    training adv accuracy 32.0%
+    435.9592807570641 examples per second
+Step 3600:    (2019-11-11 20:59:19.412074)
+    training nat accuracy 72.0%
+    training adv accuracy 22.0%
+    421.850030497972 examples per second
+Step 3700:    (2019-11-11 20:59:31.266860)
+    training nat accuracy 88.0%
+    training adv accuracy 28.0%
+    424.02629968894104 examples per second
+Step 3800:    (2019-11-11 20:59:43.085770)
+    training nat accuracy 80.0%
+    training adv accuracy 32.0%
+    423.26462280757545 examples per second
+Step 3900:    (2019-11-11 20:59:54.623009)
+    training nat accuracy 86.0%
+    training adv accuracy 36.0%
+    433.60820979548015 examples per second
+Step 4000:    (2019-11-11 21:00:06.572154)
+    training nat accuracy 92.0%
+    training adv accuracy 24.0%
+    420.7350885804366 examples per second
+Step 4100:    (2019-11-11 21:00:19.865234)
+    training nat accuracy 88.0%
+    training adv accuracy 38.0%
+    376.31166930900076 examples per second
+Step 4200:    (2019-11-11 21:00:33.328959)
+    training nat accuracy 90.0%
+    training adv accuracy 42.0%
+    371.54351561383083 examples per second
+Step 4300:    (2019-11-11 21:00:48.050806)
+    training nat accuracy 86.0%
+    training adv accuracy 36.0%
+    341.0245185009677 examples per second
+Step 4400:    (2019-11-11 21:01:00.334736)
+    training nat accuracy 96.0%
+    training adv accuracy 34.0%
+    408.3948561327767 examples per second
+Step 4500:    (2019-11-11 21:01:12.476939)
+    training nat accuracy 86.0%
+    training adv accuracy 40.0%
+    411.9838132708783 examples per second
+Step 4600:    (2019-11-11 21:01:24.594579)
+    training nat accuracy 96.0%
+    training adv accuracy 36.0%
+    414.59532917508136 examples per second
+Step 4700:    (2019-11-11 21:01:36.223080)
+    training nat accuracy 94.0%
+    training adv accuracy 38.0%
+    430.2095549152477 examples per second
+Step 4800:    (2019-11-11 21:01:48.785403)
+    training nat accuracy 92.0%
+    training adv accuracy 40.0%
+    398.21159760372893 examples per second
+Step 4900:    (2019-11-11 21:02:01.944801)
+    training nat accuracy 90.0%
+    training adv accuracy 28.0%
+    381.6187986297108 examples per second
+Step 5000:    (2019-11-11 21:02:14.385309)
+    training nat accuracy 94.0%
+    training adv accuracy 44.0%
+    402.41858143440356 examples per second
+Step 5100:    (2019-11-11 21:02:26.761788)
+    training nat accuracy 90.0%
+    training adv accuracy 34.0%
+    404.2190415968932 examples per second
+Step 5200:    (2019-11-11 21:02:39.115592)
+    training nat accuracy 92.0%
+    training adv accuracy 36.0%
+    406.49633933378067 examples per second
+Step 5300:    (2019-11-11 21:02:51.118463)
+    training nat accuracy 94.0%
+    training adv accuracy 42.0%
+    416.92949751239206 examples per second
+Step 5400:    (2019-11-11 21:03:03.722751)
+    training nat accuracy 94.0%
+    training adv accuracy 40.0%
+    396.8759366594073 examples per second
+Step 5500:    (2019-11-11 21:03:15.785895)
+    training nat accuracy 88.0%
+    training adv accuracy 34.0%
+    417.57575024036873 examples per second
+Step 5600:    (2019-11-11 21:03:27.875744)
+    training nat accuracy 92.0%
+    training adv accuracy 38.0%
+    413.78905078363255 examples per second
+Step 5700:    (2019-11-11 21:03:40.002199)
+    training nat accuracy 90.0%
+    training adv accuracy 38.0%
+    412.6110793016609 examples per second
+Step 5800:    (2019-11-11 21:03:51.949792)
+    training nat accuracy 90.0%
+    training adv accuracy 38.0%
+    420.7541141093596 examples per second
+Step 5900:    (2019-11-11 21:04:03.903774)
+    training nat accuracy 90.0%
+    training adv accuracy 44.0%
+    418.4823257857598 examples per second
+Step 6000:    (2019-11-11 21:04:15.966967)
+    training nat accuracy 90.0%
+    training adv accuracy 48.0%
+    414.68544317419946 examples per second
+Step 6100:    (2019-11-11 21:04:27.806596)
+    training nat accuracy 94.0%
+    training adv accuracy 40.0%
+    424.4647779289573 examples per second
+Step 6200:    (2019-11-11 21:04:40.176671)
+    training nat accuracy 88.0%
+    training adv accuracy 42.0%
+    404.3990283792101 examples per second
+Step 6300:    (2019-11-11 21:04:52.340579)
+    training nat accuracy 88.0%
+    training adv accuracy 40.0%
+    411.268620435485 examples per second
+Step 6400:    (2019-11-11 21:05:04.542180)
+    training nat accuracy 96.0%
+    training adv accuracy 40.0%
+    411.9865858797906 examples per second
+Step 6500:    (2019-11-11 21:05:16.614636)
+    training nat accuracy 86.0%
+    training adv accuracy 42.0%
+    414.40246143073387 examples per second
+Step 6600:    (2019-11-11 21:05:28.581199)
+    training nat accuracy 96.0%
+    training adv accuracy 46.0%
+    419.141203387926 examples per second
+Step 6700:    (2019-11-11 21:05:40.642037)
+    training nat accuracy 92.0%
+    training adv accuracy 46.0%
+    416.4781093042216 examples per second
+Step 6800:    (2019-11-11 21:05:52.971947)
+    training nat accuracy 90.0%
+    training adv accuracy 34.0%
+    405.7172209373493 examples per second
+Step 6900:    (2019-11-11 21:06:05.103905)
+    training nat accuracy 94.0%
+    training adv accuracy 50.0%
+    412.3361463341839 examples per second
+Step 7000:    (2019-11-11 21:06:17.225989)
+    training nat accuracy 92.0%
+    training adv accuracy 40.0%
+    414.6311612074768 examples per second
+Step 7100:    (2019-11-11 21:06:29.421444)
+    training nat accuracy 100.0%
+    training adv accuracy 42.0%
+    410.2114861590376 examples per second
+Step 7200:    (2019-11-11 21:06:41.943637)
+    training nat accuracy 92.0%
+    training adv accuracy 36.0%
+    399.4894234524058 examples per second
+Step 7300:    (2019-11-11 21:06:54.281686)
+    training nat accuracy 96.0%
+    training adv accuracy 46.0%
+    407.18298143469116 examples per second
+Step 7400:    (2019-11-11 21:07:06.341259)
+    training nat accuracy 94.0%
+    training adv accuracy 44.0%
+    414.98251367282626 examples per second
+Step 7500:    (2019-11-11 21:07:18.501316)
+    training nat accuracy 92.0%
+    training adv accuracy 40.0%
+    411.380609422118 examples per second
+Step 7600:    (2019-11-11 21:07:30.567278)
+    training nat accuracy 94.0%
+    training adv accuracy 32.0%
+    416.32574199264474 examples per second
+Step 7700:    (2019-11-11 21:07:42.800420)
+    training nat accuracy 94.0%
+    training adv accuracy 52.0%
+    409.797834678871 examples per second
+Step 7800:    (2019-11-11 21:07:55.242185)
+    training nat accuracy 96.0%
+    training adv accuracy 56.0%
+    402.07422310403336 examples per second
+Step 7900:    (2019-11-11 21:08:07.381970)
+    training nat accuracy 92.0%
+    training adv accuracy 38.0%
+    413.8304311516754 examples per second
+Step 8000:    (2019-11-11 21:08:19.640779)
+    training nat accuracy 92.0%
+    training adv accuracy 50.0%
+    408.06531630436467 examples per second
+Step 8100:    (2019-11-11 21:08:32.201146)
+    training nat accuracy 92.0%
+    training adv accuracy 44.0%
+    398.2752896110351 examples per second
+Step 8200:    (2019-11-11 21:08:44.546074)
+    training nat accuracy 94.0%
+    training adv accuracy 50.0%
+    407.0154618049006 examples per second
+Step 8300:    (2019-11-11 21:08:56.333782)
+    training nat accuracy 94.0%
+    training adv accuracy 44.0%
+    424.39200561366647 examples per second
+Step 8400:    (2019-11-11 21:09:08.563455)
+    training nat accuracy 94.0%
+    training adv accuracy 52.0%
+    409.0334294190863 examples per second
+Step 8500:    (2019-11-11 21:09:21.392809)
+    training nat accuracy 90.0%
+    training adv accuracy 44.0%
+    391.5120701162972 examples per second
+Step 8600:    (2019-11-11 21:09:33.714052)
+    training nat accuracy 96.0%
+    training adv accuracy 56.0%
+    406.00838640448274 examples per second
+Step 8700:    (2019-11-11 21:09:45.936019)
+    training nat accuracy 96.0%
+    training adv accuracy 48.0%
+    409.3116069695809 examples per second
+Step 8800:    (2019-11-11 21:09:58.224658)
+    training nat accuracy 98.0%
+    training adv accuracy 40.0%
+    409.8004656142679 examples per second
+Step 8900:    (2019-11-11 21:10:10.564574)
+    training nat accuracy 94.0%
+    training adv accuracy 44.0%
+    405.39018920482096 examples per second
+Step 9000:    (2019-11-11 21:10:22.843601)
+    training nat accuracy 88.0%
+    training adv accuracy 40.0%
+    407.5780932149958 examples per second
+Step 9100:    (2019-11-11 21:10:35.356929)
+    training nat accuracy 90.0%
+    training adv accuracy 48.0%
+    401.52070046930436 examples per second
+Step 9200:    (2019-11-11 21:10:49.118509)
+    training nat accuracy 96.0%
+    training adv accuracy 52.0%
+    363.4926594026396 examples per second
+Step 9300:    (2019-11-11 21:11:01.593859)
+    training nat accuracy 98.0%
+    training adv accuracy 48.0%
+    400.9953552023732 examples per second
+Step 9400:    (2019-11-11 21:11:13.990933)
+    training nat accuracy 90.0%
+    training adv accuracy 42.0%
+    405.2724826696988 examples per second
+Step 9500:    (2019-11-11 21:11:25.456919)
+    training nat accuracy 94.0%
+    training adv accuracy 58.0%
+    436.310188558657 examples per second
+Step 9600:    (2019-11-11 21:11:37.666555)
+    training nat accuracy 92.0%
+    training adv accuracy 54.0%
+    409.7167746768521 examples per second
+Step 9700:    (2019-11-11 21:11:49.764430)
+    training nat accuracy 96.0%
+    training adv accuracy 52.0%
+    415.3610314735883 examples per second
+Step 9800:    (2019-11-11 21:12:01.862956)
+    training nat accuracy 92.0%
+    training adv accuracy 38.0%
+    413.488533743305 examples per second
+Step 9900:    (2019-11-11 21:12:14.472788)
+    training nat accuracy 96.0%
+    training adv accuracy 40.0%
+    397.6457223648073 examples per second
+Step 10000:    (2019-11-11 21:12:28.610799)
+    training nat accuracy 96.0%
+    training adv accuracy 52.0%
+    355.2046664562582 examples per second
+Step 10100:    (2019-11-11 21:12:40.515400)
+    training nat accuracy 98.0%
+    training adv accuracy 46.0%
+    420.2251289061012 examples per second
+Step 10200:    (2019-11-11 21:12:52.818858)
+    training nat accuracy 96.0%
+    training adv accuracy 52.0%
+    406.5863137355343 examples per second
+Step 10300:    (2019-11-11 21:13:04.900531)
+    training nat accuracy 90.0%
+    training adv accuracy 46.0%
+    415.75224561989455 examples per second
+Step 10400:    (2019-11-11 21:13:17.445710)
+    training nat accuracy 100.0%
+    training adv accuracy 66.0%
+    398.74990072999213 examples per second
+Step 10500:    (2019-11-11 21:13:29.725944)
+    training nat accuracy 100.0%
+    training adv accuracy 42.0%
+    407.3517147048733 examples per second
+Step 10600:    (2019-11-11 21:13:41.418453)
+    training nat accuracy 94.0%
+    training adv accuracy 48.0%
+    429.76711147549184 examples per second
+Step 10700:    (2019-11-11 21:13:53.344662)
+    training nat accuracy 96.0%
+    training adv accuracy 48.0%
+    419.4451946922071 examples per second
+Step 10800:    (2019-11-11 21:14:05.484114)
+    training nat accuracy 92.0%
+    training adv accuracy 50.0%
+    412.0877702407905 examples per second
+Step 10900:    (2019-11-11 21:14:17.794177)
+    training nat accuracy 96.0%
+    training adv accuracy 44.0%
+    408.30911508059484 examples per second
+Step 11000:    (2019-11-11 21:14:29.549930)
+    training nat accuracy 92.0%
+    training adv accuracy 50.0%
+    426.5850874529755 examples per second
+Step 11100:    (2019-11-11 21:14:41.240281)
+    training nat accuracy 88.0%
+    training adv accuracy 34.0%
+    427.93420258086707 examples per second
+Step 11200:    (2019-11-11 21:14:54.238550)
+    training nat accuracy 92.0%
+    training adv accuracy 42.0%
+    386.3944965743325 examples per second
+Step 11300:    (2019-11-11 21:15:07.276908)
+    training nat accuracy 94.0%
+    training adv accuracy 38.0%
+    383.8603703834691 examples per second
+Step 11400:    (2019-11-11 21:15:20.309969)
+    training nat accuracy 92.0%
+    training adv accuracy 48.0%
+    383.8347558760143 examples per second
+Step 11500:    (2019-11-11 21:15:32.487937)
+    training nat accuracy 94.0%
+    training adv accuracy 48.0%
+    412.4969671412163 examples per second
+Step 11600:    (2019-11-11 21:15:44.632107)
+    training nat accuracy 94.0%
+    training adv accuracy 48.0%
+    411.9305224698933 examples per second
+Step 11700:    (2019-11-11 21:15:56.932007)
+    training nat accuracy 96.0%
+    training adv accuracy 38.0%
+    406.7136290184956 examples per second
+Step 11800:    (2019-11-11 21:16:08.865401)
+    training nat accuracy 90.0%
+    training adv accuracy 42.0%
+    420.9640636146552 examples per second
+Step 11900:    (2019-11-11 21:16:20.988092)
+    training nat accuracy 94.0%
+    training adv accuracy 42.0%
+    412.65443122463336 examples per second
+Step 12000:    (2019-11-11 21:16:33.944349)
+    training nat accuracy 96.0%
+    training adv accuracy 40.0%
+    386.09306244122644 examples per second
+Step 12100:    (2019-11-11 21:16:45.879140)
+    training nat accuracy 94.0%
+    training adv accuracy 50.0%
+    421.9022399410562 examples per second
+Step 12200:    (2019-11-11 21:17:00.340430)
+    training nat accuracy 92.0%
+    training adv accuracy 54.0%
+    345.9421284597382 examples per second
+Step 12300:    (2019-11-11 21:17:13.533292)
+    training nat accuracy 92.0%
+    training adv accuracy 26.0%
+    379.16343769029066 examples per second
+Step 12400:    (2019-11-11 21:17:25.947949)
+    training nat accuracy 94.0%
+    training adv accuracy 46.0%
+    404.6923174629796 examples per second
+Step 12500:    (2019-11-11 21:17:38.640251)
+    training nat accuracy 96.0%
+    training adv accuracy 58.0%
+    394.1432857997553 examples per second
+Step 12600:    (2019-11-11 21:17:51.115117)
+    training nat accuracy 92.0%
+    training adv accuracy 44.0%
+    401.0241336958884 examples per second
+Step 12700:    (2019-11-11 21:18:03.219762)
+    training nat accuracy 98.0%
+    training adv accuracy 40.0%
+    415.1898861394504 examples per second
+Step 12800:    (2019-11-11 21:18:15.297401)
+    training nat accuracy 94.0%
+    training adv accuracy 48.0%
+    414.2205915950709 examples per second
+Step 12900:    (2019-11-11 21:18:27.734322)
+    training nat accuracy 98.0%
+    training adv accuracy 46.0%
+    402.26642135267724 examples per second
+Step 13000:    (2019-11-11 21:18:40.348783)
+    training nat accuracy 94.0%
+    training adv accuracy 42.0%
+    398.3499729515944 examples per second
+Step 13100:    (2019-11-11 21:18:53.654641)
+    training nat accuracy 94.0%
+    training adv accuracy 46.0%
+    375.9553060062095 examples per second
+Step 13200:    (2019-11-11 21:19:07.074393)
+    training nat accuracy 96.0%
+    training adv accuracy 52.0%
+    374.30902611654875 examples per second
+Step 13300:    (2019-11-11 21:19:19.822580)
+    training nat accuracy 96.0%
+    training adv accuracy 44.0%
+    394.0164283046565 examples per second
+Step 13400:    (2019-11-11 21:19:33.219406)
+    training nat accuracy 96.0%
+    training adv accuracy 58.0%
+    373.3892320292762 examples per second
+Step 13500:    (2019-11-11 21:19:45.479554)
+    training nat accuracy 98.0%
+    training adv accuracy 48.0%
+    408.0215307907603 examples per second
+Step 13600:    (2019-11-11 21:19:59.003371)
+    training nat accuracy 96.0%
+    training adv accuracy 42.0%
+    371.55441155553564 examples per second
+Step 13700:    (2019-11-11 21:20:12.158903)
+    training nat accuracy 96.0%
+    training adv accuracy 54.0%
+    380.2495410959791 examples per second
+Step 13800:    (2019-11-11 21:20:24.239865)
+    training nat accuracy 96.0%
+    training adv accuracy 54.0%
+    414.0759774737644 examples per second
+Step 13900:    (2019-11-11 21:20:36.400045)
+    training nat accuracy 96.0%
+    training adv accuracy 36.0%
+    413.1288796189963 examples per second
+Step 14000:    (2019-11-11 21:20:48.458122)
+    training nat accuracy 92.0%
+    training adv accuracy 52.0%
+    414.95927935606045 examples per second
+Step 14100:    (2019-11-11 21:21:01.111143)
+    training nat accuracy 94.0%
+    training adv accuracy 40.0%
+    395.5194555298989 examples per second
+Step 14200:    (2019-11-11 21:21:14.717131)
+    training nat accuracy 98.0%
+    training adv accuracy 52.0%
+    369.15041796920394 examples per second
+Step 14300:    (2019-11-11 21:21:28.232618)
+    training nat accuracy 96.0%
+    training adv accuracy 52.0%
+    371.6130616723616 examples per second
+Step 14400:    (2019-11-11 21:21:41.622270)
+    training nat accuracy 92.0%
+    training adv accuracy 46.0%
+    373.59142198471505 examples per second
+Step 14500:    (2019-11-11 21:21:55.106946)
+    training nat accuracy 88.0%
+    training adv accuracy 52.0%
+    372.7623940859019 examples per second
+Step 14600:    (2019-11-11 21:22:07.771768)
+    training nat accuracy 98.0%
+    training adv accuracy 58.0%
+    395.06871504058034 examples per second
+Step 14700:    (2019-11-11 21:22:20.268994)
+    training nat accuracy 92.0%
+    training adv accuracy 44.0%
+    400.35524188761354 examples per second
+Step 14800:    (2019-11-11 21:22:32.350890)
+    training nat accuracy 98.0%
+    training adv accuracy 56.0%
+    415.91471241132973 examples per second
+Step 14900:    (2019-11-11 21:22:44.639658)
+    training nat accuracy 96.0%
+    training adv accuracy 50.0%
+    407.0708206155191 examples per second
+Step 15000:    (2019-11-11 21:22:56.890533)
+    training nat accuracy 92.0%
+    training adv accuracy 54.0%
+    408.3323435100529 examples per second
+Step 15100:    (2019-11-11 21:23:10.263930)
+    training nat accuracy 98.0%
+    training adv accuracy 50.0%
+    375.51218491398964 examples per second
+Step 15200:    (2019-11-11 21:23:23.619955)
+    training nat accuracy 94.0%
+    training adv accuracy 38.0%
+    374.62031834999675 examples per second
+Step 15300:    (2019-11-11 21:23:36.313405)
+    training nat accuracy 98.0%
+    training adv accuracy 56.0%
+    394.0890564324714 examples per second
+Step 15400:    (2019-11-11 21:23:49.510367)
+    training nat accuracy 94.0%
+    training adv accuracy 50.0%
+    384.8987361489711 examples per second
+Step 15500:    (2019-11-11 21:24:01.765681)
+    training nat accuracy 94.0%
+    training adv accuracy 50.0%
+    408.19741593357577 examples per second
+Step 15600:    (2019-11-11 21:24:14.168703)
+    training nat accuracy 96.0%
+    training adv accuracy 52.0%
+    403.3353529790434 examples per second
+Step 15700:    (2019-11-11 21:24:26.327224)
+    training nat accuracy 96.0%
+    training adv accuracy 48.0%
+    413.4244246149131 examples per second
+Step 15800:    (2019-11-11 21:24:38.261605)
+    training nat accuracy 94.0%
+    training adv accuracy 40.0%
+    419.18514236683825 examples per second
+Step 15900:    (2019-11-11 21:24:49.972344)
+    training nat accuracy 100.0%
+    training adv accuracy 52.0%
+    427.17855399123243 examples per second
+Step 16000:    (2019-11-11 21:25:01.571723)
+    training nat accuracy 92.0%
+    training adv accuracy 44.0%
+    433.1946853838539 examples per second
+Step 16100:    (2019-11-11 21:25:13.605297)
+    training nat accuracy 92.0%
+    training adv accuracy 60.0%
+    415.70843904142987 examples per second
+Step 16200:    (2019-11-11 21:25:25.418627)
+    training nat accuracy 100.0%
+    training adv accuracy 60.0%
+    423.4618830319376 examples per second
+Step 16300:    (2019-11-11 21:25:37.925213)
+    training nat accuracy 92.0%
+    training adv accuracy 48.0%
+    401.74202232041387 examples per second
+Step 16400:    (2019-11-11 21:25:50.134505)
+    training nat accuracy 98.0%
+    training adv accuracy 62.0%
+    409.72106520227635 examples per second
+Step 16500:    (2019-11-11 21:26:01.987852)
+    training nat accuracy 94.0%
+    training adv accuracy 48.0%
+    422.9935163162646 examples per second
+Step 16600:    (2019-11-11 21:26:14.242510)
+    training nat accuracy 88.0%
+    training adv accuracy 38.0%
+    409.97485919661574 examples per second
+Step 16700:    (2019-11-11 21:26:26.312947)
+    training nat accuracy 94.0%
+    training adv accuracy 44.0%
+    414.44453444735444 examples per second
+Step 16800:    (2019-11-11 21:26:38.652113)
+    training nat accuracy 98.0%
+    training adv accuracy 56.0%
+    405.41170985742195 examples per second
+Step 16900:    (2019-11-11 21:26:51.646876)
+    training nat accuracy 96.0%
+    training adv accuracy 54.0%
+    386.4855092454678 examples per second
+Step 17000:    (2019-11-11 21:27:04.579670)
+    training nat accuracy 96.0%
+    training adv accuracy 66.0%
+    386.8017146892253 examples per second
+Step 17100:    (2019-11-11 21:27:17.347397)
+    training nat accuracy 90.0%
+    training adv accuracy 54.0%
+    391.7962525671312 examples per second
+Step 17200:    (2019-11-11 21:27:29.746565)
+    training nat accuracy 98.0%
+    training adv accuracy 62.0%
+    405.16192256040813 examples per second
+Step 17300:    (2019-11-11 21:27:42.023052)
+    training nat accuracy 98.0%
+    training adv accuracy 58.0%
+    407.4880571842352 examples per second
+Step 17400:    (2019-11-11 21:27:54.155155)
+    training nat accuracy 90.0%
+    training adv accuracy 60.0%
+    412.3366599647513 examples per second
+Step 17500:    (2019-11-11 21:28:06.322285)
+    training nat accuracy 98.0%
+    training adv accuracy 56.0%
+    412.99366891509317 examples per second
+Step 17600:    (2019-11-11 21:28:18.561928)
+    training nat accuracy 98.0%
+    training adv accuracy 48.0%
+    409.7867499698672 examples per second
+Step 17700:    (2019-11-11 21:28:30.158876)
+    training nat accuracy 94.0%
+    training adv accuracy 58.0%
+    431.3778206540684 examples per second
+Step 17800:    (2019-11-11 21:28:42.376626)
+    training nat accuracy 96.0%
+    training adv accuracy 56.0%
+    411.5203346090156 examples per second
+Step 17900:    (2019-11-11 21:28:55.061998)
+    training nat accuracy 92.0%
+    training adv accuracy 56.0%
+    394.3424383242428 examples per second
+Step 18000:    (2019-11-11 21:29:07.966790)
+    training nat accuracy 94.0%
+    training adv accuracy 66.0%
+    387.6353362656808 examples per second
+Step 18100:    (2019-11-11 21:29:20.010161)
+    training nat accuracy 90.0%
+    training adv accuracy 52.0%
+    417.1953721803418 examples per second
+Step 18200:    (2019-11-11 21:29:32.873564)
+    training nat accuracy 92.0%
+    training adv accuracy 50.0%
+    388.89381172442825 examples per second
+Step 18300:    (2019-11-11 21:29:44.916438)
+    training nat accuracy 96.0%
+    training adv accuracy 62.0%
+    415.4060011464208 examples per second
+Step 18400:    (2019-11-11 21:29:56.896032)
+    training nat accuracy 92.0%
+    training adv accuracy 60.0%
+    419.6385666737163 examples per second
+Step 18500:    (2019-11-11 21:30:09.525812)
+    training nat accuracy 96.0%
+    training adv accuracy 58.0%
+    396.07435741682906 examples per second
+Step 18600:    (2019-11-11 21:30:22.064924)
+    training nat accuracy 98.0%
+    training adv accuracy 64.0%
+    398.9523643667086 examples per second
+Step 18700:    (2019-11-11 21:30:34.138770)
+    training nat accuracy 92.0%
+    training adv accuracy 58.0%
+    417.26949861516545 examples per second
+Step 18800:    (2019-11-11 21:30:46.160122)
+    training nat accuracy 98.0%
+    training adv accuracy 72.0%
+    416.1299598967089 examples per second
+Step 18900:    (2019-11-11 21:30:57.993614)
+    training nat accuracy 90.0%
+    training adv accuracy 56.0%
+    422.7444560480442 examples per second
+Step 19000:    (2019-11-11 21:31:10.362174)
+    training nat accuracy 98.0%
+    training adv accuracy 72.0%
+    406.2000150790727 examples per second
+Step 19100:    (2019-11-11 21:31:24.533709)
+    training nat accuracy 92.0%
+    training adv accuracy 58.0%
+    352.9785833358016 examples per second
+Step 19200:    (2019-11-11 21:31:37.237148)
+    training nat accuracy 98.0%
+    training adv accuracy 46.0%
+    393.79528822396526 examples per second
+Step 19300:    (2019-11-11 21:31:49.770772)
+    training nat accuracy 94.0%
+    training adv accuracy 56.0%
+    400.8341472253961 examples per second
+Step 19400:    (2019-11-11 21:32:01.885746)
+    training nat accuracy 96.0%
+    training adv accuracy 62.0%
+    412.9115848784618 examples per second
+Step 19500:    (2019-11-11 21:32:14.293666)
+    training nat accuracy 96.0%
+    training adv accuracy 54.0%
+    403.1916767816765 examples per second
+Step 19600:    (2019-11-11 21:32:26.571633)
+    training nat accuracy 98.0%
+    training adv accuracy 64.0%
+    409.80049110404525 examples per second
+Step 19700:    (2019-11-11 21:32:38.948352)
+    training nat accuracy 96.0%
+    training adv accuracy 62.0%
+    404.20822502918077 examples per second
+Step 19800:    (2019-11-11 21:32:51.219842)
+    training nat accuracy 100.0%
+    training adv accuracy 72.0%
+    408.6443064370894 examples per second
+Step 19900:    (2019-11-11 21:33:03.893456)
+    training nat accuracy 100.0%
+    training adv accuracy 66.0%
+    396.3964032995974 examples per second
+Step 20000:    (2019-11-11 21:33:16.175688)
+    training nat accuracy 92.0%
+    training adv accuracy 56.0%
+    407.3032421894124 examples per second
+Step 20100:    (2019-11-11 21:33:28.849917)
+    training nat accuracy 98.0%
+    training adv accuracy 70.0%
+    394.7424069247777 examples per second
+Step 20200:    (2019-11-11 21:33:41.290027)
+    training nat accuracy 96.0%
+    training adv accuracy 54.0%
+    404.51659918235015 examples per second
+Step 20300:    (2019-11-11 21:33:53.499521)
+    training nat accuracy 90.0%
+    training adv accuracy 54.0%
+    409.71466695906156 examples per second
+Step 20400:    (2019-11-11 21:34:05.560900)
+    training nat accuracy 98.0%
+    training adv accuracy 62.0%
+    414.7543253459278 examples per second
+Step 20500:    (2019-11-11 21:34:17.431639)
+    training nat accuracy 98.0%
+    training adv accuracy 44.0%
+    423.2234577278437 examples per second
+Step 20600:    (2019-11-11 21:34:29.757444)
+    training nat accuracy 94.0%
+    training adv accuracy 60.0%
+    405.83596076840564 examples per second
+Step 20700:    (2019-11-11 21:34:42.037868)
+    training nat accuracy 96.0%
+    training adv accuracy 64.0%
+    407.3586376738974 examples per second
+Step 20800:    (2019-11-11 21:34:54.285444)
+    training nat accuracy 100.0%
+    training adv accuracy 70.0%
+    410.2719274841719 examples per second
+Step 20900:    (2019-11-11 21:35:06.597713)
+    training nat accuracy 94.0%
+    training adv accuracy 66.0%
+    407.3982340780106 examples per second
+Step 21000:    (2019-11-11 21:35:18.841450)
+    training nat accuracy 92.0%
+    training adv accuracy 62.0%
+    408.5730884517514 examples per second
+Step 21100:    (2019-11-11 21:35:31.451752)
+    training nat accuracy 94.0%
+    training adv accuracy 62.0%
+    398.62808336342664 examples per second
+Step 21200:    (2019-11-11 21:35:43.910138)
+    training nat accuracy 98.0%
+    training adv accuracy 58.0%
+    401.5249575846835 examples per second
+Step 21300:    (2019-11-11 21:35:56.629989)
+    training nat accuracy 94.0%
+    training adv accuracy 68.0%
+    393.4415483173303 examples per second
+Step 21400:    (2019-11-11 21:36:08.954510)
+    training nat accuracy 94.0%
+    training adv accuracy 64.0%
+    407.6222729479652 examples per second
+Step 21500:    (2019-11-11 21:36:21.414931)
+    training nat accuracy 94.0%
+    training adv accuracy 64.0%
+    401.48651801798184 examples per second
+Step 21600:    (2019-11-11 21:36:33.488966)
+    training nat accuracy 90.0%
+    training adv accuracy 54.0%
+    414.3320168684879 examples per second
+Step 21700:    (2019-11-11 21:36:45.597831)
+    training nat accuracy 96.0%
+    training adv accuracy 76.0%
+    415.0682315316108 examples per second
+Step 21800:    (2019-11-11 21:36:57.916875)
+    training nat accuracy 98.0%
+    training adv accuracy 72.0%
+    406.2723246438625 examples per second
+Step 21900:    (2019-11-11 21:37:09.948510)
+    training nat accuracy 96.0%
+    training adv accuracy 74.0%
+    416.30359326090206 examples per second
+Step 22000:    (2019-11-11 21:37:22.180715)
+    training nat accuracy 96.0%
+    training adv accuracy 62.0%
+    412.0439943385784 examples per second
+Step 22100:    (2019-11-11 21:37:34.044911)
+    training nat accuracy 96.0%
+    training adv accuracy 58.0%
+    421.7142667443857 examples per second
+Step 22200:    (2019-11-11 21:37:46.582467)
+    training nat accuracy 100.0%
+    training adv accuracy 68.0%
+    399.00258559992875 examples per second
+Step 22300:    (2019-11-11 21:38:00.012159)
+    training nat accuracy 100.0%
+    training adv accuracy 76.0%
+    374.02981744868276 examples per second
+Step 22400:    (2019-11-11 21:38:12.271755)
+    training nat accuracy 96.0%
+    training adv accuracy 72.0%
+    408.05244030843465 examples per second
+^CTraceback (most recent call last):
+  File "train.py", line 83, in <module>
+    x_batch_adv = attack.perturb(x_batch, y_batch, sess)
+  File "/home/user/git/mnist_challenge/pgd_attack.py", line 54, in perturb
+    self.model.y_input: y})
+  File "/usr/local/lib/python3.6/dist-packages/tensorflow_core/python/client/session.py", line 956, in run
+    run_metadata_ptr)
+  File "/usr/local/lib/python3.6/dist-packages/tensorflow_core/python/client/session.py", line 1180, in _run
+    feed_dict_tensor, options, run_metadata)
+  File "/usr/local/lib/python3.6/dist-packages/tensorflow_core/python/client/session.py", line 1359, in _do_run
+    run_metadata)
+  File "/usr/local/lib/python3.6/dist-packages/tensorflow_core/python/client/session.py", line 1365, in _do_call
+    return fn(*args)
+  File "/usr/local/lib/python3.6/dist-packages/tensorflow_core/python/client/session.py", line 1350, in _run_fn
+    target_list, run_metadata)
+  File "/usr/local/lib/python3.6/dist-packages/tensorflow_core/python/client/session.py", line 1443, in _call_tf_sessionrun
+    run_metadata)
+KeyboardInterrupt
+^C^C

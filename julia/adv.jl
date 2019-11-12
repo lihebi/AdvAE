@@ -276,3 +276,128 @@ function test_attack()
     evaluate_attack(model, attack_PGD_k(40), trainX, trainY, testX, testY)
 end
 
+function custom_train!(model, opt, ds)
+    x, y = next_batch!(ds) |> gpu
+    model(x);
+
+    ps = Flux.params(model)
+    loss_metric = MeanMetric()
+    acc_metric = MeanMetric()
+    step = 0
+    @showprogress 0.1 "Training..." for step in 1:1000
+        x, y = next_batch!(ds) |> gpu
+        gs = Flux.Tracker.gradient(ps) do
+            # FIXME this will slow down the model twice
+            logits = model(x)
+            loss = my_xent(logits, y)
+            add!(loss_metric, loss.data)
+            add!(acc_metric, accuracy_with_logits(logits.data, y))
+            loss
+        end
+        Flux.Tracker.update!(opt, ps, gs)
+
+        if step % 40 == 0
+            println()
+            @show get!(loss_metric)
+            @show get!(acc_metric)
+        end
+    end
+end
+
+function custom_evaluate(model, ds; attack_fn=nothing)
+    # first, sample clean image
+    xx,yy = next_batch!(ds) |> gpu
+    sample_and_view(xx, model(xx))
+
+    # then, run clean image accuracy
+    acc_metric = MeanMetric()
+    @showprogress 0.1 "Testing..." for step in 1:10
+        x,y = next_batch!(ds) |> gpu
+        acc = accuracy_with_logits(model(x), y)
+        add!(acc_metric, acc)
+    end
+    @show get!(acc_metric)
+
+    # then, run attack
+    if attack_fn != nothing
+        loss_fn(x, y) = my_xent(model(x), y)
+
+        adv = attack_fn(model, loss_fn, xx, yy)
+        # FIXME showing prediction, should show both label/pred
+        sample_and_view(adv, model(adv))
+
+        advacc_metric = MeanMetric()
+        @showprogress 0.1 "Testing adv..." for step in 1:10
+            x,y = next_batch!(ds) |> gpu
+            adv = attack_fn(model, loss_fn, x, y)
+            acc = accuracy_with_logits(model(adv), y)
+            add!(advacc_metric, acc)
+        end
+        @show get!(advacc_metric)
+    end
+    nothing
+end
+
+function custom_advtrain!(model, opt, attack_fn, ds)
+    loss_fn(x, y) = my_xent(model(x), y)
+    ps = Flux.params(model)
+
+    # FIXME how to efficiently track metrics?
+    m_cleanloss = MeanMetric()
+    m_cleanacc = MeanMetric()
+    m_advloss = MeanMetric()
+    m_advacc = MeanMetric()
+    @showprogress 0.1 "Training..." for step in 1:1000
+        x, y = next_batch!(ds) |> gpu
+        x_adv = attack_fn(model, loss_fn, x,y)
+        gs = Flux.Tracker.gradient(ps) do
+            # FIXME this will slow down the model twice
+            clean_logits = model(x)
+            clean_loss = my_xent(clean_logits, y)
+            adv_logits = model(x_adv)
+            adv_loss = my_xent(adv_logits, y)
+
+            # I should be able to compute any value, or even get data, and save
+            # to metrics
+            add!(m_cleanloss, clean_loss.data)
+            add!(m_cleanacc, accuracy_with_logits(clean_logits.data, y))
+            add!(m_advloss, adv_loss.data)
+            add!(m_advacc, accuracy_with_logits(adv_logits.data, y))
+
+            l = adv_loss
+            # DEBUG add clean loss
+            # l = adv_loss + clean_loss
+        end
+        Flux.Tracker.update!(opt, ps, gs)
+
+        if step % 40 == 0
+            println()
+            @show get!(m_cleanloss)
+            @show get!(m_cleanacc)
+            @show get!(m_advloss)
+            @show get!(m_advacc)
+        end
+    end
+end
+
+
+function test()
+    train_ds, test_ds = load_MNIST_ds(batch_size=50);
+    x, y = next_batch!(train_ds) |> gpu;
+
+    # FIXME NOW why Madry model does not work, while LeNet5 works (on
+    # adv+clean, but still not on adv alone)?
+    model = get_Madry_model()[1:end-1]
+    model = get_LeNet5()[1:end-1]
+
+    model(x)
+
+    opt = ADAM(1e-4);
+
+    custom_train!(model, opt, train_ds)
+    custom_advtrain!(model, opt, attack_PGD_k(40), train_ds)
+
+    # FIXME arbitrary model has 1.0 adv accuracy?
+    custom_evaluate(model, test_ds, attack_fn=attack_PGD_k(40))
+    accuracy_with_logits(model(x), y)
+end

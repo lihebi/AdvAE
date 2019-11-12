@@ -510,3 +510,18 @@ function CNN3_AE()
                     x -> σ.(x))
     Chain(encoder, decoder) |> gpu
 end
+function test_concate()
+    # FIXME concatenation works
+    nx = cat(d[1], x_adv, dims=4)
+    ny = gpu(cat(d[2], d[2], dims=2))
+    loss(nx, ny)
+end
+
+adv_accuracy(x, y) = begin
+    x_adv = attack_fn(model, loss, x, y)
+    accuracy(x_adv, y)
+end
+adv_loss(x, y) = begin
+    x_adv = attack_fn(model, loss, x, y)
+    loss(x_adv, y)
+end

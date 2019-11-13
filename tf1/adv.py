@@ -12,7 +12,8 @@ import time
 
 from data_utils import load_mnist, sample_and_view
 
-from model import get_Madry_model, get_LeNet5, dense_AE, train_AE, train_CNN
+from model import get_Madry_model, get_LeNet5, train_CNN
+from model import dense_AE, CNN_AE, train_AE, test_AE
 
 import cleverhans
 from cleverhans.attacks import FastGradientMethod
@@ -178,3 +179,14 @@ def test():
     do_evaluate_attack(cnn, (test_x, test_y))
 
     evaluate_attack(cnn, PGD, (train_x[:1000], train_y[:1000]))
+
+    ae = CNN_AE()
+    test_AE(ae, test_x, test_y)
+    train_AE(ae, train_x)
+
+    # FIXME would this work? Seems to work but the cnn weights also seem to change
+    cnn.trainable = False
+    ae.trainable = True
+    advtrain(Sequential(ae.layers + cnn.layers), (train_x, train_y))
+
+    evaluate_attack(Sequential(ae.layers + cnn.layers), PGD, (test_x, test_y))

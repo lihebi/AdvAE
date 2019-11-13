@@ -58,7 +58,7 @@ def dense_AE():
     decoder = Sequential([Dense(28*28),
                           Reshape((28,28,1)),
                           Activation('sigmoid')])
-    return Sequential([encoder, decoder])
+    return Sequential(encoder.layers + decoder.layers)
 
 
 def CNN_AE():
@@ -70,12 +70,12 @@ def CNN_AE():
                           UpSampling2D(),
                           Conv2D(1, 3, padding='same'),
                           Activation('sigmoid')])
-    return Sequential([encoder, decoder])
+    return Sequential(encoder.layers + decoder.layers)
 
 def train_AE(model, x):
     model.compile(loss=keras.losses.MSE,
                   optimizer=Adam(0.01))
-    model.fit(train_x, train_x, epochs=3)
+    model.fit(x, x, epochs=3)
 
 def test_AE(model, x, y):
     # imrepl(torchvision.utils.make_grid(images))

@@ -4,7 +4,7 @@
 READ-ONLY, keep in sync with next sections, do NOT change this section.
 
 ** MNIST itadv
-MNIST, lr=1e-4, MNISTCNN, ItAdv train, GTX 1070, 72s/epoch
+MNIST, lr=1e-4, MNISTCNN, ItAdv train, batch 32, GTX 1070, 72s/epoch
 
 | epoch | adv acc | clean acc |
 |-------+---------+-----------|
@@ -20,7 +20,7 @@ MNIST, lr=1e-4, MNISTCNN, ItAdv train, GTX 1070, 72s/epoch
 
 ** CIFAR10 clean training
 
-ResNet29, [0,1], lr=1e-3, CNN training. 25s/epoch
+ResNet29, [0,1], lr=1e-3, batch 128, CNN training. 25s/epoch
 
 |       epoch | val acc |
 |-------------+---------|
@@ -38,7 +38,7 @@ ResNet29, [0,1], lr=1e-3, CNN training. 25s/epoch
 
 ** CIFAR10 itadv
 
-Resnet29, [0,1], lr=2e-3, itadv, trained until early stop, 88
+Resnet29, [0,1], lr=2e-3, itadv, batch 128, trained until early stop, 88
 epochs. 160s/epoch. Note that 4e-4 is Madry's starting lr.
 
 

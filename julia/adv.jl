@@ -169,10 +169,22 @@ function test()
     m.n
 end
 
-# FIXME this is scalar operation, but anyway
+# CAUTION: A bug in CuArrays, https://github.com/FluxML/Flux.jl/issues/839
+#
+# onecold(cpu([1,-2])) # => 1
+# onecold(gpu([1,-2])) # => 2
+#
+# The only scalar operation is the "mapreduce" in onecold. It also has bug that
+# causes argmax to give incorrect results, thus, I'm disablng scalar operations,
+# and force using CPU to compute onecold. CAUTION I should also check whether
+# argmax bug affects my code elsewhere.
+CuArrays.allowscalar(false)
 # FIXME do I need .data for y?
 # FIXME logits.data?
-accuracy_with_logits(logits, y) = mean(onecold(logits) .== onecold(y))
+accuracy_with_logits(logits, y) = mean(onecold(cpu(logits)) .== onecold(cpu(y)))
+# CuArrays.allowscalar(true)
+# accuracy_with_logits(logits, y) = mean(onecold(logits) .== onecold(y))
+
 
 """TODO use model and ps in attack? This follows the flux train tradition, but
 is this better? I think using model and loss is better, where loss should accept
@@ -382,22 +394,39 @@ end
 
 
 function test()
+    Random.seed!(1234);
+
     train_ds, test_ds = load_MNIST_ds(batch_size=50);
     x, y = next_batch!(train_ds) |> gpu;
 
     # FIXME NOW why Madry model does not work, while LeNet5 works (on
     # adv+clean, but still not on adv alone)?
     model = get_Madry_model()[1:end-1]
-    model = get_LeNet5()[1:end-1]
-
-    model(x)
+    # model = get_LeNet5()[1:end-1]
 
     opt = ADAM(1e-4);
 
-    custom_train!(model, opt, train_ds)
+    @info "Evaluating un-trained network .."
+    custom_evaluate(model, test_ds, attack_fn=attack_PGD_k(40))
+
+    @info "Adv training .."
+    # custom_train!(model, opt, train_ds)
     custom_advtrain!(model, opt, attack_PGD_k(40), train_ds)
 
-    # FIXME arbitrary model has 1.0 adv accuracy?
+    @info "Evaluating .."
     custom_evaluate(model, test_ds, attack_fn=attack_PGD_k(40))
-    accuracy_with_logits(model(x), y)
+    # accuracy_with_logits(model(x), y)
+end
+
+function test2()
+    # PGD(model, loss, x, y; ϵ = 10, step_size = 0.001, iters = 100, clamp_range = (0, 1))
+    # loss(x,y) = my_xent(model(x), y)
+    # adv = Adversarial.PGD(model, loss, x, y, ϵ=0.3, step_size=0.01, iters=40);
+    adv = myPGD(model, x, y, ϵ=0.3, step_size=0.01, iters=10);
+    # adv = Adversarial.FGSM(model, loss, x, y, ϵ=0.3);
+    accuracy_with_logits(model(adv), y)
+end
+
+function main()
+    test()
 end

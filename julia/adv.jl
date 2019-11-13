@@ -5,6 +5,11 @@
 import Adversarial
 using Images
 
+using Logging
+using LoggingExtras: TeeLogger
+using TensorBoardLogger
+using Dates
+
 include("model.jl")
 
 # CAUTION: A bug in CuArrays, https://github.com/FluxML/Flux.jl/issues/839
@@ -134,8 +139,7 @@ function train!(model, opt, ds;
 
         if step % print_steps == 0
             println()
-            @show get!(loss_metric)
-            @show get!(acc_metric)
+            @info "data" loss=get!(loss_metric) acc=get!(acc_metric)
         end
     end
 end
@@ -175,10 +179,8 @@ function advtrain!(model, opt, attack_fn, ds;
 
         if step % print_steps == 0
             println()
-            @show get!(m_cleanloss)
-            @show get!(m_cleanacc)
-            @show get!(m_advloss)
-            @show get!(m_advacc)
+            @info "loss" nat_loss=get!(m_cleanloss) adv_loss=get!(m_advloss),
+            @info "acc" nat_acc=get!(m_cleanacc) adv_acc=get!(m_advacc)
         end
     end
 end
@@ -204,6 +206,13 @@ function evaluate(model, ds; attack_fn=(m,x,y)->x)
     @show get!(acc_metric)
 end
 
+function create_logger()
+    # FIXME overwrite behavior
+    TeeLogger(global_logger(),
+              TBLogger("tensorboard_logs/exp-$(now())",
+                       min_level=Logging.Info))
+end
+
 function test()
     Random.seed!(1234);
 
@@ -222,10 +231,17 @@ function test()
     # opt = Flux.Optimiser(Flux.ExpDecay(0.001, 0.5, 1000, 1e-4), ADAM(0.001))
     opt = ADAM(1e-4);
 
+    logger = create_logger()
+    with_logger(logger) do
+        train!(model, opt, ds, print_steps=20)
+    end
+
     @info "Adv training .."
     # custom_train!(model, opt, train_ds)
-    @epochs 2 advtrain!(model, opt, attack_PGD_k(40), ds,
-                        print_steps=20)
+
+    with_logger(logger) do
+        @epochs 2 advtrain!(model, opt, attack_PGD_k(40), ds, print_steps=20)
+    end
 
     @info "Evaluating clean accuracy .."
     evaluate(model, test_ds)

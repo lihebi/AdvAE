@@ -36,9 +36,10 @@ end
 mutable struct DataSetIterator
     raw_x::AbstractArray
     raw_y::AbstractArray
-    index::UInt64
-    batch_size::UInt64
-    DataSetIterator(x,y,batch_size) = new(x,y,0,batch_size)
+    index::Int
+    batch_size::Int
+    nbatch::Int
+    DataSetIterator(x,y,batch_size) = new(x,y,0,batch_size, convert(Int, floor(size(x)[end]/batch_size)))
 end
 
 function next_batch!(ds::DataSetIterator)
@@ -88,7 +89,9 @@ function load_MNIST_ds(;batch_size)
 end
 
 function test()
-    train_ds, test_ds = load_MNIST_ds(128)
+    train_ds, test_ds = load_MNIST_ds(batch_size=128);
+    train_ds.nbatch
+    test_ds.nbatch
     x, y = next_batch!(train_ds)
     size(x)
     size(y)

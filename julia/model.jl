@@ -1,5 +1,3 @@
-using Revise
-
 using ProgressMeter
 
 include("data.jl")
@@ -17,22 +15,25 @@ my_glorot_uniform(dims...) = (rand(Float32, dims...) .- 0.5f0) .* sqrt(24.0f0/_n
 Sample up to 10 images and show the image and label. If less than 10, use all.
 
 """
-function sample_and_view(X, Y=nothing, model=nothing)
-    if length(size(X)) < 4
-        X = X[:,:,:,:]
+function sample_and_view(x, y=nothing, model=nothing)
+    if length(size(x)) < 4
+        x = x[:,:,:,:]
     end
-    size(X)[1] in [28,32,56] ||
+    if typeof(x) <: TrackedArray
+        x = x.data
+    end
+    size(x)[1] in [28,32,56] ||
         error("Image size $(size(X)[1]) not correct size. Currently support 28 or 32.")
-    num = min(size(X)[4], 10)
+    num = min(size(x)[4], 10)
     @info "Showing $num images .."
-    imgs = cpu(hcat([X[:,:,:,i] for i in 1:num]...))
+    imgs = cpu(hcat([x[:,:,:,i] for i in 1:num]...))
     viewrepl(imgs)
-    if Y != nothing
-        labels = onecold(cpu(Y[:,1:num]), 0:9)
+    if y != nothing
+        labels = onecold(cpu(y[:,1:num]), 0:9)
         @show labels
     end
     if model != nothing
-        preds = onecold(cpu(model(X)[:,1:num]), 0:9)
+        preds = onecold(cpu(model(x)[:,1:num]), 0:9)
         @show preds
     end
     nothing

@@ -4,3 +4,21 @@ This attempts to clean up previous tf1 implmenetation, and try to figure out
 what's the root cause of performance difference.
 
 
+* using only adv data
+
+It works, but very tricky. You have to use lr=1e-4, not 1e-3. Or, you can use
+1e-3, by first run an epoch of nat+adv, then solo adv.
+
+* Previous advae
+
+How that achieves 90% adv acc in one epoch?
+
+* TODO-list
+
+** custom train loop
+*** test matching previous performance
+*** tensorboard
+** advae test
+** free train
+** dynamic data mixing
+** dynamic attacking strength

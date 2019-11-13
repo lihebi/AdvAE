@@ -110,20 +110,22 @@ function reset!(m::MeanMetric)
     m.n = 0
 end
 
-function train!(model, opt, ds; train_steps=1000, print_steps=40)
-    ps = Flux.params(model)
+function train!(model, opt, ds;
+                loss_fn=my_xent, ps=Flux.params(model),
+                acc_fn=accuracy_with_logits,
+                train_steps=ds.nbatch, print_steps=50)
     loss_metric = MeanMetric()
     acc_metric = MeanMetric()
     step = 0
 
-    @info "Training $train_steps steps.."
+    @info "Training for $train_steps steps, printing every $print_steps steps .."
     @showprogress 0.1 "Training..." for step in 1:train_steps
         x, y = next_batch!(ds) |> gpu
         gs = Flux.Tracker.gradient(ps) do
             logits = model(x)
-            loss = my_xent(logits, y)
+            loss = loss_fn(logits, y)
             add!(loss_metric, loss.data)
-            add!(acc_metric, accuracy_with_logits(logits.data, y))
+            add!(acc_metric, acc_fn(logits.data, y))
             loss
         end
         Flux.Tracker.update!(opt, ps, gs)
@@ -136,14 +138,14 @@ function train!(model, opt, ds; train_steps=1000, print_steps=40)
     end
 end
 
-function advtrain!(model, opt, attack_fn, ds; train_steps=1000, print_steps=40)
-    ps = Flux.params(model)
-
+function advtrain!(model, opt, attack_fn, ds;
+                   loss_fn=my_xent, ps=Flux.params(model),
+                   train_steps=ds.nbatch, print_steps=50)
     m_cleanloss = MeanMetric()
     m_cleanacc = MeanMetric()
     m_advloss = MeanMetric()
     m_advacc = MeanMetric()
-    @info "Training for $train_steps steps .."
+    @info "Training for $train_steps steps, printing every $print_steps steps .."
     @showprogress 0.1 "Training..." for step in 1:train_steps
         x, y = next_batch!(ds) |> gpu
         # this computation won't affect model parameter gradients
@@ -220,7 +222,7 @@ function test()
     @info "Adv training .."
     # custom_train!(model, opt, train_ds)
     @epochs 2 advtrain!(model, opt, attack_PGD_k(40), ds,
-                        train_steps=ds.nbatch, print_steps=20)
+                        print_steps=20)
 
     @info "Evaluating clean accuracy .."
     evaluate(model, test_ds)

@@ -4,11 +4,20 @@ using ProgressMeter
 
 include("data.jl")
 
+# glorot_uniform(dims...) = (rand(Float32, dims...) .- 0.5f0) .* sqrt(24.0f0/sum(dims))
+# glorot_normal(dims...) = randn(Float32, dims...) .* sqrt(2.0f0/sum(dims))
+#
+# https://github.com/FluxML/Flux.jl/issues/442
+
+_nfan(dims...) = prod(dims[1:end-2]) * sum(dims[end-1:end])
+my_glorot_uniform(dims...) = (rand(Float32, dims...) .- 0.5f0) .* sqrt(24.0f0/_nfan(dims...))
+
+
 """
 Sample up to 10 images and show the image and label. If less than 10, use all.
 
 """
-function sample_and_view(X, Y=nothing)
+function sample_and_view(X, Y=nothing, model=nothing)
     if length(size(X)) < 4
         X = X[:,:,:,:]
     end
@@ -92,9 +101,9 @@ end
 
 function get_LeNet5()
     model = Chain(
-        Conv((3,3), 1=>32, relu, pad=(1,1)),
+        Conv((3,3), 1=>32, relu, pad=(1,1), init=my_glorot_uniform),
         MaxPool((2,2)),
-        Conv((3,3), 32=>64, relu, pad=(1,1)),
+        Conv((3,3), 32=>64, relu, pad=(1,1), init=my_glorot_uniform),
         MaxPool((2,2)),
         x -> reshape(x, :, size(x, 4)),
         Dense(7 * 7 * 64, 200, relu),
@@ -106,9 +115,11 @@ end
 
 function get_Madry_model()
     model = Chain(
-        Conv((5,5), 1=>32, pad=(2,2), relu),
+        Conv((5,5), 1=>32, pad=(2,2), relu, init=my_glorot_uniform),
+        # Conv((5,5), 1=>32, pad=(2,2), relu),
         MaxPool((2,2)),
-        Conv((5,5), 32=>64, pad=(2,2), relu),
+        Conv((5,5), 32=>64, pad=(2,2), relu, init=my_glorot_uniform),
+        # Conv((5,5), 32=>64, pad=(2,2), relu),
         MaxPool((2,2)),
         x -> reshape(x, :, size(x, 4)),
         Dense(7*7*64, 1024),

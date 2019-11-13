@@ -27,4 +27,48 @@ good. Probably will have some difference for convergence value.
 
 *** learning rate decay
 
-** dynamic attacking strength
+** Moving to tf1
+
+tf2 cleverhans library is too rudimental, and running time overhead is 5x, I
+think due to attacking. adv accuracy performance is also slower for unknown
+reason. PGD does not pass sanity check, I think due to library code quality issue.
+
+All in all, I'm moving to tf1.
+
+
+* Batch Normalization behavior
+
+Setting it to None, the BN.call will use K.learning_phase(). If I'm not using
+keras training, it will be 0 by default. Thus, I need to do either of these two
+things:
+
+1. use K.set_learning_phase(0/1) to switch
+2. when using the model, use model(x, training=True/False) explicitly. This is
+   mentioned in BN's source code. In 2.0 setting layer trainable=False will
+   switch it to inference mode. See:
+
+#+BEGIN_SRC python
+class BatchNormalizationBase(Layer):
+  def _get_training_value(self, training=None):
+    if training is None:
+      training = K.learning_phase()
+    if self._USE_V2_BEHAVIOR:
+      if isinstance(training, int):
+        training = bool(training)
+      if base_layer_utils.is_in_keras_graph():
+        training = math_ops.logical_and(training, self._get_trainable_var())
+      else:
+        training = math_ops.logical_and(training, self.trainable)
+    return training
+
+  def call(self, inputs, training=None):
+    training = self._get_training_value(training)
+#+END_SRC
+
+Now the question is, whether the calling of model is re-executed when applying
+the model on some data. I think so, because otherwise keras's own loop won't
+work without recreating the layers.
+
+Another problem is subclassing of keras.Model, as user will directly define the
+forward call, and if user used BN layers inside, and does not pass kw_args to
+when calling BN layer, I don't think training parameter would be in effect.

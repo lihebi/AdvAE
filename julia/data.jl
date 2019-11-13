@@ -19,6 +19,90 @@ using EmacsREPL
 
 export load_MNIST, load_CIFAR10
 
+
+using MLDatasets
+
+function test()
+    train_x, train_y = MLDatasets.MNIST.traindata();
+    test_x,  test_y  = MLDatasets.MNIST.testdata();
+    train_x[:,:,1]
+    train_y[1]
+    train_x, train_y = MLDatasets.CIFAR10.traindata();
+    test_x,  test_y  = MLDatasets.CIFAR10.testdata();
+    train_x[:,:,:,1]
+    train_y[1]
+end
+
+mutable struct DataSetIterator
+    raw_x::AbstractArray
+    raw_y::AbstractArray
+    index::Int
+    batch_size::Int
+    nbatch::Int
+    DataSetIterator(x,y,batch_size) = new(x,y,0,batch_size, convert(Int, floor(size(x)[end]/batch_size)))
+end
+
+function next_batch!(ds::DataSetIterator)
+    if (ds.index + 1) * ds.batch_size > size(ds.raw_x)[end]
+        ds.index = 0
+    end
+    if ds.index == 0
+        indices = shuffle(1:size(ds.raw_x)[end])
+        ds.raw_x = ds.raw_x[:,:,:,indices]
+        ds.raw_y = ds.raw_y[:,indices]
+    end
+    a = ds.index * ds.batch_size + 1
+    b = (ds.index + 1) * ds.batch_size
+
+    ds.index += 1
+    # FIXME use view instead of copy
+    # FIXME properly slice with channel-last format
+    return ds.raw_x[:,:,:,a:b], ds.raw_y[:,a:b]
+end
+
+function my_convert2image(x)
+    # DEPRECATED
+    #
+    # FIXME the digits are horizontal-major instead of vertical-major, which is
+    # very weird, create problem for my visualization. I have to use
+    # MLDatasets.MNIST.convert2image, which turns floating array into white
+    # background digits. WTF. I would want to just rotate it.
+    reshape(MLDatasets.MNIST.convert2image(reshape(x, 28,28,:)), 28,28,1,:)
+end
+function load_MNIST_ds(;batch_size)
+    # Ideally, it takes a batch size, and should return an iterator that repeats
+    # infinitely, and shuffle before each epoch. The data should be moved to GPU
+    # on demand. I prefer to just move online during training.
+    train_x, train_y = MLDatasets.MNIST.traindata();
+    test_x,  test_y  = MLDatasets.MNIST.testdata();
+    # reshape to add channel, and onehot y encoding
+    #
+    # I'll just permute dims to make it column major
+    train_ds = DataSetIterator(reshape(permutedims(train_x, [2,1,3]), 28,28,1,:),
+                               onehotbatch(train_y, 0:9), batch_size);
+    # FIXME test_ds should repeat only once
+    # TODO add iterator interface, for x,y in ds end
+    test_ds = DataSetIterator(reshape(permutedims(test_x, [2,1,3]), 28,28,1,:),
+                              onehotbatch(test_y, 0:9), batch_size);
+    # x, y = next_batch!(train_ds);
+    return train_ds, test_ds
+end
+
+function test()
+    train_ds, test_ds = load_MNIST_ds(batch_size=128);
+    train_ds.nbatch
+    test_ds.nbatch
+    x, y = next_batch!(train_ds)
+    size(x)
+    size(y)
+    train_ds.raw_y[1:10]
+    for i=1:1000
+        next_batch!(train_ds)
+        @show train_ds.index
+    end
+    60000 / 32
+end
+
 function make_minibatch(X, Y, idxs)
     X_batch = Array{Float32}(undef, size(X[1])..., 1, length(idxs))
     for i in 1:length(idxs)
@@ -31,10 +115,12 @@ end
 """
 FIXME batch_size cannot equally divide
 FIXME move to GPU on demand, otherwise GPU memory may exaust for large dataset
+FIXME shuffle
+FIXME minibatch
 """
 function load_MNIST(; batch_size=32, val_split=0.1)
-    imgs = MNIST.images();
-    labels = MNIST.labels();
+    imgs = Flux.Data.MNIST.images();
+    labels = Flux.Data.MNIST.labels();
 
     # I don't want to reshape the data. I'll just add reshape layer
     # X = hcat(float.(reshape.(imgs, :))...);
@@ -64,8 +150,8 @@ function load_MNIST(; batch_size=32, val_split=0.1)
     # test_labels = MNIST.labels(:test);
     # test_set = make_minibatch(test_imgs, test_labels, 1:length(test_imgs));
 
-    X, Y = toXY(MNIST.images(:train), MNIST.labels(:train))
-    X2, Y2 = toXY(MNIST.images(:test), MNIST.labels(:test))
+    X, Y = toXY(Flux.Data.MNIST.images(:train), Flux.Data.MNIST.labels(:train))
+    X2, Y2 = toXY(Flux.Data.MNIST.images(:test), Flux.Data.MNIST.labels(:test))
 
     N = length(X)
     # val_split = 0.1
@@ -115,7 +201,7 @@ function load_CIFAR10(; batch_size=32, val_split=0.1)
         end
     end
 
-    X, Y = toXY(trainimgs(CIFAR10));
+    X, Y = toXY(trainimgs(Metalhead.CIFAR10));
 
     N = length(X)
     # TODO use random index
@@ -124,7 +210,7 @@ function load_CIFAR10(; batch_size=32, val_split=0.1)
 
     # There is no testimgs. the valimgs is the test.
     # imgs3 = testimgs(CIFAR10);
-    X2, Y2 = toXY(valimgs(CIFAR10));
+    X2, Y2 = toXY(valimgs(Metalhead.CIFAR10));
     N2 = length(X2);
 
     trainX = gpu.([cat(X[i]..., dims = 4) for i in partition(1:mid, batch_size)]);

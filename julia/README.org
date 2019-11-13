@@ -1,5 +1,14 @@
 #+TITLE: Julia Implementation
 
+* References
+- organization: https://github.com/JuliaML
+- dataset! https://github.com/JuliaML/MLDatasets.jl
+  - pattern https://github.com/JuliaML/MLDataPattern.jl
+- tensorboard logger: https://github.com/PhilipVinc/TensorBoardLogger.jl/
+  - or possibly: https://github.com/zenna/Tensorboard.jl
+
+- a pytorch adv training library from MadryLab https://github.com/MadryLab/robustness
+
 * TODO-list
 
 ** TODO CIFAR10 models

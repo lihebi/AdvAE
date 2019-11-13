@@ -1,3 +1,5 @@
+using Revise
+
 using Flux, Zygote
 using Flux.Data.MNIST
 using Flux: @epochs
@@ -509,4 +511,43 @@ function CNN3_AE()
                     Conv((3,3), 16=>1, pad=(1,1)),
                     x -> σ.(x))
     Chain(encoder, decoder) |> gpu
+end
+function test_concate()
+    # FIXME concatenation works
+    nx = cat(d[1], x_adv, dims=4)
+    ny = gpu(cat(d[2], d[2], dims=2))
+    loss(nx, ny)
+end
+
+adv_accuracy(x, y) = begin
+    x_adv = attack_fn(model, loss, x, y)
+    accuracy(x_adv, y)
+end
+adv_loss(x, y) = begin
+    x_adv = attack_fn(model, loss, x, y)
+    loss(x_adv, y)
+end
+
+
+using TensorBoardLogger, Logging, Random
+
+lg=TBLogger("tensorboard_logs/run", min_level=Logging.Info)
+
+struct sample_struct first_field; other_field; end
+
+with_logger(lg) do
+    for i=1:100
+        x0          = 0.5+i/30; s0 = 0.5/(i/20);
+        edges       = collect(-5:0.1:5)
+        centers     = collect(edges[1:end-1] .+0.05)
+        histvals    = [exp(-((c-x0)/s0)^2) for c=centers]
+        data_tuple  = (edges, histvals)
+        data_struct = sample_struct(i^2, i^1.5-0.3*i)
+
+
+        @info "test" i=i j=i^2 dd=rand(10).+0.1*i hh=data_tuple
+        @info "test_2" i=i j=2^i hh=data_tuple log_step_increment=0
+        @info "" my_weird_struct=data_struct   log_step_increment=0
+        @debug "debug_msg" this_wont_show_up=i
+    end
 end

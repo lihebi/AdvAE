@@ -1,27 +1,41 @@
 # https://github.com/jaypmorgan/Adversarial.jl.git
 #
 # I'm specifically not using PGD, but myPGD instead.
-using Adversarial: FGSM
+# using Adversarial: FGSM
+import Adversarial
 using Images
+
+using Logging
+using LoggingExtras: TeeLogger
+using TensorBoardLogger
+using Dates
 
 include("model.jl")
 
-function train_MNIST_model(model, trainX, trainY, valX, valY)
-    model(trainX[1]);
+# CAUTION: A bug in CuArrays, https://github.com/FluxML/Flux.jl/issues/839
+#
+# onecold(cpu([1,-2])) # => 1
+# onecold(gpu([1,-2])) # => 2
+#
+# The only scalar operation is the "mapreduce" in onecold. It also has bug that
+# causes argmax to give incorrect results, thus, I'm disablng scalar operations,
+# and force using CPU to compute onecold. CAUTION I should also check whether
+# argmax bug affects my code elsewhere.
+CuArrays.allowscalar(false)
+# FIXME do I need .data for y?
+# FIXME logits.data?
+accuracy_with_logits(logits, y) = mean(onecold(cpu(logits)) .== onecold(cpu(y)))
+# CuArrays.allowscalar(true)
+# accuracy_with_logits(logits, y) = mean(onecold(logits) .== onecold(y))
 
-    loss(x, y) = crossentropy(model(x), y)
-    accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
-
-    evalcb = throttle(() -> @show(loss(valX[1], valY[1])) , 5);
-    opt = ADAM(1e-3);
-    @epochs 10 mytrain!(loss, Flux.params(model), zip(trainX, trainY), opt, cb=evalcb)
-end
+my_xent(logits, y) = Flux.logitcrossentropy(logits, y)
 
 """Not using, the same as Adversarial.jl's FGSM.
 """
-function myFGSM(model, loss, x, y; ϵ = 0.1, clamp_range = (0, 1))
+function myFGSM(model, x, y; ϵ = 0.3, clamp_range = (0, 1))
+    # FIXME what if I just don't create Flux.params(model)?
     px, θ = Flux.param(x), Flux.params(model)
-    Flux.Tracker.gradient(() -> loss(px, y), θ)
+    Flux.Tracker.gradient(() -> my_xent(model(px), y), θ)
     x_adv = clamp.(x + (Float32(ϵ) * sign.(px.grad)), clamp_range...)
 end
 
@@ -35,17 +49,22 @@ My modifications:
 
 - clipped into valid range of epsilon, i.e. clip_eta in cleverhans
 """
-function myPGD(model, loss, x, y;
-               ϵ = 10, step_size = 0.001,
-               iters = 100, clamp_range = (0, 1))
+function myPGD(model, x, y;
+               ϵ = 0.3, step_size = 0.01,
+               iters = 40, clamp_range = (0, 1))
     # start from the random point
-    r = clamp.(gpu(randn(Float32, size(x)...)), clamp_range...)
+    # eta = gpu(randn(Float32, size(x)...))
+    # eta = clamp.(eta, -ϵ, ϵ)
     # DEBUG uniform sample
-    # r = gpu(rand(Float32, size(x)...)) .- 0.5 .* 2
-    x_adv = clamp.(x + (r * Float32(step_size)), clamp_range...)
+    eta = (gpu(rand(Float32, size(x)...)) .- 0.5) * 2 * ϵ
+    # FIXME this clamp should not be necessary
+    eta = clamp.(eta, -ϵ, ϵ)
+    x_adv = x + Float32.(eta)
+    x_adv = clamp.(x_adv, clamp_range...)
+    # x_adv = clamp.(x + (r * Float32(step_size)), clamp_range...)
     for iter = 1:iters
-        x_adv = FGSM(model, loss, x_adv, y;
-                     ϵ = step_size, clamp_range = clamp_range)
+        x_adv = myFGSM(model, x_adv, y;
+                       ϵ = step_size, clamp_range = clamp_range)
         eta = x_adv - x
         eta = clamp.(eta, -ϵ, ϵ)
         x_adv = x + Float32.(eta)
@@ -54,16 +73,16 @@ function myPGD(model, loss, x, y;
     return x_adv
 end
 
-function attack_PGD(model, loss, x, y)
-    x_adv = myPGD(model, loss, x, y;
+function attack_PGD(model, x, y)
+    x_adv = myPGD(model, x, y;
                   ϵ = 0.3,
                   step_size = 0.01,
                   iters = 40)
 end
 
 function attack_PGD_k(k)
-    (model, loss, x, y) -> begin
-        x_adv = myPGD(model, loss, x, y;
+    (model, x, y) -> begin
+        x_adv = myPGD(model, x, y;
                       ϵ = 0.3,
                       step_size = 0.01,
                       iters = k)
@@ -71,152 +90,165 @@ function attack_PGD_k(k)
 end
 
 
-function attack_FGSM(model, loss, x, y)
-    x_adv = FGSM(model, loss, x, y; ϵ = 0.3)
+function attack_FGSM(model, x, y)
+    x_adv = myFGSM(model, x, y; ϵ = 0.3)
 end
 
-"""Attack the model, get adversarial inputs, and evaluate accuracy
-
-TODO different attack methods
-FIXME use all test data to test
-"""
-function evaluate_attack(model, attack_fn, trainX, trainY, testX, testY)
-    accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
-    println("Clean accuracy:")
-    # FIXME this may need to be evaluated on CPU
-    @show accuracy(trainX[1], trainY[1])
-    @show accuracy(testX[1], testY[1])
-
-    sample_and_view(testX[1], testY[1])
-
-    # using only one
-    # x = testX[1][:,:,:,1:1]
-    # y = testY[1][:,1]
-    # use 10
-    # x = testX[1][:,:,:,1:10]
-    # y = testY[1][:,1:10]
-    # use entire batch
-    x = testX[1]
-    y = testY[1]
-
-    loss(x, y) = crossentropy(model(x), y)
-    @info "performing attack .."
-    x_adv = attack_fn(model, loss, x, y)
-    @info "attack done."
-
-    # we can see that the predicted labels are different
-    # adversarial_pred = model(x_adv) |> Flux.onecold
-    # original_pred = model(x) |> Flux.onecold
-
-    @show accuracy(x_adv, y)
-
-    sample_and_view(x_adv, model(x_adv))
-
-    # all test data
-    accs = []
-    @showprogress 0.1 "testing all data .." for d in zip(testX, testY)
-        x, y = d
-        loss(x, y) = crossentropy(model(x), y)
-        x_adv = attack_fn(model, loss, x, y)
-        acc = accuracy(x_adv, y)
-        push!(accs, acc)
-    end
-    @show mean(accs)
-    nothing
+# something like tf.keras.metrics.Mean
+# a good reference https://github.com/apache/incubator-mxnet/blob/master/julia/src/metric.jl
+mutable struct MeanMetric
+    sum::Float64
+    n::Int
+    MeanMetric() = new(0.0, 0)
+end
+function add!(m::MeanMetric, v)
+    m.sum += v
+    m.n += 1
+end
+get(m::MeanMetric) = m.sum / m.n
+function get!(m::MeanMetric)
+    res = m.sum / m.n
+    reset!(m)
+    res
+end
+function reset!(m::MeanMetric)
+    m.sum = 0.0
+    m.n = 0
 end
 
+function train!(model, opt, ds;
+                train_steps=ds.nbatch, print_steps=50)
+    ps=Flux.params(model)
 
-"""TODO use model and ps in attack? This follows the flux train tradition, but
-is this better? I think using model and loss is better, where loss should accept
-model, not x and y.
+    loss_metric = MeanMetric()
+    acc_metric = MeanMetric()
+    step = 0
 
-TODO full adv evaluation at the end of each epoch
 
-"""
-function advtrain!(model, attack_fn, loss, ps, data, opt; cb = () -> ())
-    ps = Flux.Tracker.Params(ps)
-    cb = runall(cb)
-    @showprogress 0.1 "Training..." for d in data
-        x_adv = attack_fn(model, loss, d...)
-
-        # train xent loss using adv data
+    @info "Training for $train_steps steps, printing every $print_steps steps .."
+    @showprogress 0.1 "Training..." for step in 1:train_steps
+        x, y = next_batch!(ds) |> gpu
         gs = Flux.Tracker.gradient(ps) do
-            # addition works
-            # loss(x_adv, d[2]) + loss(d...)
-            loss(x_adv, d[2])
-
-            # FIXME concatenation works
-            # nx = cat(d[1], x_adv, dims=4)
-            # ny = gpu(cat(d[2], d[2], dims=2))
-            # loss(nx, ny)
-
-            # FIXME cannot run two loss sequentially. The last one seems to be in effect
-            # loss(d...)
-            # loss(x_adv, d[2])
+            logits = model(x)
+            loss = my_xent(logits, y)
+            add!(loss_metric, loss.data)
+            add!(acc_metric, accuracy_with_logits(logits.data, y))
+            loss
         end
         Flux.Tracker.update!(opt, ps, gs)
 
-        cb()
+        if step % print_steps == 0
+            println()
+            @info "data" loss=get!(loss_metric) acc=get!(acc_metric)
+        end
     end
 end
 
-function advtrain(model, attack_fn, trainX, trainY, valX, valY)
-    model(trainX[1]);
+function advtrain!(model, opt, attack_fn, ds;
+                   train_steps=ds.nbatch, print_steps=50)
+    ps=Flux.params(model)
 
-    loss(x, y) = crossentropy(model(x), y)
-    # evalcb = throttle(() -> @show(loss(valX[1], valY[1])) , 5);
-    #
-    # I should probably monitor the adv accuracy
-    accuracy(x, y) = mean(onecold(model(x)) .== onecold(y))
-    adv_accuracy(x, y) = begin
-        x_adv = attack_fn(model, loss, x, y)
-        accuracy(x_adv, y)
-    end
-    adv_loss(x, y) = begin
-        x_adv = attack_fn(model, loss, x, y)
-        loss(x_adv, y)
-    end
-    cb_fn() = begin
-        # add a new line so that it plays nicely with progress bar
-        @time begin
-            println("")
-            @show loss(valX[1], valY[1])
-            @show adv_loss(valX[1], valY[1])
-            @show accuracy(valX[1], valY[1])
-            @show adv_accuracy(valX[1], valY[1])
-            @show accuracy(trainX[1], trainY[1])
-            @show adv_accuracy(trainX[1], trainY[1])
+    m_cleanloss = MeanMetric()
+    m_cleanacc = MeanMetric()
+    m_advloss = MeanMetric()
+    m_advacc = MeanMetric()
+    @info "Training for $train_steps steps, printing every $print_steps steps .."
+    @showprogress 0.1 "Training..." for step in 1:train_steps
+        x, y = next_batch!(ds) |> gpu
+        # this computation won't affect model parameter gradients
+        x_adv = attack_fn(model, x, y)
+
+        gs = Flux.Tracker.gradient(ps) do
+            # FIXME this will slow down the model twice
+            adv_logits = model(x_adv)
+            adv_loss = my_xent(adv_logits, y)
+
+            clean_logits = model(x)
+            clean_loss = my_xent(clean_logits, y)
+
+            add!(m_advloss, adv_loss.data)
+            add!(m_advacc, accuracy_with_logits(adv_logits.data, y))
+            add!(m_cleanloss, clean_loss.data)
+            add!(m_cleanacc, accuracy_with_logits(clean_logits.data, y))
+
+            l = adv_loss
+            # l = clean_loss
+            # l = adv_loss + clean_loss
+        end
+        Flux.Tracker.update!(opt, ps, gs)
+
+        if step % print_steps == 0
+            println()
+            @info "loss" nat_loss=get!(m_cleanloss) adv_loss=get!(m_advloss),
+            @info "acc" nat_acc=get!(m_cleanacc) adv_acc=get!(m_advacc)
         end
     end
-    evalcb = throttle(cb_fn , 10);
+end
 
-    # train
+
+function evaluate(model, ds; attack_fn=(m,x,y)->x)
+    xx,yy = next_batch!(ds) |> gpu
+
+    @info "Sampling BEFORE images .."
+    sample_and_view(xx, yy, model)
+    @info "Sampling AFTER images .."
+    adv = attack_fn(model, xx, yy)
+    sample_and_view(adv, yy, model)
+
+    @info "Testing multiple batches .."
+    acc_metric = MeanMetric()
+    @showprogress 0.1 "Testing..." for step in 1:10
+        x,y = next_batch!(ds) |> gpu
+        adv = attack_fn(model, x, y)
+        acc = accuracy_with_logits(model(adv), y)
+        add!(acc_metric, acc)
+    end
+    @show get!(acc_metric)
+end
+
+function create_logger()
+    # FIXME overwrite behavior
+    TeeLogger(global_logger(),
+              TBLogger("tensorboard_logs/exp-$(now())",
+                       min_level=Logging.Info))
+end
+
+function test()
+    Random.seed!(1234);
+
+    ds, test_ds = load_MNIST_ds(batch_size=50);
+    x, y = next_batch!(ds) |> gpu;
+
+    model = get_Madry_model()[1:end-1]
+    # model = get_LeNet5()[1:end-1]
+
+    # Warm up the model
+    model(x)
+
     # FIXME would this be 0.001 * 0.001?
     # FIXME decay on pleau
     # FIXME print out information when decayed
     # opt = Flux.Optimiser(Flux.ExpDecay(0.001, 0.5, 1000, 1e-4), ADAM(0.001))
     opt = ADAM(1e-4);
-    @epochs 3 advtrain!(model, attack_fn, loss, Flux.params(model), zip(trainX, trainY), opt, cb=evalcb)
+
+    logger = create_logger()
+    with_logger(logger) do
+        train!(model, opt, ds, print_steps=20)
+    end
+
+    @info "Adv training .."
+    # custom_train!(model, opt, train_ds)
+
+    with_logger(logger) do
+        @epochs 2 advtrain!(model, opt, attack_PGD_k(40), ds, print_steps=20)
+    end
+
+    @info "Evaluating clean accuracy .."
+    evaluate(model, test_ds)
+    evaluate(model, test_ds, attack_fn=attack_FGSM)
+    evaluate(model, test_ds, attack_fn=attack_PGD_k(40))
 end
 
-
-function test_attack()
-    (trainX, trainY), (valX, valY), (testX, testY) = load_MNIST(batch_size=50);
-
-    cnn = get_Madry_model()
-    # FIXME LeNet5 is working, Madry is not working
-    # cnn = get_LeNet5()
-
-    train_MNIST_model(cnn, trainX, trainY, valX, valY)
-
-    # FIXME it does not seem to have the same level of security
-    advtrain(cnn, attack_PGD_k(7), trainX, trainY, valX, valY)
-    advtrain(cnn, attack_PGD_k(20), trainX, trainY, valX, valY)
-    advtrain(cnn, attack_PGD_k(40), trainX, trainY, valX, valY)
-
-    evaluate_attack(cnn, attack_FGSM, trainX, trainY, testX, testY)
-    evaluate_attack(cnn, attack_PGD, trainX, trainY, testX, testY)
-    evaluate_attack(cnn, attack_PGD_k(7), trainX, trainY, testX, testY)
-    evaluate_attack(cnn, attack_PGD_k(20), trainX, trainY, testX, testY)
-    evaluate_attack(cnn, attack_PGD_k(40), trainX, trainY, testX, testY)
+function main()
+    test()
 end

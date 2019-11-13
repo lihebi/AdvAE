@@ -28,8 +28,12 @@ function sample_and_view(X, Y=nothing, model=nothing)
     imgs = cpu(hcat([X[:,:,:,i] for i in 1:num]...))
     viewrepl(imgs)
     if Y != nothing
-        labels = onecold(Y[:,1:num], 0:9)
+        labels = onecold(cpu(Y[:,1:num]), 0:9)
         @show labels
+    end
+    if model != nothing
+        preds = onecold(cpu(model(X)[:,1:num]), 0:9)
+        @show preds
     end
     nothing
 end

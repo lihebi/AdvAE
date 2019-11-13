@@ -1,7 +1,8 @@
 # https://github.com/jaypmorgan/Adversarial.jl.git
 #
 # I'm specifically not using PGD, but myPGD instead.
-using Adversarial: FGSM
+# using Adversarial: FGSM
+import Adversarial
 using Images
 
 include("model.jl")
@@ -24,9 +25,9 @@ end
 
 """Not using, the same as Adversarial.jl's FGSM.
 """
-function myFGSM(model, loss, x, y; ϵ = 0.1, clamp_range = (0, 1))
+function myFGSM(model, x, y; ϵ = 0.3, clamp_range = (0, 1))
     px, θ = Flux.param(x), Flux.params(model)
-    Flux.Tracker.gradient(() -> loss(px, y), θ)
+    Flux.Tracker.gradient(() -> my_xent(model(px), y), θ)
     x_adv = clamp.(x + (Float32(ϵ) * sign.(px.grad)), clamp_range...)
 end
 
@@ -40,9 +41,9 @@ My modifications:
 
 - clipped into valid range of epsilon, i.e. clip_eta in cleverhans
 """
-function myPGD(model, loss, x, y;
-               ϵ = 10, step_size = 0.001,
-               iters = 100, clamp_range = (0, 1))
+function myPGD(model, x, y;
+               ϵ = 0.3, step_size = 0.01,
+               iters = 40, clamp_range = (0, 1))
     # start from the random point
     # eta = gpu(randn(Float32, size(x)...))
     # eta = clamp.(eta, -ϵ, ϵ)
@@ -54,8 +55,8 @@ function myPGD(model, loss, x, y;
     x_adv = clamp.(x_adv, clamp_range...)
     # x_adv = clamp.(x + (r * Float32(step_size)), clamp_range...)
     for iter = 1:iters
-        x_adv = FGSM(model, loss, x_adv, y;
-                     ϵ = step_size, clamp_range = clamp_range)
+        x_adv = myFGSM(model, x_adv, y;
+                       ϵ = step_size, clamp_range = clamp_range)
         eta = x_adv - x
         eta = clamp.(eta, -ϵ, ϵ)
         x_adv = x + Float32.(eta)
@@ -64,16 +65,16 @@ function myPGD(model, loss, x, y;
     return x_adv
 end
 
-function attack_PGD(model, loss, x, y)
-    x_adv = myPGD(model, loss, x, y;
+function attack_PGD(model, x, y)
+    x_adv = myPGD(model, x, y;
                   ϵ = 0.3,
                   step_size = 0.01,
                   iters = 40)
 end
 
 function attack_PGD_k(k)
-    (model, loss, x, y) -> begin
-        x_adv = myPGD(model, loss, x, y;
+    (model, x, y) -> begin
+        x_adv = myPGD(model, x, y;
                       ϵ = 0.3,
                       step_size = 0.01,
                       iters = k)
@@ -81,8 +82,8 @@ function attack_PGD_k(k)
 end
 
 
-function attack_FGSM(model, loss, x, y)
-    x_adv = FGSM(model, loss, x, y; ϵ = 0.3)
+function attack_FGSM(model, x, y)
+    x_adv = myFGSM(model, x, y; ϵ = 0.3)
 end
 
 """Attack the model, get adversarial inputs, and evaluate accuracy
@@ -109,9 +110,8 @@ function evaluate_attack(model, attack_fn, trainX, trainY, testX, testY)
     x = testX[1]
     y = testY[1]
 
-    loss(x, y) = my_xent(model(x), y)
     @info "performing attack .."
-    x_adv = attack_fn(model, loss, x, y)
+    x_adv = attack_fn(model, x, y)
     @info "attack done."
 
     # we can see that the predicted labels are different
@@ -126,8 +126,7 @@ function evaluate_attack(model, attack_fn, trainX, trainY, testX, testY)
     m_acc = MeanMetric()
     @showprogress 0.1 "testing all data .." for d in zip(testX, testY)
         x, y = d
-        loss(x, y) = my_xent(model(x), y)
-        x_adv = attack_fn(model, loss, x, y)
+        x_adv = attack_fn(model, x, y)
         acc = accuracy(x_adv, y)
         add!(m_acc, acc)
     end
@@ -205,7 +204,7 @@ function advtrain!(model, attack_fn, loss, ps, data, opt; cb = () -> ())
     @showprogress 0.1 "Training..." for d in data
         # FIXME can I use x,y in for variable?
         x, y = d
-        x_adv = attack_fn(model, loss, d...)
+        x_adv = attack_fn(model, d...)
 
         # train xent loss using adv data
         gs = Flux.Tracker.gradient(ps) do
@@ -250,7 +249,6 @@ end
 function advtrain(model, attack_fn, trainX, trainY, valX, valY)
     model(trainX[1]);
 
-    loss_fn(x, y) = my_xent(model(x), y)
     # evalcb = throttle(cb_fn , 5);
     evalcb = () -> ()
 
@@ -263,7 +261,7 @@ function advtrain(model, attack_fn, trainX, trainY, valX, valY)
     # TODO use steps instead of epoch
     # TODO shuffle dataset, using data loader instead of moving all data to GPU at once
     # TODO make it faster
-    @epochs 3 advtrain!(model, attack_fn, loss_fn, Flux.params(model), zip(trainX, trainY), opt, cb=evalcb)
+    @epochs 3 advtrain!(model, attack_fn, Flux.params(model), zip(trainX, trainY), opt, cb=evalcb)
 end
 
 
@@ -319,9 +317,10 @@ end
 function custom_evaluate(model, ds; attack_fn=nothing)
     # first, sample clean image
     xx,yy = next_batch!(ds) |> gpu
-    sample_and_view(xx, model(xx))
 
-    # then, run clean image accuracy
+    @info "Evaluating clean images .."
+    sample_and_view(xx, yy, model)
+
     acc_metric = MeanMetric()
     @showprogress 0.1 "Testing..." for step in 1:10
         x,y = next_batch!(ds) |> gpu
@@ -332,16 +331,14 @@ function custom_evaluate(model, ds; attack_fn=nothing)
 
     # then, run attack
     if attack_fn != nothing
-        loss_fn(x, y) = my_xent(model(x), y)
-
-        adv = attack_fn(model, loss_fn, xx, yy)
-        # FIXME showing prediction, should show both label/pred
-        sample_and_view(adv, model(adv))
+        @info "Evaluating attack .."
+        adv = attack_fn(model, xx, yy)
+        sample_and_view(adv, yy, model)
 
         advacc_metric = MeanMetric()
         @showprogress 0.1 "Testing adv..." for step in 1:10
             x,y = next_batch!(ds) |> gpu
-            adv = attack_fn(model, loss_fn, x, y)
+            adv = attack_fn(model, x, y)
             acc = accuracy_with_logits(model(adv), y)
             add!(advacc_metric, acc)
         end
@@ -351,7 +348,6 @@ function custom_evaluate(model, ds; attack_fn=nothing)
 end
 
 function custom_advtrain!(model, opt, attack_fn, ds)
-    loss_fn(x, y) = my_xent(model(x), y)
     ps = Flux.params(model)
 
     # FIXME how to efficiently track metrics?
@@ -361,22 +357,26 @@ function custom_advtrain!(model, opt, attack_fn, ds)
     m_advacc = MeanMetric()
     @showprogress 0.1 "Training..." for step in 1:1000
         x, y = next_batch!(ds) |> gpu
-        x_adv = attack_fn(model, loss_fn, x,y)
+        # this computation won't affect model parameter gradients
+        x_adv = attack_fn(model, x, y)
+
         gs = Flux.Tracker.gradient(ps) do
             # FIXME this will slow down the model twice
-            clean_logits = model(x)
-            clean_loss = my_xent(clean_logits, y)
             adv_logits = model(x_adv)
             adv_loss = my_xent(adv_logits, y)
 
+            clean_logits = model(x)
+            clean_loss = my_xent(clean_logits, y)
+
             # I should be able to compute any value, or even get data, and save
             # to metrics
-            add!(m_cleanloss, clean_loss.data)
-            add!(m_cleanacc, accuracy_with_logits(clean_logits.data, y))
             add!(m_advloss, adv_loss.data)
             add!(m_advacc, accuracy_with_logits(adv_logits.data, y))
+            add!(m_cleanloss, clean_loss.data)
+            add!(m_cleanacc, accuracy_with_logits(clean_logits.data, y))
 
             l = adv_loss
+            # l = clean_loss
             # DEBUG add clean loss
             # l = adv_loss + clean_loss
         end

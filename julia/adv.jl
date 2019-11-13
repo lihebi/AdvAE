@@ -28,6 +28,7 @@ my_xent(logits, y) = Flux.logitcrossentropy(logits, y)
 """Not using, the same as Adversarial.jl's FGSM.
 """
 function myFGSM(model, x, y; ϵ = 0.3, clamp_range = (0, 1))
+    # FIXME what if I just don't create Flux.params(model)?
     px, θ = Flux.param(x), Flux.params(model)
     Flux.Tracker.gradient(() -> my_xent(model(px), y), θ)
     x_adv = clamp.(x + (Float32(ϵ) * sign.(px.grad)), clamp_range...)
@@ -111,21 +112,22 @@ function reset!(m::MeanMetric)
 end
 
 function train!(model, opt, ds;
-                loss_fn=my_xent, ps=Flux.params(model),
-                acc_fn=accuracy_with_logits,
                 train_steps=ds.nbatch, print_steps=50)
+    ps=Flux.params(model)
+
     loss_metric = MeanMetric()
     acc_metric = MeanMetric()
     step = 0
+
 
     @info "Training for $train_steps steps, printing every $print_steps steps .."
     @showprogress 0.1 "Training..." for step in 1:train_steps
         x, y = next_batch!(ds) |> gpu
         gs = Flux.Tracker.gradient(ps) do
             logits = model(x)
-            loss = loss_fn(logits, y)
+            loss = my_xent(logits, y)
             add!(loss_metric, loss.data)
-            add!(acc_metric, acc_fn(logits.data, y))
+            add!(acc_metric, accuracy_with_logits(logits.data, y))
             loss
         end
         Flux.Tracker.update!(opt, ps, gs)
@@ -139,8 +141,9 @@ function train!(model, opt, ds;
 end
 
 function advtrain!(model, opt, attack_fn, ds;
-                   loss_fn=my_xent, ps=Flux.params(model),
                    train_steps=ds.nbatch, print_steps=50)
+    ps=Flux.params(model)
+
     m_cleanloss = MeanMetric()
     m_cleanacc = MeanMetric()
     m_advloss = MeanMetric()

@@ -91,7 +91,8 @@ def accuracy(model, dl):
     return correct / total
 
 def train_MNIST_model(model, train_dl, valid_dl):
-    opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+    # opt = optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+    opt = optim.Adam(model.parameters(), lr=1e-3)
     # this (and NLLLoss in general) expects label as target, thus no need to
     # one-hot encoding
     loss_fn = nn.CrossEntropyLoss()

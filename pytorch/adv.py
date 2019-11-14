@@ -81,7 +81,7 @@ def advtrain(model, opt, loss_fn, dl, cb=None, epoch=10):
                 with torch.no_grad():
                     cb(i, running_loss)
             # FIXME move this to cb
-            if i % 20 == 9:
+            if i % 50 == 1:
                 with torch.no_grad():
                     nat_acc = _accuracy(model, inputs, labels)
                     adv_acc = _accuracy(model, xadv, labels)
@@ -136,6 +136,10 @@ def do_evaluate_attack(model, dl):
     evaluate_attack(model,
                     lambda m,l,x,y: attack_LinfPGD(m,l,x,y),
                     dl)
+    print('evaluating full PGD ..')
+    evaluate_attack(model,
+                    lambda m,l,x,y: PGD(m,l,x,y),
+                    dl, full=True)
 
 from advertorch.attacks import LinfPGDAttack
 def attack_LinfPGD(model, loss_fn, x, y):
@@ -150,7 +154,7 @@ def test():
     torch.manual_seed(0)
 
     model = get_Madry_model()
-    model = get_LeNet5()
+    # model = get_LeNet5()
 
     train_dl, valid_dl, test_dl = get_mnist(batch_size=50)
 

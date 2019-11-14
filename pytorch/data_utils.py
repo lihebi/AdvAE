@@ -110,13 +110,16 @@ def get_cifar10(batch_size=128, cachedir='./cache'):
 
 def test_use():
 
+    train_dl, valid_dl, test_dl = get_mnist()
     # get some random training images
-    dataiter = iter(trainloader)
-    images, labels = dataiter.next()
+    dataiter = iter(train_dl)
+    images, labels = next(dataiter)
 
     # show images
     _imshow(torchvision.utils.make_grid(images))
-    imrepl(torchvision.utils.make_grid(images))
+    imrepl(torchvision.utils.make_grid(images[:100]))
+    imrepl(torchvision.utils.make_grid(images[:100], nrow=20))
+    imrepl(torchvision.utils.make_grid(images[:20], nrow=10))
     # print labels
     print(' '.join('%5s' % classes[labels[j]] for j in range(4)))
 

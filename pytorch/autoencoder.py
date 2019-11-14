@@ -79,8 +79,8 @@ def evaluate_AE(model, dl):
     imrepl(make_grid(decoded[:10], nrow=10))
 
 def test_AE():
-    # cnn = get_Madry_model()
-    cnn = get_LeNet5()
+    cnn = get_Madry_model()
+    # cnn = get_LeNet5()
     ae = dense_AE()
     ae = CNN_AE()
 
@@ -104,6 +104,7 @@ def test_AE():
 
 
 def do_advae_train(ae, cnn, dl):
+    # opt = optim.SGD(ae.parameters(), lr=0.1, momentum=0.9)
     opt = optim.Adam(ae.parameters(), lr=1e-3)
     loss_fn = nn.CrossEntropyLoss()
     model = nn.Sequential(ae, cnn)
@@ -138,10 +139,10 @@ def advae_train(model, opt, loss_fn, dl, cb=None, epoch=10):
 
             if i % 20 == 9:
                 with torch.no_grad():
-                    nat_acc = _accuracy(model, inputs, labels)
                     adv_acc = _accuracy(model, xadv, labels)
                     adv_loss = running_loss / i
-                    nat_loss = loss_fn(model(inputs), labels)
                     # adv_acc = 0
+                    nat_loss = loss_fn(model(inputs), labels)
+                    nat_acc = _accuracy(model, inputs, labels)
                     print('nat acc: {:.3f}, adv acc: {:.3f}'.format(nat_acc, adv_acc))
                     print('nat loss: {:.3f}, adv loss: {:.3f}'.format(nat_loss, adv_loss))

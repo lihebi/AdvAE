@@ -18,6 +18,16 @@ RUN apt-get install -y sudo
 RUN apt-get install -y rxvt-unicode
 RUN apt-get install -y tmux htop silversearcher-ag
 
+# For showing iamges in emacs
+RUN apt-get install -y imagemagick
+
+# TODO I might need a browser
+# RUN apt-get install -y chromium-browser
+# FIXME chromium does not work inside container, firefox does
+# RUN apt-get install -y firefox
+
+# for elpy RPC
+RUN apt-get install -y python3-venv
 
 ENV DOCKER_ENVIRONMENT "set"
 
@@ -34,12 +44,13 @@ RUN git clone https://github.com/lihebi/dothebi .hebi &&\
         sh .hebi/install.sh &&\
         sh .hebi/setup-git.sh
 
-# keras
-RUN pip install --user matplotlib seaborn cleverhans
+# NOTE: do not install keras
+RUN pip install --user matplotlib seaborn cleverhans ipython foolbox pillow tqdm
 
 RUN mkdir git
 RUN cd git && git clone https://github.com/lihebi/AdvAE
 RUN cd git && git clone https://github.com/MadryLab/mnist_challenge
+RUN cd git && git clone https://github.com/MadryLab/cifar10_challenge
 
 RUN mkdir .vnc
 ADD xstartup .vnc/xstartup

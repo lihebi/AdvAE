@@ -141,15 +141,18 @@ function train!(model, opt, ds;
 
         if step % print_steps == 0
             println()
-            @info "data" loss=get!(loss_metric) acc=get!(acc_metric) log_step_increment=print_steps
+            @info "data" loss=get!(loss_metric) acc=get!(acc_metric)
         end
     end
 end
 
 function advtrain!(model, opt, attack_fn, ds;
-                   train_steps=ds.nbatch, print_steps=50,
+                   train_steps=ds.nbatch,
+                   from_steps=1,
+                   print_steps=50,
                    logger=global_logger(),
-                   save_cb=(i)->nothing)
+                   save_cb=(i)->nothing,
+                   test_cb=(i)->nothing)
     ps=Flux.params(model)
 
     m_cleanloss = MeanMetric()
@@ -157,7 +160,7 @@ function advtrain!(model, opt, attack_fn, ds;
     m_advloss = MeanMetric()
     m_advacc = MeanMetric()
     @info "Training for $train_steps steps, printing every $print_steps steps .."
-    @showprogress 0.1 "Training..." for step in 1:train_steps
+    @showprogress 0.1 "Training..." for step in from_steps:train_steps
         x, y = next_batch!(ds) |> gpu
         # this computation won't affect model parameter gradients
         x_adv = attack_fn(model, x, y)
@@ -181,18 +184,17 @@ function advtrain!(model, opt, attack_fn, ds;
         end
         Flux.Tracker.update!(opt, ps, gs)
 
-        save_cb(step)
-
         if step % print_steps == 0
             println()
             @info "data" get(m_cleanloss) get(m_advloss) get(m_cleanacc) get(m_advacc)
             # TODO log training time
-            @show typeof(logger)
-            with_logger(logger) do
-                @info "loss" nat_loss=get!(m_cleanloss) adv_loss=get!(m_advloss) log_step_increment=0
-                @info "acc" nat_acc=get!(m_cleanacc) adv_acc=get!(m_advacc) log_step_increment=print_steps
-            end
+            log_value(logger, "loss/nat_loss", get!(m_cleanloss), step=step)
+            log_value(logger, "loss/adv_loss", get!(m_advloss), step=step)
+            log_value(logger, "acc/nat_acc", get!(m_cleanacc), step=step)
+            log_value(logger, "acc/adv_acc", get!(m_advacc), step=step)
         end
+        test_cb(step)
+        save_cb(step)
     end
 end
 
@@ -203,7 +205,7 @@ function exp_itadv(lr, total_steps)
     model_file = "trained/itadv-$lr.bson"
     mkpath(dirname(model_file))
 
-    # FIXME should I record @time?
+    # TODO record training @time?
     # FIXME what should be my batch_size?
     ds, test_ds = load_MNIST_ds(batch_size=50);
     x, y = next_batch!(ds) |> gpu;
@@ -215,24 +217,20 @@ function exp_itadv(lr, total_steps)
         # it can be key=value pair, or just the variable, but cannot be x.y
         @load model_file weights from_steps
         @info "loading weights"
+        # NOTE: add 1 as starting step
+        from_steps += 1
         model = get_Madry_model()[1:end-1]
         Flux.loadparams!(model, weights)
     else
         @info "Starting from scratch .."
         model = get_Madry_model()[1:end-1]
-        from_steps = 0
+        from_steps = 1
     end
 
-    # advancing logger
-    logger = TBLogger("tensorboard_logs/exp-itadv-$lr", tb_append, min_level=Logging.Info)
+    @info "Progress" total_steps from_steps
 
-    to_steps = total_steps - from_steps
-    @info "Progress:" total_steps from_steps to_steps
-
-    @info "Advancing log step .." log_step_increment=from_steps
-    with_logger(logger) do
-        @info "Advancing log step .." log_step_increment=from_steps
-    end
+    logger = TBLogger("tensorboard_logs/exp-itadv-$lr/train", tb_append, min_level=Logging.Info)
+    test_logger = TBLogger("tensorboard_logs/exp-itadv-$lr/test", tb_append, min_level=Logging.Info)
 
     # warm up the model
     model(x)
@@ -242,24 +240,64 @@ function exp_itadv(lr, total_steps)
 
     function save_cb(step)
         # FIXME as config, should be Integer multiple of print_steps
-        save_steps = 20
+        save_steps = 100
         if step % save_steps == 0
-            println()
             @info "saving .."
             # FIXME opt cannot be saved
             # FIXME logger cannot be saved
             #
             # FIXME model cannot be easily saved and loaded, weights can, but
             # needs to get rid of CuArrays and TrackedArrays
-            @save model_file weights=Tracker.data.(Flux.params(cpu(model))) from_steps=step
+            @time @save model_file weights=Tracker.data.(Flux.params(cpu(model))) from_steps=step
+        end
+    end
+
+    function test_cb(step)
+        # FIXME this function uses too many lexical scope variables
+        # model, test_logger, test_ds
+        test_per_steps = 100
+        # I'm only testing a fraction of data
+        test_run_steps = 20
+        if step % test_per_steps == 0
+            println()
+            @info "testing for $test_run_steps steps .."
+            m_cleanloss = MeanMetric()
+            m_cleanacc = MeanMetric()
+            m_advloss = MeanMetric()
+            m_advacc = MeanMetric()
+            # FIXME as parameter
+            attack_fn = attack_PGD_k(40)
+            @showprogress 0.1 "Inner testing..." for i in 1:test_run_steps
+                x, y = next_batch!(test_ds) |> gpu
+                # this computation won't affect model parameter gradients
+                x_adv = attack_fn(model, x, y)
+                adv_logits = model(x_adv)
+                adv_loss = my_xent(adv_logits, y)
+                clean_logits = model(x)
+                clean_loss = my_xent(clean_logits, y)
+                add!(m_advloss, adv_loss.data)
+                add!(m_advacc, accuracy_with_logits(adv_logits.data, y))
+                add!(m_cleanloss, clean_loss.data)
+                add!(m_cleanacc, accuracy_with_logits(clean_logits.data, y))
+            end
+            @info "test data" get(m_cleanloss) get(m_advloss) get(m_cleanacc) get(m_advacc)
+            @info "logging results .."
+
+            # use explicit API to avoid manipulating log_step_increment
+            log_value(test_logger, "loss/nat_loss", get!(m_cleanloss), step=step)
+            log_value(test_logger, "loss/adv_loss", get!(m_advloss), step=step)
+            log_value(test_logger, "acc/nat_acc", get!(m_cleanacc), step=step)
+            log_value(test_logger, "acc/adv_acc", get!(m_advacc), step=step)
         end
     end
 
     advtrain!(model, opt, attack_PGD_k(40), ds,
-              train_steps=to_steps,
+              train_steps=total_steps,
+              from_steps=from_steps,
               print_steps=20,
               logger=logger,
-              save_cb=save_cb)
+              save_cb=save_cb,
+              test_cb=test_cb)
 
 end
 

@@ -569,3 +569,17 @@ function test_logger()
     end
 end
 
+function test_nested_meter()
+    @showprogress 0.1 "Level 0 " for i in 1:10
+        sleep(0.5)
+        if i % 2 == 0
+            @showprogress 0.1 " Level 1 " 1 for i2 in 1:10
+                sleep(0.5)
+                @showprogress 0.1 "  Level 2 " 2 for i3 in 1:10
+                    sleep(0.5)
+                end
+            end
+        end
+        sleep(0.5)
+    end
+end

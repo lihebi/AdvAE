@@ -10,6 +10,8 @@ using LoggingExtras: TeeLogger
 using TensorBoardLogger
 using Dates
 
+using BSON: @save, @load
+
 include("model.jl")
 
 # CAUTION: A bug in CuArrays, https://github.com/FluxML/Flux.jl/issues/839
@@ -139,13 +141,15 @@ function train!(model, opt, ds;
 
         if step % print_steps == 0
             println()
-            @info "data" loss=get!(loss_metric) acc=get!(acc_metric)
+            @info "data" loss=get!(loss_metric) acc=get!(acc_metric) log_step_increment=print_steps
         end
     end
 end
 
 function advtrain!(model, opt, attack_fn, ds;
-                   train_steps=ds.nbatch, print_steps=50)
+                   train_steps=ds.nbatch, print_steps=50,
+                   logger=global_logger(),
+                   save_cb=(i)->nothing)
     ps=Flux.params(model)
 
     m_cleanloss = MeanMetric()
@@ -177,14 +181,87 @@ function advtrain!(model, opt, attack_fn, ds;
         end
         Flux.Tracker.update!(opt, ps, gs)
 
+        save_cb(step)
+
         if step % print_steps == 0
             println()
-            @info "loss" nat_loss=get!(m_cleanloss) adv_loss=get!(m_advloss),
-            @info "acc" nat_acc=get!(m_cleanacc) adv_acc=get!(m_advacc)
+            @info "data" get(m_cleanloss) get(m_advloss) get(m_cleanacc) get(m_advacc)
+            # TODO log training time
+            @show typeof(logger)
+            with_logger(logger) do
+                @info "loss" nat_loss=get!(m_cleanloss) adv_loss=get!(m_advloss) log_step_increment=0
+                @info "acc" nat_acc=get!(m_cleanacc) adv_acc=get!(m_advacc) log_step_increment=print_steps
+            end
         end
     end
 end
 
+"""
+TODO test data and results
+"""
+function exp_itadv(lr, total_steps)
+    model_file = "trained/itadv-$lr.bson"
+    mkpath(dirname(model_file))
+
+    # FIXME should I record @time?
+    # FIXME what should be my batch_size?
+    ds, test_ds = load_MNIST_ds(batch_size=50);
+    x, y = next_batch!(ds) |> gpu;
+
+    if isfile(model_file)
+        @info "Loading from $model_file .."
+        # During load, there is no key=value, but the variable name shall match
+        # the key when saving, thus the order is not important. During saving,
+        # it can be key=value pair, or just the variable, but cannot be x.y
+        @load model_file weights from_steps
+        @info "loading weights"
+        model = get_Madry_model()[1:end-1]
+        Flux.loadparams!(model, weights)
+    else
+        @info "Starting from scratch .."
+        model = get_Madry_model()[1:end-1]
+        from_steps = 0
+    end
+
+    # advancing logger
+    logger = TBLogger("tensorboard_logs/exp-itadv-$lr", tb_append, min_level=Logging.Info)
+
+    to_steps = total_steps - from_steps
+    @info "Progress:" total_steps from_steps to_steps
+
+    @info "Advancing log step .." log_step_increment=from_steps
+    with_logger(logger) do
+        @info "Advancing log step .." log_step_increment=from_steps
+    end
+
+    # warm up the model
+    model(x)
+
+    # FIXME opt states
+    opt = ADAM(lr);
+
+    function save_cb(step)
+        # FIXME as config, should be Integer multiple of print_steps
+        save_steps = 20
+        if step % save_steps == 0
+            println()
+            @info "saving .."
+            # FIXME opt cannot be saved
+            # FIXME logger cannot be saved
+            #
+            # FIXME model cannot be easily saved and loaded, weights can, but
+            # needs to get rid of CuArrays and TrackedArrays
+            @save model_file weights=Tracker.data.(Flux.params(cpu(model))) from_steps=step
+        end
+    end
+
+    advtrain!(model, opt, attack_PGD_k(40), ds,
+              train_steps=to_steps,
+              print_steps=20,
+              logger=logger,
+              save_cb=save_cb)
+
+end
 
 function evaluate(model, ds; attack_fn=(m,x,y)->x)
     xx,yy = next_batch!(ds) |> gpu
@@ -206,12 +283,6 @@ function evaluate(model, ds; attack_fn=(m,x,y)->x)
     @show get!(acc_metric)
 end
 
-function create_logger()
-    # FIXME overwrite behavior
-    TeeLogger(global_logger(),
-              TBLogger("tensorboard_logs/exp-$(now())",
-                       min_level=Logging.Info))
-end
 
 function test()
     Random.seed!(1234);
@@ -249,6 +320,33 @@ function test()
     evaluate(model, test_ds, attack_fn=attack_PGD_k(40))
 end
 
+# integer in bytes
+# 7G = 7 * 1000 * 1000 * 1000
+# FIXME does not work
+ENV["CUARRAYS_MEMORY_LIMIT"] = 7 * 1000 * 1000 * 1000
+
+function exp()
+    # itadv train with different learning rate
+    # FIXME should I use learning rate decay at the same time?
+    exp_itadv(1e-1, 500)
+    exp_itadv(5e-2, 500)
+    exp_itadv(1e-2, 500)
+    exp_itadv(5e-3, 500)
+    exp_itadv(1e-3, 500)
+    exp_itadv(5e-4, 1000)
+
+
+    exp_itadv(1e-4, 5000)
+    exp_itadv(5e-5, 5000)
+    exp_itadv(1e-5, 5000)
+
+    # TODO pretrain CNN with different learning rate
+    # TODO nat+acc 1:1 with different learning rate
+    # TODO mixing data with schedule
+    # TODO dynamic attacking strength
+end
+
 function main()
     test()
+    exp_itadv(1e-4, 500)
 end

@@ -551,3 +551,21 @@ with_logger(lg) do
         @debug "debug_msg" this_wont_show_up=i
     end
 end
+
+function test_logger()
+    name="$(now())"
+    TeeLogger(global_logger(),
+              TBLogger("tensorboard_logs/exp-$name",
+                       min_level=Logging.Info))
+    TBLogger("tensorboard_logs/exp-$name", min_level=Logging.Info)
+
+    # 7937 bytes
+    @save "test.bson" weights=Tracker.data.(Flux.params(cpu(model)))
+    # 37482 bytes, so I'm going to just save the model
+    @save "test.bson" model
+    with_logger(ConsoleLogger(stderr, Logging.Debug)) do
+        @info "hello"
+        @debug "world"
+    end
+end
+

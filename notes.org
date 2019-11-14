@@ -1,0 +1,57 @@
+#+TITLE: Implementation notes
+
+* TODO-list
+
+* DONE-list
+
+** DONE pytorch implementation
+   CLOSED: [2019-11-14 Thu 10:04]
+** DONE julia try LeNet5 and Madry model
+   CLOSED: [2019-11-14 Thu 10:04]
+and compare advae performance with pytorch model
+** DONE tf keras issue
+   CLOSED: [2019-11-14 Thu 10:04]
+
+tf.keras is not working in tf1. must use keras.
+
+** DONE matching previous tf1 code performance
+   CLOSED: [2019-11-13 Wed 17:46]
+
+See if I can match the itadv performance of my previous code:
+
+- MNIST itadv train
+- ResNet clean train
+- ResNet itadv train
+
+I probably work on tf1 code now, add summary writer, and probably use 0-255
+range for directly comparable to lr settings for MNIST_challenge and free_train.
+
+** CANCELED subtract mean, divide stddev ????
+   CLOSED: [2019-11-10 Sun 18:59]
+
+pred = cnn(norm(x))
+
+Using
+
+#+begin_example
+norm(perturb(x))
+#+end_example
+
+We can easily define allowed perturbation. But this is not how the training
+works. The attacker only see normed x norm(x). Thus it becomes:
+
+#+begin_example
+perturb(norm(x))
+#+end_example
+
+However, here perturb won't have a clearly defined allowed perturbation.
+
+Or do BN layers achieve the same effect?
+
+Forget about it, does not seem to be very important.
+
+
+** CANCELED tf2.0 + cleverhans future
+   CLOSED: [2019-11-14 Thu 10:05]
+
+Can I just use tf1 related staff in tf2? No.

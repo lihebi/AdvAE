@@ -1,0 +1,160 @@
+#+TITLE: Implementation notes
+* References
+- organization: https://github.com/JuliaML
+- dataset! https://github.com/JuliaML/MLDatasets.jl
+  - pattern https://github.com/JuliaML/MLDataPattern.jl
+
+- a pytorch adv training library from MadryLab https://github.com/MadryLab/robustness
+
+
+* robust training
+
+** plots
+
+*** show problem of itadv
+
+plot different learning rate onto loss/acc
+
+*** nat+clean 1:1
+*** pretrianed CNN with lambda=0
+
+*** compare with dynamic data mixing
+plot different learning rate onto loss/acc, both approach
+*** compare dynamic data mixing with dynamic attacking strength
+
+- Dy-Mix
+- Dy-Attack
+
+1. the number of steps to converge should be the same
+2. the time/step compares three approaches:
+   - Dy-Mix, Dy-Attack, It-Adv
+
+** dynamic data mixing
+
+- a good article for dynamic learning rate https://www.jeremyjordan.me/nn-learning-rate/
+- visualize and show the gradient surface, such as https://arxiv.org/abs/1712.09913
+- learning rate paper: Cyclical Learning Rates for Training Neural Networks
+
+*** Some questions
+
+- when loss decreases, the input gradient of loss is smaller, then the learning
+  rate should increase?
+
+- should the lambda ratio of nat and adv sum to 1?
+
+** TODO dynamic attacking strength
+
+*** cifar10 resnet model
+https://github.com/tensorflow/models/blob/master/official/vision/image_classification/resnet_cifar_model.py
+
+*** adapt natural train and adv train for cifar models
+*** implement dy-attack
+*** imagenet
+*** compare with free_train
+*** compare with 1:1 data mixing
+
+
+* TODO-list
+
+
+** TODO CIFAR10 models
+
+*** TODO data augmentation
+*** TODO densenet
+https://github.com/FluxML/Metalhead.jl/
+*** TODO learning rate schedule/decay
+*** CANCELED early stopping
+    CLOSED: [2019-11-13 Wed 16:17]
+
+
+*** DONE batchnorm layer
+    CLOSED: [2019-10-31 Thu 16:03]
+*** DONE ResNet
+    CLOSED: [2019-10-31 Thu 12:15]
+*** CANCELED VGG
+    CLOSED: [2019-10-31 Thu 12:15]
+
+** TODO adversarial attacks
+https://github.com/jaypmorgan/Adversarial.jl
+
+*** DONE PGD
+    CLOSED: [2019-11-01 Fri 16:27]
+*** DONE FGSM
+    CLOSED: [2019-11-01 Fri 16:27]
+*** TODO CW
+*** TODO black-box substitute model
+*** TODO BoundaryAttack, BAPP
+*** TODO BPDA
+
+
+*** STARTED AdvAE
+**** auto encoder
+***** Dunet
+*** HGD
+
+** STARTED GAN
+*** GAN
+*** DefenseGAN
+
+
+** CANCELED fix the local package version problem
+   CLOSED: [2019-11-02 Sat 13:28]
+
+
+* DONE-list
+
+** DONE @progress
+   CLOSED: [2019-10-17 Thu 16:17]
+
+ProgressMeter.jl https://github.com/timholy/ProgressMeter.jl
+
+Very easy to use:
+
+#+BEGIN_SRC julia
+@showprogress 1 "Computing..." for i in 1:50
+    sleep(0.1)
+end
+#+END_SRC
+
+** DONE adversarial training
+   CLOSED: [2019-11-13 Wed 16:16]
+*** DONE itadvtrain
+    CLOSED: [2019-11-01 Fri 16:27]
+
+**** DONE convergency problem
+     CLOSED: [2019-11-13 Wed 16:16]
+There seems to be some problems: when directly using 20-PGD or 40-PGD, it does
+not converge. Two ways:
+- use 7-PGD, then 20-PGD, then 40-PGD. This seems to be the best strategy
+- use 40-PGD directly, but train with both adv_x and x
+- first train clean CNN for 1 epoch, then adv train
+- weights initialization and regularization?
+
+**** DONE consistency with python code
+     CLOSED: [2019-11-13 Wed 16:16]
+- speed seems to be a lot slower
+- accuracy does not seem to be equal at each epoch
+- convergency (or not) rate
+- the final performance, 40-iter PGD, 0.8033, while should be 0.95
+
+I'm going to use docker container to run the python code. For that I'd build a
+machine with VNC support, via either:
+- build ontop of tf official images
+- see how tf official images are built, and build on top of ubuntu from scratch
+** DONE tensorboard support
+   CLOSED: [2019-11-14 Thu 10:02]
+- tensorboard logger: https://github.com/PhilipVinc/TensorBoardLogger.jl/
+  - or possibly: https://github.com/zenna/Tensorboard.jl
+
+Install tensorflow:
+
+#+begin_example
+pip install --user tensorflow==1.15
+#+end_example
+
+The tensorflow package should install tensorboard. If not:
+
+#+begin_example
+pip install --user tensorboard==1.15
+#+end_example
+

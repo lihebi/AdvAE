@@ -2,7 +2,7 @@
 #
 # I'm specifically not using PGD, but myPGD instead.
 # using Adversarial: FGSM
-import Adversarial
+# import Adversarial
 
 using BSON: @save, @load
 
@@ -116,16 +116,19 @@ function reset!(m::MeanMetric)
 end
 
 function train!(model, opt, ds;
-                train_steps=ds.nbatch, print_steps=100)
+                train_steps=ds.nbatch,
+                from_steps=1,
+                print_steps=100,
+                logger=nothing,
+                save_cb=(i)->nothing,
+                test_cb=(i)->nothing)
     ps=Flux.params(model)
 
     loss_metric = MeanMetric()
     acc_metric = MeanMetric()
-    step = 0
-
 
     @info "Training for $train_steps steps, printing every $print_steps steps .."
-    @showprogress 0.1 "Training..." for step in 1:train_steps
+    @showprogress 0.1 "Training..." for step in from_steps:train_steps
         x, y = next_batch!(ds) |> gpu
         gs = Flux.Tracker.gradient(ps) do
             logits = model(x)
@@ -138,8 +141,14 @@ function train!(model, opt, ds;
 
         if step % print_steps == 0
             println()
-            @info "data" loss=get!(loss_metric) acc=get!(acc_metric)
+            @info "data" loss=get(loss_metric) acc=get(acc_metric)
+            if typeof(logger) <: TBLogger
+                log_value(logger, "loss", get!(loss_metric), step=step)
+                log_value(logger, "acc", get!(acc_metric), step=step)
+            end
         end
+        test_cb(step)
+        save_cb(step)
     end
 end
 
@@ -214,7 +223,7 @@ function create_save_cb(model_file, model)
     end
 end
 
-function create_test_cb(model, test_ds; logger=nothing)
+function create_adv_test_cb(model, test_ds; logger=nothing)
     function test_cb(step)
         test_per_steps = 100
         # I'm only testing a fraction of data
@@ -250,6 +259,36 @@ function create_test_cb(model, test_ds; logger=nothing)
                 log_value(logger, "loss/adv_loss", get!(m_advloss), step=step)
                 log_value(logger, "acc/nat_acc", get!(m_cleanacc), step=step)
                 log_value(logger, "acc/adv_acc", get!(m_advacc), step=step)
+            end
+        end
+    end
+end
+
+function create_test_cb(model, test_ds; logger=nothing)
+    function test_cb(step)
+        test_per_steps = 100
+        # I'm only testing a fraction of data
+        test_run_steps = 20
+        if step % test_per_steps == 0
+            println()
+            @info "testing for $test_run_steps steps .."
+            m_cleanloss = MeanMetric()
+            m_cleanacc = MeanMetric()
+            @showprogress 0.1 "Inner testing..." for i in 1:test_run_steps
+                x, y = next_batch!(test_ds) |> gpu
+                # this computation won't affect model parameter gradients
+                logits = model(x)
+                loss = my_xent(logits, y)
+                add!(m_cleanloss, loss.data)
+                add!(m_cleanacc, accuracy_with_logits(logits.data, y))
+            end
+            @info "test data" get(m_cleanloss) get(m_cleanacc)
+
+            # use explicit API to avoid manipulating log_step_increment
+            if typeof(logger) <: TBLogger
+                @info "logging results .."
+                log_value(logger, "loss", get!(m_cleanloss), step=step)
+                log_value(logger, "acc", get!(m_cleanacc), step=step)
             end
         end
     end

@@ -150,7 +150,8 @@ function advtrain!(model, opt, attack_fn, ds;
                    train_steps=ds.nbatch,
                    from_steps=1,
                    print_steps=50,
-                   logger=global_logger(),
+                   logger=nothing,
+                   λ = 0,
                    save_cb=(i)->nothing,
                    test_cb=(i)->nothing)
     ps=Flux.params(model)
@@ -178,9 +179,7 @@ function advtrain!(model, opt, attack_fn, ds;
             add!(m_cleanloss, clean_loss.data)
             add!(m_cleanacc, accuracy_with_logits(clean_logits.data, y))
 
-            l = adv_loss
-            # l = clean_loss
-            # l = adv_loss + clean_loss
+            l = adv_loss + λ * clean_loss
         end
         Flux.Tracker.update!(opt, ps, gs)
 
@@ -188,59 +187,22 @@ function advtrain!(model, opt, attack_fn, ds;
             println()
             @info "data" get(m_cleanloss) get(m_advloss) get(m_cleanacc) get(m_advacc)
             # TODO log training time
-            log_value(logger, "loss/nat_loss", get!(m_cleanloss), step=step)
-            log_value(logger, "loss/adv_loss", get!(m_advloss), step=step)
-            log_value(logger, "acc/nat_acc", get!(m_cleanacc), step=step)
-            log_value(logger, "acc/adv_acc", get!(m_advacc), step=step)
+            if typeof(logger) <: TBLogger
+                log_value(logger, "loss/nat_loss", get!(m_cleanloss), step=step)
+                log_value(logger, "loss/adv_loss", get!(m_advloss), step=step)
+                log_value(logger, "acc/nat_acc", get!(m_cleanacc), step=step)
+                log_value(logger, "acc/adv_acc", get!(m_advacc), step=step)
+            end
         end
         test_cb(step)
         save_cb(step)
     end
 end
 
-"""
-TODO test data and results
-"""
-function exp_itadv(lr, total_steps)
-    model_file = "trained/itadv-$lr.bson"
-    mkpath(dirname(model_file))
-
-    # TODO record training @time?
-    # FIXME what should be my batch_size?
-    ds, test_ds = load_MNIST_ds(batch_size=50);
-    x, y = next_batch!(ds) |> gpu;
-
-    if isfile(model_file)
-        @info "Loading from $model_file .."
-        # During load, there is no key=value, but the variable name shall match
-        # the key when saving, thus the order is not important. During saving,
-        # it can be key=value pair, or just the variable, but cannot be x.y
-        @load model_file weights from_steps
-        @info "loading weights"
-        # NOTE: add 1 as starting step
-        from_steps += 1
-        model = get_Madry_model()[1:end-1]
-        Flux.loadparams!(model, weights)
-    else
-        @info "Starting from scratch .."
-        model = get_Madry_model()[1:end-1]
-        from_steps = 1
-    end
-
-    @info "Progress" total_steps from_steps
-
-    logger = TBLogger("tensorboard_logs/exp-itadv-$lr/train", tb_append, min_level=Logging.Info)
-    test_logger = TBLogger("tensorboard_logs/exp-itadv-$lr/test", tb_append, min_level=Logging.Info)
-
-    # warm up the model
-    model(x)
-
-    # FIXME opt states
-    opt = ADAM(lr);
-
+function create_save_cb(model_file, model)
     function save_cb(step)
         # FIXME as config, should be Integer multiple of print_steps
-        save_steps = 100
+        save_steps = 40
         if step % save_steps == 0
             @info "saving .."
             # FIXME opt cannot be saved
@@ -251,10 +213,12 @@ function exp_itadv(lr, total_steps)
             @time @save model_file weights=Tracker.data.(Flux.params(cpu(model))) from_steps=step
         end
     end
+end
 
+function create_test_cb(model, test_logger, test_ds)
+    # FIXME this function uses too many lexical scope variables
+    # model, test_logger, test_ds
     function test_cb(step)
-        # FIXME this function uses too many lexical scope variables
-        # model, test_logger, test_ds
         test_per_steps = 100
         # I'm only testing a fraction of data
         test_run_steps = 20
@@ -290,11 +254,107 @@ function exp_itadv(lr, total_steps)
             log_value(test_logger, "acc/adv_acc", get!(m_advacc), step=step)
         end
     end
+end
+
+function get_pretrained_model()
+    model_file = "trained/pretrain.bson"
+    if isfile(model_file)
+        @info "Already trained. Loading .."
+        # load the model
+        @load model_file weights
+        @info "loading weights into model"
+        model = get_Madry_model()[1:end-1]
+        Flux.loadparams!(model, weights)
+        return model
+    else
+        @info "Pre-training CNN model .."
+        model = get_Madry_model()[1:end-1]
+        ds, test_ds = load_MNIST_ds(batch_size=50);
+        x, y = next_batch!(ds) |> gpu;
+        model(x)
+
+        opt = ADAM(1e-3);
+        @info "trainig .."
+        train!(model, opt, ds)
+        @info "saving .."
+        @save model_file weights=Tracker.data.(Flux.params(cpu(model)))
+        return model
+    end
+end
+
+function maybe_load(model_file)
+    if isfile(model_file)
+        @info "Loading from $model_file .."
+        # During load, there is no key=value, but the variable name shall match
+        # the key when saving, thus the order is not important. During saving,
+        # it can be key=value pair, or just the variable, but cannot be x.y
+        @load model_file weights from_steps
+        @info "loading weights"
+        # NOTE: add 1 as starting step
+        from_steps += 1
+        model = get_Madry_model()[1:end-1]
+        Flux.loadparams!(model, weights)
+    else
+        @info "Starting from scratch .."
+        # FIXME load a pretrained model here
+        model = get_Madry_model()[1:end-1]
+        from_steps = 1
+    end
+    return model, from_steps
+end
+
+function exp_itadv(lr, total_steps)
+    expID = "itadv-$lr"
+    exp_helper(expID, lr, total_steps, 0)
+end
+
+function exp_pretrain(lr, total_steps)
+    expID = "pretrain-$lr"
+    exp_helper(expID, lr, total_steps, 0, pretrain=true)
+end
+
+function exp_f1(lr, total_steps)
+    expID = "f1-$lr"
+    exp_helper(expID, lr, total_steps, 1)
+end
+
+function exp_helper(expID, lr, total_steps, λ; pretrain=false)
+    model_file = "trained/$expID.bson"
+    mkpath(dirname(model_file))
+
+    # TODO record training @time? I need to use the average time instead of
+    # accumulated time, because accumulated time introduces states that needs to
+    # be saved. This is not very urgent.
+    #
+    # FIXME what should be my batch_size?
+    ds, test_ds = load_MNIST_ds(batch_size=50);
+    x, y = next_batch!(ds) |> gpu;
+
+    model, from_steps = maybe_load(model_file)
+    if from_steps == 1 & pretrain
+        model = get_pretrained_model()
+    end
+    @info "Progress" total_steps from_steps
+    # stops here to avoid model warming up overhead
+    if from_steps > total_steps return end
+
+    logger = TBLogger("tensorboard_logs/exp-$expID/train", tb_append, min_level=Logging.Info)
+    test_logger = TBLogger("tensorboard_logs/exp-$expID/test", tb_append, min_level=Logging.Info)
+
+    # warm up the model
+    model(x)
+
+    # FIXME opt states
+    opt = ADAM(lr);
+
+    save_cb = create_save_cb(model_file, model)
+    test_cb = create_test_cb(model, test_logger, test_ds)
 
     advtrain!(model, opt, attack_PGD_k(40), ds,
               train_steps=total_steps,
               from_steps=from_steps,
               print_steps=20,
+              λ=λ,
               logger=logger,
               save_cb=save_cb,
               test_cb=test_cb)
@@ -363,28 +423,81 @@ end
 # FIXME does not work
 ENV["CUARRAYS_MEMORY_LIMIT"] = 7 * 1000 * 1000 * 1000
 
+function exp_itadv()
+    # FIXME should I use learning rate decay at the same time?
+    #
+    # NOTE: the steps must devide all metric steps, especially save steps,
+    # otherwise it won't be saved correctly.
+    exp_itadv(1e-1, 600)
+    exp_itadv(5e-2, 600)
+    exp_itadv(1e-2, 600)
+    exp_itadv(5e-3, 600)
+    exp_itadv(1e-3, 600)
+    exp_itadv(5e-4, 1000)
+    exp_itadv(4e-4, 1000)
+
+    # converging from 3e-4, (HEBI: this is the border line)
+    exp_itadv(3e-4, 6000)
+    exp_itadv(1e-4, 8000)
+    exp_itadv(5e-5, 4000)
+
+    exp_itadv(1e-5, 3000)
+end
+
+function exp_pretrain()
+    exp_pretrain(1e-2, 1000)
+    # This does not converge, and I would expect nat acc to graduallly reduce 0.1
+    exp_pretrain(1e-3, 1000)
+    exp_pretrain(8e-4, 2000)
+    # TODO and this is important because it is next to border-line. FIXME It
+    # also does work
+    exp_pretrain(7e-4, 2000)
+
+    # This converges, and (HEBI: this is the border line)
+    exp_pretrain(6e-4, 5000)
+    # it is working here, but struggled
+    exp_pretrain(5e-4, 5000)
+    # TODO and I want to show how the worked one perform with a pretrained start
+    exp_pretrain(3e-4, 3000)
+end
+
+function exp_f1()
+    # TODO what about starting from pretrained?
+    #
+    # (HEBI: I hope this not to reach high accuracy)
+    #
+    # FIXME what if we just use a simple lr decay? The key point should be, no
+    # matter how the lr change, the accuracy should still not reach the high
+    # value. This might make more sense on CIFAR10 than MNIST. I'll need to stop
+    # here and (HEBI: move to CIFAR NOW).
+    #
+    # this defnintely does not converge, this lr may not converge even for clean
+    # train, I didn't try though.
+    exp_f1(1e-2, 2000)
+    # this converges, but end acc is not high, as expected
+    exp_f1(8e-3, 3000)
+    exp_f1(5e-3, 3000)
+    # TODO what is the borderline of fast+acc
+    exp_f1(3e-3, 5000)
+    exp_f1(2e-3, 5000)
+    # this should be the most promising results for this exp setting
+    exp_f1(1e-3, 5000)
+    exp_f1(5e-4, 1000)
+end
+
 function exp()
     # itadv train with different learning rate
-    # FIXME should I use learning rate decay at the same time?
-    exp_itadv(1e-1, 500)
-    exp_itadv(5e-2, 500)
-    exp_itadv(1e-2, 500)
-    exp_itadv(5e-3, 500)
-    exp_itadv(1e-3, 500)
-    exp_itadv(5e-4, 1000)
-
-
-    exp_itadv(1e-4, 5000)
-    exp_itadv(5e-5, 5000)
-    exp_itadv(1e-5, 5000)
-
+    exp_itadv()
     # TODO pretrain CNN with different learning rate
+    exp_pretrain()
     # TODO nat+acc 1:1 with different learning rate
+    exp_f1()
     # TODO mixing data with schedule
     # TODO dynamic attacking strength
+    # FIXME I will need to monitor the acc of which attack?
 end
 
 function main()
     test()
-    exp_itadv(1e-4, 500)
+    exp()
 end

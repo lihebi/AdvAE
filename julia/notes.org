@@ -8,15 +8,21 @@
 
 
 * robust training
+** TODO cifar10
+** TODO imagenet
 
 ** plots
 
-*** show problem of itadv
+*** DONE show problem of itadv
+    CLOSED: [2019-11-14 Thu 11:21]
 
 plot different learning rate onto loss/acc
 
-*** nat+clean 1:1
-*** pretrianed CNN with lambda=0
+*** TODO visualize the gradient surface of mixing clean data
+
+*** DONE pretrianed CNN with lambda=0
+    CLOSED: [2019-11-14 Thu 17:13]
+*** TODO nat+clean 1:1
 
 *** compare with dynamic data mixing
 plot different learning rate onto loss/acc, both approach

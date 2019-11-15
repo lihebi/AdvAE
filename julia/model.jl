@@ -1,7 +1,5 @@
 using ProgressMeter
 
-include("data.jl")
-
 # glorot_uniform(dims...) = (rand(Float32, dims...) .- 0.5f0) .* sqrt(24.0f0/sum(dims))
 # glorot_normal(dims...) = randn(Float32, dims...) .* sqrt(2.0f0/sum(dims))
 #
@@ -12,50 +10,44 @@ my_glorot_uniform(dims...) = (rand(Float32, dims...) .- 0.5f0) .* sqrt(24.0f0/_n
 
 
 function get_LeNet5()
-    model = Chain(
-        Conv((3,3), 1=>32, relu, pad=(1,1), init=my_glorot_uniform),
-        MaxPool((2,2)),
-        Conv((3,3), 32=>64, relu, pad=(1,1), init=my_glorot_uniform),
-        MaxPool((2,2)),
-        x -> reshape(x, :, size(x, 4)),
-        Dense(7 * 7 * 64, 200, relu),
-        Dense(200, 10),
-        softmax,
-    ) |> gpu;
-    return model
+    Chain(Conv((3,3), 1=>32, relu, pad=(1,1), init=my_glorot_uniform),
+          MaxPool((2,2)),
+          Conv((3,3), 32=>64, relu, pad=(1,1), init=my_glorot_uniform),
+          MaxPool((2,2)),
+          x -> reshape(x, :, size(x, 4)),
+          Dense(7 * 7 * 64, 200, relu),
+          Dense(200, 10),
+          softmax,
+          ) |> gpu
 end
 
 function get_Madry_model()
-    model = Chain(
-        Conv((5,5), 1=>32, pad=(2,2), relu, init=my_glorot_uniform),
-        # Conv((5,5), 1=>32, pad=(2,2), relu),
-        MaxPool((2,2)),
-        Conv((5,5), 32=>64, pad=(2,2), relu, init=my_glorot_uniform),
-        # Conv((5,5), 32=>64, pad=(2,2), relu),
-        MaxPool((2,2)),
-        x -> reshape(x, :, size(x, 4)),
-        Dense(7*7*64, 1024),
-        Dense(1024, 10),
-        softmax,
-    ) |> gpu;
-    return model
+    Chain(Conv((5,5), 1=>32, pad=(2,2), relu, init=my_glorot_uniform),
+          # Conv((5,5), 1=>32, pad=(2,2), relu),
+          MaxPool((2,2)),
+          Conv((5,5), 32=>64, pad=(2,2), relu, init=my_glorot_uniform),
+          # Conv((5,5), 32=>64, pad=(2,2), relu),
+          MaxPool((2,2)),
+          x -> reshape(x, :, size(x, 4)),
+          Dense(7*7*64, 1024),
+          Dense(1024, 10),
+          softmax,
+          ) |> gpu
 end
 
 myConv(args...; kwargs...) = Conv(args..., init=my_glorot_uniform; kwargs...)
 
 function get_CIFAR_CNN_model()
-    model = Chain(
-        myConv((5,5), 3=>16, relu),
-        MaxPool((2,2)),
-        myConv((5,5), 16=>8, relu),
-        MaxPool((2,2)),
-        x -> reshape(x, :, size(x, 4)),
-        # Dense(200, 120),
-        # Dense(120, 84),
-        # Dense(84, 10),
-        Dense(200, 10),
-        softmax) |> gpu;
-    return model
+    Chain(myConv((5,5), 3=>16, relu),
+          MaxPool((2,2)),
+          myConv((5,5), 16=>8, relu),
+          MaxPool((2,2)),
+          x -> reshape(x, :, size(x, 4)),
+          # Dense(200, 120),
+          # Dense(120, 84),
+          # Dense(84, 10),
+          Dense(200, 10),
+          softmax) |> gpu
 end
 
 struct ResidualBlock
@@ -113,29 +105,62 @@ function res_block(num_blocks, kernel_size, filters)
     return Chain(layers...)
 end
 
-# TODO wide resnet
-function resnet(num_blocks)
+# TODO resnet v2 with pre-activations. But it does not seem to change the result
+# much, so not a priority
+function resnet(depth)
     # num_blocks: 3,5,9,11
     # (6*num_blocks + 2)
     # 20, 32, 56, 68
     # USE 9, resnet56
+    (depth - 2) % 6 == 0 || error("resnet error")
+    n = convert(Int, (depth - 2) / 6)
+
     Chain(
         myConv((3,3), 3=>16, stride=(1,1), pad=1),
-        BatchNorm(16),
+        # BatchNorm(16),
         # 32,32,16
 
         # 2n 32x32, 16
         conv_block((3,3), 16=>16, 1),
-        res_block(num_blocks-1, (3,3), 16=>16),
+        res_block(n-1, (3,3), 16=>16),
 
         conv_block((3,3), 16=>32, 2),
-        res_block(num_blocks-1, (3,3), 32=>32),
+        res_block(n-1, (3,3), 32=>32),
 
         conv_block((3,3), 32=>64, 2),
-        res_block(num_blocks-1, (3,3), 64=>64),
+        res_block(n-1, (3,3), 64=>64),
 
         MeanPool((8,8)),
-        x -> reshape(x, :, size(x,4)),
+        x -> reshape(x, :, size(x)[end]),
         Dense(64,10),
-        softmax)
+        softmax) |> gpu
+end
+
+function WRN(depth, k)
+    # depth = n * 6 + 4 (conv layers, not including dense)
+    # w28-10: depth 28, widen factor 10
+    # TODO wide resnet w28-10 (https://arxiv.org/abs/1605.07146)
+    #
+    # use filters = [16, 16, 32, 64] for a non-wide version
+    # filters = [16, 160, 320, 640]
+    (depth - 4) % 6 == 0 || error("WRN error")
+    n = convert(Int, (depth - 4) / 6)
+    filters = [16, 16*k, 32*k, 64*k]
+    Chain(
+        myConv((3,3), 3=>16, stride=(1,1), pad=1),
+        BatchNorm(16),
+
+        conv_block((3,3), 16=>filters[2], 1),
+        res_block(n, (3,3), filters[2]=>filters[2]),
+
+        conv_block((3,3), filters[2]=>filters[3], 2),
+        res_block(n, (3,3), filters[3]=>filters[3]),
+
+        conv_block((3,3), filters[3]=>filters[4], 2),
+        res_block(n, (3,3), filters[4]=>filters[4]),
+
+        MeanPool((8,8)),
+        x -> reshape(x, :, size(x)[end]),
+        Dense(filters[4],10),
+        softmax) |> gpu
 end

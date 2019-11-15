@@ -65,7 +65,16 @@ https://github.com/tensorflow/models/blob/master/official/vision/image_classific
 
 ** TODO CIFAR10 models
 
-*** TODO data augmentation
+*** Verifying implementation
+
+- keras resnet https://keras.io/examples/cifar10_resnet/
+- wide resnet pytorch: https://github.com/meliketoy/wide-resnet.pytorch/blob/master/networks/wide_resnet.py
+- metalhead resnet: https://github.com/FluxML/Metalhead.jl/blob/master/src/resnet.jl
+- resnet from He: https://github.com/KaimingHe/deep-residual-networks#models
+- wide resnet official: https://github.com/szagoruyko/wide-residual-networks/blob/master/models/wide-resnet.lua
+
+*** CANCELED data augmentation
+    CLOSED: [2019-11-15 Fri 13:16]
 *** TODO densenet
 https://github.com/FluxML/Metalhead.jl/
 *** TODO learning rate schedule/decay

@@ -17,6 +17,10 @@ using Metalhead
 
 using EmacsREPL
 
+include("data.jl")
+include("model.jl")
+include("train.jl")
+
 function test_BatchNorm()
     using Flux
     using CuArrays
@@ -33,29 +37,6 @@ function test_allowscalar()
     accuracy(x, y) = Flux.onecold(x) .== Flux.onecold(y);
     accuracy(x, y)
     CuArrays.allowscalar(true)
-end
-
-function test_CIFAR_ds()
-    ds, test_ds = load_CIFAR10_ds(batch_size=64);
-    ds
-    test_ds
-    x, y = next_batch!(ds) |> gpu;
-    size(x)
-    x[:,:,:,1]
-
-    accuracy_with_logits(model(x), y)
-    accuracy_with_logits(resnet20(x), y)
-
-    model = get_CIFAR_CNN_model()[1:end-1]
-    resnet20 = resnet(3)[1:end-1] |> gpu;
-    # resnet32 = resnet(5) |> gpu;
-    # resnet56 = resnet(9) |> gpu;
-    # resnet68 = resnet(11) |> gpu;
-
-    opt = ADAM(1e-3)
-    @epochs 5 train!(model, opt, ds, print_steps=100)
-    # TODO data augmentation
-    @epochs 5 train!(resnet20, opt, ds, print_steps=100)
 end
 
 function evaluate(model, ds; attack_fn=(m,x,y)->x)

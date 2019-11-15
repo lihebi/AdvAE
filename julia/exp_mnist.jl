@@ -1,10 +1,5 @@
 using Images
 
-using Logging
-using LoggingExtras: TeeLogger
-using TensorBoardLogger
-using Dates
-
 include("train.jl")
 
 function exp_itadv(lr, total_steps)

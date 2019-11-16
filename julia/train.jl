@@ -224,10 +224,10 @@ end
 
 include("model.jl")
 
-function create_save_cb(model_file, model)
+function create_save_cb(model_file, model; save_steps)
     function save_cb(step)
         # FIXME as config, should be Integer multiple of print_steps
-        save_steps = 40
+        # save_steps = 40
         if step % save_steps == 0
             @info "saving .."
             # FIXME opt cannot be saved
@@ -240,11 +240,11 @@ function create_save_cb(model_file, model)
     end
 end
 
-function create_adv_test_cb(model, test_ds; logger=nothing)
+function create_adv_test_cb(model, test_ds; test_per_steps, test_run_steps, attack_fn, logger=nothing)
     function test_cb(step)
-        test_per_steps = 100
+        # test_per_steps = 100
         # I'm only testing a fraction of data
-        test_run_steps = 20
+        # test_run_steps = 20
         if step % test_per_steps == 0
             println()
             @info "testing for $test_run_steps steps .."
@@ -252,11 +252,21 @@ function create_adv_test_cb(model, test_ds; logger=nothing)
             m_cleanacc = MeanMetric()
             m_advloss = MeanMetric()
             m_advacc = MeanMetric()
-            # FIXME as parameter
-            attack_fn = attack_PGD_k(40)
 
             # into testing mode
-            Flux.testmode!(model)
+            #
+            # FIXME IMPORTANT CIFAR using BN when setting this, it crashes while
+            # attacker is taking gradient
+            #
+            # If this is not set, two consequences:
+            #
+            # 1. testing statistics will be accumulated, which is OK, won't
+            # affect training acc
+            #
+            # 2. only current batch of testing statistic is used for testing,
+            # which might reduce test acc
+            #
+            # Flux.testmode!(model)
             @showprogress 0.1 "Inner testing..." for i in 1:test_run_steps
                 x, y = next_batch!(test_ds) |> gpu
                 # this computation won't affect model parameter gradients

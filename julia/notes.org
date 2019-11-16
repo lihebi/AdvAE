@@ -1,14 +1,64 @@
 #+TITLE: Implementation notes
 * References
-- organization: https://github.com/JuliaML
+- a pytorch adv training library from MadryLab https://github.com/MadryLab/robustness
+
+* General
+** Data preparation
 - dataset! https://github.com/JuliaML/MLDatasets.jl
   - pattern https://github.com/JuliaML/MLDataPattern.jl
 
-- a pytorch adv training library from MadryLab https://github.com/MadryLab/robustness
+- Images.jl: https://github.com/JuliaImages/Images.jl
+- ImageFiltering.jl: where padarray locates, exported in Images namespace
+  https://github.com/JuliaImages/ImageFiltering.jl
 
+- Augmentor.jl, a very nice library, but not on Julia 1.0
+  https://github.com/Evizero/Augmentor.jl
+  - update to 1.x PR: https://github.com/Evizero/Augmentor.jl/pull/29
+
+- Metalhead.jl/ https://github.com/FluxML/Metalhead.jl/
+  - Metalhead.jl has training code for ImageNet
+    https://github.com/FluxML/Metalhead.jl/blob/sf/training/src/preprocessing.jl
+
+* AdvAE
+
+** STARTED MNIST testing and logging
+*** TODO AdvAE
+**** auto encoder
+***** Dunet
+*** HGD
+
+** CIFAR10 testing
+
+** STARTED GAN
+*** GAN
+*** DefenseGAN
+
+** attacks
+*** TODO CW
+*** TODO black-box substitute model
+*** TODO BoundaryAttack, BAPP
+*** TODO BPDA
 
 * robust training
-** TODO cifar10
+** STARTED cifar10
+
+*** DONE select the best resnet model
+    CLOSED: [2019-11-16 Sat 07:06]
+- first match the results from the papers
+- Possibly consider DenseNet
+
+**** DONE data augmentation
+     CLOSED: [2019-11-16 Sat 07:06]
+**** CANCELED -mean/variance and handle adv epsilon bounds
+     CLOSED: [2019-11-16 Sat 07:06]
+
+**** TODO densenet
+
+*** STARTED adv train it
+
+*** mix clean data
+*** dynamic attacking strength
+
 ** TODO imagenet
 
 ** plots
@@ -60,24 +110,27 @@ https://github.com/tensorflow/models/blob/master/official/vision/image_classific
 *** compare with 1:1 data mixing
 
 
-* TODO-list
+* DONE-list
 
+** DONE CIFAR10 models
+   CLOSED: [2019-11-16 Sat 02:20]
 
-** TODO CIFAR10 models
-
-*** Verifying implementation
+*** DONE Verifying implementation
+    CLOSED: [2019-11-16 Sat 02:20]
 
 - keras resnet https://keras.io/examples/cifar10_resnet/
-- wide resnet pytorch: https://github.com/meliketoy/wide-resnet.pytorch/blob/master/networks/wide_resnet.py
-- metalhead resnet: https://github.com/FluxML/Metalhead.jl/blob/master/src/resnet.jl
+- wide resnet pytorch:
+  https://github.com/meliketoy/wide-resnet.pytorch/blob/master/networks/wide_resnet.py
+- metalhead resnet:
+  https://github.com/FluxML/Metalhead.jl/blob/master/src/resnet.jl
 - resnet from He: https://github.com/KaimingHe/deep-residual-networks#models
-- wide resnet official: https://github.com/szagoruyko/wide-residual-networks/blob/master/models/wide-resnet.lua
+- deprecated official torch code from FAIR (but I found good)
+  https://github.com/facebookarchive/fb.resnet.torch
+- wide resnet official:
+  https://github.com/szagoruyko/wide-residual-networks/blob/master/models/wide-resnet.lua
 
-*** CANCELED data augmentation
-    CLOSED: [2019-11-15 Fri 13:16]
-*** TODO densenet
-https://github.com/FluxML/Metalhead.jl/
-*** TODO learning rate schedule/decay
+*** DONE learning rate schedule/decay
+    CLOSED: [2019-11-16 Sat 02:20]
 *** CANCELED early stopping
     CLOSED: [2019-11-13 Wed 16:17]
 
@@ -96,27 +149,11 @@ https://github.com/jaypmorgan/Adversarial.jl
     CLOSED: [2019-11-01 Fri 16:27]
 *** DONE FGSM
     CLOSED: [2019-11-01 Fri 16:27]
-*** TODO CW
-*** TODO black-box substitute model
-*** TODO BoundaryAttack, BAPP
-*** TODO BPDA
-
-
-*** STARTED AdvAE
-**** auto encoder
-***** Dunet
-*** HGD
-
-** STARTED GAN
-*** GAN
-*** DefenseGAN
 
 
 ** CANCELED fix the local package version problem
    CLOSED: [2019-11-02 Sat 13:28]
 
-
-* DONE-list
 
 ** DONE @progress
    CLOSED: [2019-10-17 Thu 16:17]

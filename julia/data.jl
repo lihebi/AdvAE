@@ -1,3 +1,19 @@
+# DEBUG I'm trying to set this env before any possible using of CuArrays
+#
+# integer in bytes
+# 7G = 7 * 1000 * 1000 * 1000
+# FIXME does not work
+ENV["CUARRAYS_MEMORY_LIMIT"] = convert(Int, round(7.5 * 1024 * 1024 * 1024))
+
+# this manually set works
+# CuArrays.usage_limit[] = parse(Int, ENV["CUARRAYS_MEMORY_LIMIT"])
+# Or better call the init function
+# CuArrays.__init_memory__()
+# Or
+# CuArrays.__init__()
+
+using CuArrays
+
 using Flux
 # Zygote
 using Flux.Data.MNIST

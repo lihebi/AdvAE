@@ -6,11 +6,6 @@
 
 using BSON: @save, @load
 
-# integer in bytes
-# 7G = 7 * 1000 * 1000 * 1000
-# FIXME does not work
-ENV["CUARRAYS_MEMORY_LIMIT"] = 7 * 1000 * 1000 * 1000
-
 # CAUTION: A bug in CuArrays, https://github.com/FluxML/Flux.jl/issues/839
 #
 # onecold(cpu([1,-2])) # => 1

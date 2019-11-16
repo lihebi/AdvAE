@@ -3,46 +3,19 @@ using LoggingExtras: TeeLogger
 using TensorBoardLogger
 using Dates
 
-MNIST_pretrained_model_file = "trained/pretrain-MNIST.bson"
-MNIST_model_fn = get_Madry_model
-MNIST_ds_fn = () -> load_MNIST_ds(batch_size=50)
-MNIST_train_fn = (args...) -> train!(args...)
-
-CIFAR10_pretrained_model_file = "trained/pretrain-CIFAR10.bson"
-CIFAR10_model_fn = () -> resnet(20)
-CIFAR10_ds_fn = () -> load_CIFAR10_ds(batch_size=128)
-CIFAR10_train_fn = (args...) -> @epochs 3 train!(args...)
-
-function get_pretrained_MNIST_model()
-    get_pretrained_model(MNIST_pretrained_model_file, MNIST_model_fn, MNIST_ds_fn, MNIST_train_fn)
-end
-
-function get_pretrained_CIFAR10_model()
-    get_pretrained_model(CIFAR10_pretrained_model_file, CIFAR10_model_fn, CIFAR10_ds_fn, CIFAR10_train_fn)
-end
-
 # I'm going to have one and only one MNIST and CIFAR model, so pretrained model
 # only takes dataset name.
-function get_pretrained_model(model_file, model_fn, ds_fn, train_fn)
+function maybe_train(model_file, model, train_fn)
     if isfile(model_file)
         @info "Already trained. Loading .."
         # load the model
         @load model_file weights
         @info "loading weights into model"
-        model = model_fn()[1:end-1]
         Flux.loadparams!(model, weights)
         return model
     else
         @info "Pre-training CNN model .."
-        model = model_fn()[1:end-1]
-
-        ds, test_ds = ds_fn();
-        x, y = next_batch!(ds) |> gpu;
-        model(x)
-
-        opt = ADAM(1e-3);
-        @info "trainig .."
-        train_fn(model, opt, ds)
+        train_fn(model)
         @info "saving .."
         @save model_file weights=Tracker.data.(Flux.params(cpu(model)))
         return model
@@ -73,21 +46,64 @@ end
 function MNIST_exp_helper(expID, lr, total_steps, λ; pretrain=false)
     # This put log and saved model into MNIST subfolder
     expID = "MNIST/" * expID
+
+    pretrained_model_file = "trained/pretrain-MNIST.bson"
+    model_fn = get_Madry_model
+    ds_fn = () -> load_MNIST_ds(batch_size=50)
+
+    function train_fn(model)
+        ds, test_ds = ds_fn();
+        x, y = next_batch!(ds) |> gpu;
+        model(x)
+
+        opt = ADAM(1e-3);
+        train!(model, opt, ds, train_steps=5000, print_steps=100)
+    end
+    pretrain_fn(model) = maybe_train(pretrained_model_file, model, train_fn)
+
     adv_exp_helper(expID, lr, total_steps, λ,
-                   MNIST_model_fn, MNIST_ds_fn, get_pretrained_MNIST_model,
-                   pretrain=pretrain)
+                   model_fn, ds_fn,
+                   if pretrain pretrain_fn else (a)->a end,
+                   print_steps=20, save_steps=40,
+                   test_per_steps=100, test_run_steps=20,
+                   attack_fn=attack_PGD_k(40))
 end
 
 function CIFAR10_exp_helper(expID, lr, total_steps, λ; pretrain=false)
     expID = "CIFAR10/" * expID
+
+    pretrained_model_file = "trained/pretrain-CIFAR10.bson"
+    model_fn = () -> WRN(16,4)
+    ds_fn = () -> load_CIFAR10_ds(batch_size=128)
+
+    function train_fn(model)
+        ds, test_ds = ds_fn();
+        x, y = next_batch!(ds) |> gpu;
+        model(x)
+
+        # FIXME I might want to print the test acc at the end
+        # FIXME record the pretrain as well?
+        opt = ADAM(1e-3);
+        train!(model, opt, ds, train_steps=2000, print_steps=20)
+        opt = ADAM(1e-4);
+        train!(model, opt, ds, train_steps=4000, from_steps=2000, print_steps=20)
+    end
+
+    pretrain_fn(model) = maybe_train(pretrained_model_file, model, train_fn)
+
     adv_exp_helper(expID, lr, total_steps, λ,
-                   CIFAR10_model_fn, CIFAR10_ds_fn, get_pretrained_CIFAR10_model,
-                   pretrain=pretrain)
+                   model_fn, ds_fn,
+                   if pretrain pretrain_fn else (a)->a end,
+                   print_steps=2, save_steps=4,
+                   test_per_steps=20, test_run_steps=2,
+                   attack_fn=CIFAR10_PGD_7)
 end
 
 function adv_exp_helper(expID, lr, total_steps, λ,
                         model_fn, ds_fn, pretrained_fn;
-                        pretrain=false)
+                        attack_fn,
+                        print_steps, save_steps,
+                        test_per_steps, test_run_steps)
     model_file = "trained/$expID.bson"
     mkpath(dirname(model_file))
 
@@ -100,8 +116,8 @@ function adv_exp_helper(expID, lr, total_steps, λ,
     x, y = next_batch!(ds) |> gpu;
 
     model, from_steps = maybe_load(model_file, model_fn)
-    if from_steps == 1 & pretrain
-        model = pretrained_fn()
+    if from_steps == 1
+        model = pretrained_fn(model)
     end
 
     @info "Progress" total_steps from_steps
@@ -117,13 +133,16 @@ function adv_exp_helper(expID, lr, total_steps, λ,
     # FIXME opt states
     opt = ADAM(lr);
 
-    save_cb = create_save_cb(model_file, model)
-    test_cb = create_adv_test_cb(model, test_ds, logger=test_logger)
+    save_cb = create_save_cb(model_file, model, save_steps=save_steps)
+    test_cb = create_adv_test_cb(model, test_ds,
+                                 logger=test_logger,
+                                 attack_fn=attack_fn,
+                                 test_per_steps=test_per_steps, test_run_steps=test_run_steps)
 
-    advtrain!(model, opt, attack_PGD_k(40), ds,
+    advtrain!(model, opt, attack_fn, ds,
               train_steps=total_steps,
               from_steps=from_steps,
-              print_steps=20,
+              print_steps=print_steps,
               λ=λ,
               logger=logger,
               save_cb=save_cb,
@@ -153,11 +172,22 @@ function nat_exp_helper(expID, lr, total_steps,
 
     # FIXME opt states
     opt = ADAM(lr);
+    #
+    # TODO WRN used SGD with Nesterov momentum 0.9 and weight decay 0.0005 start
+    # lr=0.1, drop by 0.2 at 60,120,160 epoch
+    #
+    # FIXME weight decay?
+    #
+    # Nesterov(lr, 0.9)
+    # Momentum(lr, 0.9)
 
-    save_cb = create_save_cb(model_file, model)
-    test_cb = create_test_cb(model, test_ds, logger=test_logger)
+    save_cb = create_save_cb(model_file, model, save_steps=40)
+    test_cb = create_test_cb(model, test_ds, logger=test_logger,
+                             test_per_steps=100, test_run_steps=20)
 
     train!(model, opt, ds,
+           # DEBUG adding cifar augment. It does not seem to provide any improvement
+           # augment=Augment(),
            train_steps=total_steps,
            from_steps=from_steps,
            print_steps=20,
@@ -165,4 +195,3 @@ function nat_exp_helper(expID, lr, total_steps,
            save_cb=save_cb,
            test_cb=test_cb)
 end
-

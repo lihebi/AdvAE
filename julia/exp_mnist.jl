@@ -1,6 +1,9 @@
-using Images
-
+include("data.jl")
+include("model.jl")
 include("train.jl")
+include("exp.jl")
+
+# CAUTION the function names are the same for CIFAR
 
 function exp_itadv(lr, total_steps)
     expID = "f0-$lr"

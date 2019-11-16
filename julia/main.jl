@@ -1,4 +1,7 @@
-include("adv.jl")
+include("exp_cifar.jl")
 
-test_attack()
+
+include("exp_mnist.jl")
+
+# test_attack()
 

@@ -15,6 +15,9 @@ using CuArrays
 
 using Metalhead
 
+# for padarray and Fill
+using Images
+
 using EmacsREPL
 
 export load_MNIST, load_CIFAR10
@@ -33,6 +36,7 @@ function test()
     train_y[1]
 end
 
+# There is a data loader PR: https://github.com/FluxML/Flux.jl/pull/450
 mutable struct DataSetIterator
     raw_x::AbstractArray
     raw_y::AbstractArray
@@ -107,13 +111,79 @@ function load_CIFAR10_ds(;batch_size)
     return train_ds, test_ds
 end
 
+function flipx(p)
+    function f(img)
+        if rand() < p
+            reverse(img, dims=2)
+        else
+            img
+        end
+    end
+end
+
+function pad_and_crop(img)
+    w = size(img)[1]
+    h = size(img)[2]
+    # FIXME this returns OffsetArrays, with possibly negative or 0 index
+    padded = padarray(img, Fill(0,(4,4,0), (4,4,0)))
+    a = rand(-3:4)
+    b = rand(-3:4)
+    # @show a
+    # @show b
+    # convert OffsetArrays to normal array with parent()
+    parent(padded[a:a+w-1, b:b+h-1, :])
+end
+
+function augment_one(img)
+    pad_and_crop(flipx(0.5)(img))
+end
+
+struct Augment end
+Flux.@treelike Augment
+
+# - will this apply different random op to images in a batch? Yes.
+# - can this apply to batch automatically? NO!
+# FIXME performance, and also on CPU/GPU?
+function (a::Augment)(x::AbstractArray)
+    length(size(x)) == 4 || error("Dim of input must be 4, got $(length(size(x)))")
+    res = map(collect(1:size(x)[end])) do i
+        augment_one(x[:,:,:,i])
+    end
+    cat(res..., dims=4)
+end
+
+function Base.show(io::IO, l::Augment)
+  print(io, "Augment()")
+end
+
+function test_augment()
+    # padarray
+
+    ds, test_ds = load_CIFAR10_ds(batch_size=16);
+    x,y = next_batch!(ds);
+
+    # some testing
+    img = x[:,:,:,1];
+    sample_and_view(img)
+    sample_and_view(reverse(img, dims=2))
+    sample_and_view(pad_and_crop(flipx(0.5)(img)))
+
+    # testing augment layer
+    aug = Augment()
+    sample_and_view(x)
+    sample_and_view(aug(x))
+    size(aug(x))
+end
+
 function test()
-    train_ds, test_ds = load_MNIST_ds(batch_size=128);
-    train_ds.nbatch
+    ds, test_ds = load_MNIST_ds(batch_size=128);
+    ds.nbatch
     test_ds.nbatch
-    x, y = next_batch!(train_ds)
+    x, y = next_batch!(ds)
     size(x)
     size(y)
+    sample_and_view(x)
+    # size(x)
     train_ds.raw_y[1:10]
     for i=1:1000
         next_batch!(train_ds)
@@ -134,7 +204,7 @@ function sample_and_view(x, y=nothing, model=nothing)
         x = x.data
     end
     size(x)[1] in [28,32,56] ||
-        error("Image size $(size(X)[1]) not correct size. Currently support 28 or 32.")
+        error("Image size $(size(x)[1]) not correct size. Currently support 28 or 32.")
     num = min(size(x)[4], 10)
     @info "Showing $num images .."
     imgs = cpu(hcat([x[:,:,:,i] for i in 1:num]...))

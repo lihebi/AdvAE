@@ -622,3 +622,27 @@ function test_logger()
         @debug "world"
     end
 end
+
+"""
+Several problems before going forward:
+
+1. the augmentation should happen on-the-fly, so that each batch receives new
+kinds of augmentation
+
+2. I need a batched version of this for performance
+
+"""
+function test_augment()
+    # the padding is easy, but there does not seem to be a random crop, I'll
+    # need to write a simple random slicing algorithm
+    #
+    # In the meanwhile, there are more advanced augmentation techniques
+    # using Augmentor
+    pl = ElasticDistortion(6, scale=0.3, border=true) |>
+        Rotate([10, -5, -3, 0, 3, 5, 10]) |>
+        FlipX(0.5) |>
+        ShearX(-10:10) * ShearY(-10:10) |>
+        CropSize(32, 32) |>
+        Zoom(0.9:0.1:1.2)
+    augment(img, pl)
+end

@@ -237,6 +237,9 @@ function create_adv_test_cb(model, test_ds; logger=nothing)
             m_advacc = MeanMetric()
             # FIXME as parameter
             attack_fn = attack_PGD_k(40)
+
+            # into testing mode
+            Flux.testmode!(model)
             @showprogress 0.1 "Inner testing..." for i in 1:test_run_steps
                 x, y = next_batch!(test_ds) |> gpu
                 # this computation won't affect model parameter gradients
@@ -250,6 +253,8 @@ function create_adv_test_cb(model, test_ds; logger=nothing)
                 add!(m_cleanloss, clean_loss.data)
                 add!(m_cleanacc, accuracy_with_logits(clean_logits.data, y))
             end
+            # back into training node
+            Flux.testmode!(model, false)
             @info "test data" get(m_cleanloss) get(m_advloss) get(m_cleanacc) get(m_advacc)
 
             # use explicit API to avoid manipulating log_step_increment
@@ -269,11 +274,16 @@ function create_test_cb(model, test_ds; logger=nothing)
         test_per_steps = 100
         # I'm only testing a fraction of data
         test_run_steps = 20
+
         if step % test_per_steps == 0
             println()
             @info "testing for $test_run_steps steps .."
             m_cleanloss = MeanMetric()
             m_cleanacc = MeanMetric()
+
+            # into testing mode
+            Flux.testmode!(model)
+
             @showprogress 0.1 "Inner testing..." for i in 1:test_run_steps
                 x, y = next_batch!(test_ds) |> gpu
                 # this computation won't affect model parameter gradients
@@ -282,6 +292,10 @@ function create_test_cb(model, test_ds; logger=nothing)
                 add!(m_cleanloss, loss.data)
                 add!(m_cleanacc, accuracy_with_logits(logits.data, y))
             end
+
+            # back into training node
+            Flux.testmode!(model, false)
+
             @info "test data" get(m_cleanloss) get(m_cleanacc)
 
             # use explicit API to avoid manipulating log_step_increment

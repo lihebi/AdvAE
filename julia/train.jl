@@ -79,6 +79,17 @@ function attack_PGD(model, x, y)
                   iters = 40)
 end
 
+function CIFAR10_PGD_7(model, x, y)
+    # FIXME the model contains BN layers, and is set to test mode during
+    # testing. However, I still need to perform attack during testing, which
+    # requires gradient. But testing mode model cannot take gradient?
+    myPGD(model, x, y;
+          ϵ = 8/255,
+          step_size = 2/255,
+          iters = 7)
+end
+
+# cifar: 8.0/255, 7, 2./255
 function attack_PGD_k(k)
     (model, x, y) -> begin
         x_adv = myPGD(model, x, y;

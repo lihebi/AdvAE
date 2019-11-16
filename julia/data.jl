@@ -11,10 +11,6 @@ using Statistics
 using Images: channelview
 using Base.Iterators: partition
 
-using CuArrays
-
-using Metalhead
-
 # for padarray and Fill
 using Images
 

@@ -13,8 +13,6 @@ using Base.Iterators: partition
 
 using CuArrays
 
-using Metalhead
-
 using EmacsREPL
 
 include("data.jl")

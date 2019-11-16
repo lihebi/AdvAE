@@ -22,6 +22,12 @@ Pkg.add("LoggingExtras")
 Pkg.add("Plots")
 Pkg.add("ProgressMeter")
 
+Pkg.add("FixedPointNumbers")
+
+# FIXME Augmentor not on Julia 1.0
+# Pkg.add("Augmentor")
+# Pkg.add(PackageSpec(url="https://github.com/Evizero/Augmentor.jl"))
+
 
 # CUDA support
 #

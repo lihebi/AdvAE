@@ -28,6 +28,20 @@ function test_BatchNorm()
     testimg = randn(Float32, 28, 28, 32, 1);
     @time bn(testimg);
     @time gpu(bn)(gpu(testimg));
+
+    Flux.testmode!(bn)
+    Flux.testmode!(bn, false)
+    sum(bn(testimg))
+
+    p = Flux.param(testimg);
+
+    gs = Tracker.gradient(()->sum(bn(p)), Flux.params(bn))
+    gs
+
+    function f()
+        sum(bn(p))
+    end
+    Flux.gradient(f, p)
 end
 
 function test_allowscalar()
@@ -94,4 +108,33 @@ function test()
     evaluate(model, test_ds)
     evaluate(model, test_ds, attack_fn=attack_FGSM)
     evaluate(model, test_ds, attack_fn=attack_PGD_k(40))
+end
+
+# TODO learning rate?
+function test_CIFAR_ds()
+    ds, test_ds = load_CIFAR10_ds(batch_size=128);
+    x, y = next_batch!(ds) |> gpu;
+
+    # model = get_CIFAR_CNN_model()[1:end-1]
+    # model = resnet(20)[1:end-1]
+    # model = resnet(32)[1:end-1]
+    # model = resnet(56)
+    # model = resnet(68)
+
+    # model = WRN(28, 10)[1:end-1] |> gpu;
+    model = WRN(16, 4)[1:end-1] |> gpu;
+
+    model(x)
+    augment = Augment()
+    augx = augment(cpu(x)) |> gpu;
+    # augment(x)
+    model(augx)
+    accuracy_with_logits(model(augx), y)
+
+    opt = ADAM(1e-3)
+
+    train!(model, opt, ds, print_steps=50)
+
+    accuracy_with_logits(model(x), y)
+
 end

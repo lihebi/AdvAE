@@ -117,7 +117,7 @@ function resnet(depth)
 
     Chain(
         myConv((3,3), 3=>16, stride=(1,1), pad=1),
-        # BatchNorm(16),
+        BatchNorm(16),
         # 32,32,16
 
         # 2n 32x32, 16

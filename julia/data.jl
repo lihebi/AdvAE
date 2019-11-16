@@ -111,6 +111,32 @@ function load_CIFAR10_ds(;batch_size)
     return train_ds, test_ds
 end
 
+function compute_mean_var()
+    ds, test_ds = load_CIFAR10_ds(batch_size=128)
+    # FIXME do I need to consider test_ds?
+    train_x, train_y = MLDatasets.CIFAR10.traindata();
+    test_x,  test_y  = MLDatasets.CIFAR10.testdata();
+    # dim=3 is the color channel, it will return a value for each channel
+
+    # FIXME
+    # 1. the mean var of MLDatasets and Metalhead.CIFAR10 are different
+    # 2. when subtracting mean, half of values will be negative?
+    mean(train_x)
+    mean(train_x, dims=(1,2,4))
+    std(train_x, dims=(1,2,4))
+    minimum(train_x)
+
+    # NOTE: This is in back.jl
+    (trainX, trainY), (valX, valY), (testX, testY) = load_CIFAR10();
+    trainX = cpu.(trainX);
+    size(trainX)
+    size(trainX[1])
+    typeof(trainX)
+    mean(cat(trainX..., dims=4), dims=(1,2,4))
+    std(cat(trainX..., dims=4), dims=(1,2,4))
+    mean(trainX[1])
+end
+
 function flipx(p)
     function f(img)
         if rand() < p

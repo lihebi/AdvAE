@@ -130,6 +130,7 @@ function train!(model, opt, ds;
                 train_steps=ds.nbatch,
                 from_steps=1,
                 print_steps=100,
+                augment=(x)->x,
                 logger=nothing,
                 save_cb=(i)->nothing,
                 test_cb=(i)->nothing)
@@ -138,9 +139,14 @@ function train!(model, opt, ds;
     loss_metric = MeanMetric()
     acc_metric = MeanMetric()
 
+
     @info "Training for $train_steps steps, printing every $print_steps steps .."
     @showprogress 0.1 "Training..." for step in from_steps:train_steps
-        x, y = next_batch!(ds) |> gpu
+        x, y = next_batch!(ds)
+        # TODO add data augment here
+        x = augment(x) |> gpu
+        y = gpu(y)
+
         gs = Flux.Tracker.gradient(ps) do
             logits = model(x)
             loss = my_xent(logits, y)

@@ -3,7 +3,12 @@
 # integer in bytes
 # 7G = 7 * 1000 * 1000 * 1000
 # FIXME does not work
-ENV["CUARRAYS_MEMORY_LIMIT"] = convert(Int, round(7.5 * 1024 * 1024 * 1024))
+#
+# For 1070
+# g=7.5
+# For 2080 Ti
+g=9.5
+ENV["CUARRAYS_MEMORY_LIMIT"] = convert(Int, round(g * 1024 * 1024 * 1024))
 
 # this manually set works
 # CuArrays.usage_limit[] = parse(Int, ENV["CUARRAYS_MEMORY_LIMIT"])
@@ -11,6 +16,8 @@ ENV["CUARRAYS_MEMORY_LIMIT"] = convert(Int, round(7.5 * 1024 * 1024 * 1024))
 # CuArrays.__init_memory__()
 # Or
 # CuArrays.__init__()
+# check status
+# CuArrays.memory_status()
 
 using CuArrays
 
@@ -217,7 +224,7 @@ function test()
     ds, test_ds = load_MNIST_ds(batch_size=128);
     ds.nbatch
     test_ds.nbatch
-    x, y = next_batch!(ds)
+    x, y = next_batch!(ds);
     size(x)
     size(y)
     sample_and_view(x)

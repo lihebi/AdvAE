@@ -261,7 +261,7 @@ function create_adv_test_cb(model, test_ds; test_per_steps, test_run_steps, atta
             # 2. only current batch of testing statistic is used for testing,
             # which might reduce test acc
             #
-            # Flux.testmode!(model)
+            Flux.testmode!(model)
             @showprogress 0.1 "Inner testing..." for i in 1:test_run_steps
                 x, y = next_batch!(test_ds) |> gpu
                 # this computation won't affect model parameter gradients

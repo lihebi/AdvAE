@@ -51,62 +51,36 @@ function test_allowscalar()
     CuArrays.allowscalar(true)
 end
 
-function evaluate(model, ds; attack_fn=(m,x,y)->x)
-    xx,yy = next_batch!(ds) |> gpu
-
-    @info "Sampling BEFORE images .."
-    sample_and_view(xx, yy, model)
-    @info "Sampling AFTER images .."
-    adv = attack_fn(model, xx, yy)
-    sample_and_view(adv, yy, model)
-
-    @info "Testing multiple batches .."
-    acc_metric = MeanMetric()
-    @showprogress 0.1 "Testing..." for step in 1:10
-        x,y = next_batch!(ds) |> gpu
-        adv = attack_fn(model, x, y)
-        acc = accuracy_with_logits(model(adv), y)
-        add!(acc_metric, acc)
-    end
-    @show get!(acc_metric)
-end
-
-
-function test()
-    Random.seed!(1234);
-
-    ds, test_ds = load_MNIST_ds(batch_size=50);
-    x, y = next_batch!(ds) |> gpu;
-
-    model = get_Madry_model()[1:end-1]
-    # model = get_LeNet5()[1:end-1]
-
-    # Warm up the model
+function test_bn_grad()
+    x = randn(Float32, 32, 32, 3, 16) |> gpu
+    model = Chain(
+        myConv((3,3), 3=>16, stride=(1,1), pad=1),
+        BatchNorm(16),
+        MeanPool((8,8)),
+        x -> reshape(x, :, size(x)[end]),
+        Dense(256,10)) |> gpu
     model(x)
 
-    # FIXME would this be 0.001 * 0.001?
-    # FIXME decay on pleau
-    # FIXME print out information when decayed
-    # opt = Flux.Optimiser(Flux.ExpDecay(0.001, 0.5, 1000, 1e-4), ADAM(0.001))
-    opt = ADAM(1e-4);
-
-    logger = create_logger()
-    with_logger(logger) do
-        train!(model, opt, ds, print_steps=20)
+    Flux.gradient() do
+        sum(model(x))
     end
 
-    @info "Adv training .."
-    # custom_train!(model, opt, train_ds)
+    Flux.testmode!(model)
 
-    with_logger(logger) do
-        @epochs 2 advtrain!(model, opt, attack_PGD_k(40), ds, print_steps=20)
+    # In test mode, it would fail if I don't patch Flux.jl/src/cuda/cudnn.jl
+    # cudnnBNBackward!. The root cause is sum(iter; dims) have dims as explicit
+    # kwarg, and thus calling without dims=... will call the wrong sum. Also
+    # squeeze is deprecated for dropdims. NOTE: this is in Flux v0.9, the master
+    # branch currently removed manual testmode, see discussions:
+    #
+    # - Train/test mode discussion by MikeInnes https://github.com/FluxML/Flux.jl/issues/643
+    # - https://github.com/FluxML/Flux.jl/issues/909
+    # - https://github.com/FluxML/Flux.jl/issues/232
+    Flux.gradient() do
+        sum(model(x))
     end
-
-    @info "Evaluating clean accuracy .."
-    evaluate(model, test_ds)
-    evaluate(model, test_ds, attack_fn=attack_FGSM)
-    evaluate(model, test_ds, attack_fn=attack_PGD_k(40))
 end
+
 
 # TODO learning rate?
 function test_CIFAR_ds()
@@ -114,7 +88,7 @@ function test_CIFAR_ds()
     x, y = next_batch!(ds) |> gpu;
 
     # model = get_CIFAR_CNN_model()[1:end-1]
-    # model = resnet(20)[1:end-1]
+    model = resnet(20)[1:end-1] |> gpu
     # model = resnet(32)[1:end-1]
     # model = resnet(56)
     # model = resnet(68)
@@ -123,6 +97,13 @@ function test_CIFAR_ds()
     model = WRN(16, 4)[1:end-1] |> gpu;
 
     model(x)
+
+    adv = CIFAR10_PGD_7(model, x, y);
+    Flux.testmode!(model)
+    adv = CIFAR10_PGD_7(model, x, y);
+
+    size(adv)
+
     augment = Augment()
     augx = augment(cpu(x)) |> gpu;
     # augment(x)

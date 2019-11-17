@@ -1,5 +1,7 @@
 using Pkg
 
+# official registry https://pkg.julialang.org/
+
 # activate current project
 Pkg.activate(pwd())
 
@@ -13,13 +15,17 @@ Pkg.status()
 Pkg.activate()
 
 # managing projects
+#
+# I should not use this, as it seems to decide what to update based on
+# #update-#downgrade, which downgrades Flux. But I can pin Flux.
+#
 Pkg.update()
 # precompile command is availabe at PKG repl, the usage here is not very straightforward
 # Pkg.precompile
 
 LOAD_PATH
 DEPOT_PATH
-ENV["JULIA_LOAD_PATH"]
+# ENV["JULIA_LOAD_PATH"]
 
 Pkg.add("BSON")
 Pkg.add("Images")
@@ -28,27 +34,30 @@ Pkg.add("TensorBoardLogger")
 Pkg.add("LoggingExtras")
 Pkg.add("ProgressMeter")
 
-# FIXME Flux is downgraded to 0.8
-Pkg.add("Flux")
-Pkg.add(PackageSpec(name="Flux", version="0.9"))
 
-# Pkg.add(PackageSpec(name="Flux", rev="master"))
+# trying to use Flux master. The old Flux has BN gradient bug.
 #
-# fix has_cudnn instead of libcudnn
-# Pkg.develop("Flux")
+# Pkg.add("Flux")
+Pkg.add(PackageSpec(name="Flux", version="0.9"))
+Pkg.pin(PackageSpec(name="Flux", version="0.9"))
+# Pkg.add(PackageSpec(name="Flux", rev="master"))
+
+# FIXME has_cudnn instead of libcudnn
+#
+# develop Flux, and switch to 0.9 branch, do some fix
+Pkg.develop("Flux")
+# then "resolve" so that Tracker is added to current project's .toml. Then using
+# Flux would work.
+Pkg.resolve()
+
 
 Pkg.add("CuArrays")
-# Pkg.add("Metalhead")
 
 # used packages
 # Pkg.add(PackageSpec(url="https://github.com/jaypmorgan/Adversarial.jl.git"))
 
 # Pkg.add("Plots")
 
-# Pkg.add("FixedPointNumbers")
-# Pkg.add("Distances")
-# Pkg.add("Distributions")
-# Pkg.add("FileIO")
 
 # FIXME Augmentor not on Julia 1.0
 # Pkg.add("Augmentor")
@@ -77,5 +86,9 @@ Pkg.add("CuArrays")
 # Pkg.add(PackageSpec(name="Zygote", rev="master"))
 
 
-CuArrays.allowscalar(false)
-CuArrays.allowscalar(true)
+
+# Pkg.add("Metalhead")
+# Pkg.add("FixedPointNumbers")
+# Pkg.add("Distances")
+# Pkg.add("Distributions")
+# Pkg.add("FileIO")

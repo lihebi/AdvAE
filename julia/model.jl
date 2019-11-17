@@ -35,6 +35,66 @@ function get_Madry_model()
           ) |> gpu
 end
 
+
+##############################
+## MNIST AE models
+##############################
+
+function dense_AE()
+    # FIXME why leakyrelu
+    encoder = Chain(x -> reshape(x, :, size(x, 4)),
+                    Dense(28 * 28, 32, relu)) |> gpu
+    decoder = Chain(Dense(32, 28 * 28),
+                    x -> reshape(x, 28, 28, 1, :),
+                    # FIXME use clamp?
+                    # reshape(clamp.(x, 0, 1), 28, 28)
+                    x -> σ.(x)) |> gpu
+    Chain(encoder, decoder)
+end
+
+"""From https://discourse.julialang.org/t/upsampling-in-flux-jl/25919/3
+"""
+function upsample(x)
+    ratio = (2, 2, 1, 1)
+    (h, w, c, n) = size(x)
+    y = similar(x, (1, ratio[1], 1, ratio[2], 1, 1))
+    fill!(y, 1)
+    z = reshape(x, (h, 1, w, 1, c, n))  .* y
+    reshape(permutedims(z, (2,1,4,3,5,6)), size(x) .* ratio)
+end
+
+function CNN_AE()
+    # FIXME padding='same'?
+    encoder = Chain(Conv((3,3), 1=>16, pad=(1,1), relu, init=my_glorot_uniform),
+                    # BatchNorm(16)
+                    MaxPool((2,2)))
+    decoder = Chain(Conv((3,3), 16=>16, pad=(1,1), relu, init=my_glorot_uniform),
+                    # UpSampling((2,2)),
+                    upsample,
+                    Conv((3,3), 16=>1, pad=(1,1)),
+                    x -> σ.(x))
+    Chain(encoder, decoder) |> gpu
+end
+
+function CNN2_AE()
+    encoder = Chain(Conv((3,3), 1=>16, pad=(1,1), relu, init=my_glorot_uniform),
+                    MaxPool((2,2)),
+                    Conv((3,3), 16=>8, pad=(1,1), relu, init=my_glorot_uniform),
+                    MaxPool((2,2)))
+    decoder = Chain(Conv((3,3), 8=>8, pad=(1,1), relu, init=my_glorot_uniform),
+                    upsample,
+                    Conv((3,3), 8=>16, pad=(1,1), relu, init=my_glorot_uniform),
+                    upsample,
+                    Conv((3,3), 16=>1, pad=(1,1), init=my_glorot_uniform),
+                    x -> σ.(x))
+    Chain(encoder, decoder) |> gpu
+end
+
+
+##############################
+## CIFAR models
+##############################
+
 myConv(args...; kwargs...) = Conv(args..., init=my_glorot_uniform; kwargs...)
 
 function get_CIFAR_CNN_model()

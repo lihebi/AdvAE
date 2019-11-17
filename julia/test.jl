@@ -117,3 +117,57 @@ function test_CIFAR_ds()
     accuracy_with_logits(model(x), y)
 
 end
+
+
+
+function evaluate_AE(ae, ds; cnn=nothing)
+    xx,yy = next_batch!(ds) |> gpu
+
+    @info "Sampling BEFORE images .."
+    sample_and_view(xx, yy, cnn)
+    @info "Sampling AFTER images .."
+    # NOTE: I need .data, currently handled in sample_and_view
+    rec = ae(xx)
+    sample_and_view(rec, yy, cnn)
+end
+
+function test_AE()
+    ds, test_ds = load_MNIST_ds(batch_size=50);
+    x, y = next_batch!(ds) |> gpu;
+
+    cnn = get_Madry_model()[1:end-1]
+    cnn(x)
+
+    opt = ADAM(1e-3)
+
+    # TODO schedule lr simply by setting field of opt, and maintain the
+    # state. FIXME But it seems that the state is maintained by a dict with key
+    # Param(x). I'm not sure if this aproach can resume the state.
+    #
+    # opt.eta = 1e-4
+
+    train!(cnn, opt, ds)
+
+
+    # ae = dense_AE()
+    ae = CNN_AE()
+    # ae = CNN2_AE()
+
+    # FIXME opt states?
+    opt = ADAM(1e-4)
+    # FIXME Flux.mse(logits, x)
+    # FIXME sigmoid mse?
+    aetrain!(ae, opt, ds)
+
+    evaluate_AE(ae, test_ds, cnn=cnn)
+
+    # FIXME performance overhead
+    @epochs 2 advae_train!(ae, cnn, opt, attack_PGD_k(40), ds, print_steps=20)
+
+    evaluate(cnn, test_ds)
+    evaluate(cnn, test_ds, attack_fn=attack_PGD_k(40))
+
+    evaluate(Chain(ae, cnn), test_ds)
+    evaluate(Chain(ae, cnn), test_ds, attack_fn=attack_FGSM)
+    evaluate(Chain(ae, cnn), test_ds, attack_fn=attack_PGD_k(40))
+end

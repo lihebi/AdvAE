@@ -348,17 +348,18 @@ end
 ## AE train
 ##############################
 
-mymse(ŷ, y) = sum((ŷ .- y).*(ŷ .- y)) * 1 // length(y)
+my_mse(ŷ, y) = sum((ŷ .- y).*(ŷ .- y)) * 1 // length(y)
 
 function aetrain!(model, opt, ds;
-                  train_steps=ds.nbatch, print_steps=50)
+                  train_steps=ds.nbatch,
+                  from_steps=1,
+                  print_steps=50)
     ps=Flux.params(model)
 
     loss_metric = MeanMetric()
-    step = 0
 
     @info "Training for $train_steps steps, printing even $print_steps steps .."
-    @showprogress 0.1 "Training..." for step in 1:train_steps
+    @showprogress 0.1 "Training..." for step in from_steps:train_steps
         x, _ = next_batch!(ds) |> gpu
         gs = Flux.Tracker.gradient(ps) do
             logits = model(x)
@@ -391,34 +392,39 @@ function advae_train!(ae, cnn, opt, attack_fn, ds;
     m_advloss = MeanMetric()
     m_advacc = MeanMetric()
 
-    model = Chain(ae, cnn)
+    full_model = Chain(ae, cnn)
+    # cnn is always in test mode, even in training. In testing, the whole model
+    # is set to testing mode.
+    Flux.testmode!(cnn)
 
     @info "Training for $train_steps steps, printing every $print_steps steps .."
-    @showprogress 0.1 "Training..." for step in 1:train_steps
+    @showprogress 0.1 "Training..." for step in from_steps:train_steps
         x, y = next_batch!(ds) |> gpu
         # this computation won't affect model parameter gradients
-        x_adv = attack_fn(model, x, y)
+        x_adv = attack_fn(full_model, x, y)
 
         gs = Flux.Tracker.gradient(ps) do
-            # FIXME this will slow down the model twice
-            adv_logits = model(x_adv)
+            adv_logits = full_model(x_adv)
             adv_loss = my_xent(adv_logits, y)
 
-            clean_logits = model(x)
+            clean_logits = full_model(x)
             clean_loss = my_xent(clean_logits, y)
 
             # DEBUG
-            rec_loss = mymse(ae(x), x)
-            # rec_loss = mymse(rec, x_adv)
+            rec_loss = my_mse(ae(x), x)
+            # rec_loss = my_mse(rec, x_adv)
 
             add!(m_advloss, adv_loss.data)
             add!(m_advacc, accuracy_with_logits(adv_logits.data, y))
             add!(m_cleanloss, clean_loss.data)
             add!(m_cleanacc, accuracy_with_logits(clean_logits.data, y))
 
-            l = adv_loss + rec_loss
+            # FIXME what should be the loss?
+            # l = adv_loss + rec_loss
+            # l = rec_loss
             # l = clean_loss
-            # l = adv_loss + clean_loss
+            l = adv_loss + λ * clean_loss
+            # l = adv_loss
         end
         # FIXME clean up cnn parameter gradients?
         Flux.Tracker.update!(opt, ps, gs)

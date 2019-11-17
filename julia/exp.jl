@@ -58,7 +58,7 @@ function MNIST_exp_helper(expID, lr, total_steps, λ; pretrain=false)
         opt = ADAM(1e-3);
         train!(model, opt, ds, train_steps=5000, print_steps=100)
     end
-    pretrain_fn(model) = maybe_train(pretrained_model_file, model, train_fn)
+    pretrain_fn(model) = maybe_train("trained/pretrain-MNIST.bson", model, train_fn)
 
     adv_exp_helper(expID, lr, total_steps, λ,
                    model_fn, ds_fn,
@@ -87,7 +87,7 @@ function CIFAR10_exp_helper(expID, lr, total_steps, λ; pretrain=false)
         train!(model, opt, ds, train_steps=4000, from_steps=2000, print_steps=20)
     end
 
-    pretrain_fn(model) = maybe_train(pretrained_model_file, model, train_fn)
+    pretrain_fn(model) = maybe_train("trained/pretrain-CIFAR10.bson", model, train_fn)
 
     adv_exp_helper(expID, lr, total_steps, λ,
                    model_fn, ds_fn,
@@ -98,7 +98,7 @@ function CIFAR10_exp_helper(expID, lr, total_steps, λ; pretrain=false)
 end
 
 function adv_exp_helper(expID, lr, total_steps, λ,
-                        model_fn, ds_fn, pretrained_fn;
+                        model_fn, ds_fn, pretrain_fn;
                         attack_fn,
                         print_steps, save_steps,
                         test_per_steps, test_run_steps)
@@ -115,7 +115,7 @@ function adv_exp_helper(expID, lr, total_steps, λ,
 
     model, from_steps = maybe_load(model_file, model_fn)
     if from_steps == 1
-        model = pretrained_fn(model)
+        model = pretrain_fn(model)
     end
 
     @info "Progress" total_steps from_steps
@@ -192,4 +192,80 @@ function nat_exp_helper(expID, lr, total_steps,
            logger=logger,
            save_cb=save_cb,
            test_cb=test_cb)
+end
+
+function advae_exp_helper(expID, lr, total_steps, λ,
+                          ae_model_fn, ds_fn,
+                          pretrain_fn, pretrained_cnn_fn;
+                          attack_fn,
+                          print_steps, save_steps,
+                          test_per_steps, test_run_steps)
+    model_file = "trained/$expID.bson"
+    mkpath(dirname(model_file))
+
+    ds, test_ds = ds_fn();
+    x, y = next_batch!(ds) |> gpu;
+
+    # FIXME here we have two models, AE and CNN
+    ae, from_steps = maybe_load(model_file, ae_model_fn)
+    if from_steps == 1
+        ae = pretrain_fn(ae)
+    end
+    # load pretrained CNN
+    cnn = pretrained_cnn_fn()
+
+    @info "Progress" total_steps from_steps
+    if from_steps > total_steps return end
+
+    logger = TBLogger("tensorboard_logs/$expID/train", tb_append, min_level=Logging.Info)
+    test_logger = TBLogger("tensorboard_logs/$expID/test", tb_append, min_level=Logging.Info)
+
+    # warm up the model
+    cnn(ae(x))
+
+    opt = ADAM(lr);
+
+    save_cb = create_save_cb(model_file, ae, save_steps=save_steps)
+    test_cb = create_adv_test_cb(Chain(ae, cnn), test_ds,
+                                 logger=test_logger,
+                                 attack_fn=attack_fn,
+                                 test_per_steps=test_per_steps, test_run_steps=test_run_steps)
+
+    advae_train!(ae, cnn, opt, attack_fn, ds,
+                 train_steps=total_steps,
+                 from_steps=from_steps,
+                 print_steps=print_steps,
+                 λ=λ,
+                 logger=logger,
+                 save_cb=save_cb,
+                 test_cb=test_cb)
+
+end
+
+function MNIST_advae_exp_helper(expID, lr, total_steps, λ; pretrain=false)
+    # This put log and saved model into MNIST subfolder
+    expID = "MNIST-advae/" * expID
+
+    ae_model_fn = CNN_AE
+    ds_fn = () -> load_MNIST_ds(batch_size=50)
+
+    function train_fn(model)
+        ds, test_ds = ds_fn();
+        x, y = next_batch!(ds) |> gpu;
+        model(x)
+
+        opt = ADAM(1e-3);
+        aetrain!(model, opt, ds, train_steps=5000, print_steps=100)
+    end
+    pretrain_fn(model) = maybe_train("trained/pretrain-MNIST-ae.bson", model, train_fn)
+
+    pretrained_cnn_fn() = maybe_train("trained/pretrain-MNIST.bson", get_Madry_model(), train_fn)
+
+    advae_exp_helper(expID, lr, total_steps, λ,
+                     ae_model_fn, ds_fn,
+                     if pretrain pretrain_fn else (a)->a end,
+                     pretrained_cnn_fn,
+                     print_steps=20, save_steps=40,
+                     test_per_steps=100, test_run_steps=20,
+                     attack_fn=attack_PGD_k(40))
 end

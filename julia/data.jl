@@ -7,7 +7,7 @@
 # For 1070
 # g=7.5
 # For 2080 Ti
-g=9.5
+g=9.0
 ENV["CUARRAYS_MEMORY_LIMIT"] = convert(Int, round(g * 1024 * 1024 * 1024))
 
 # this manually set works

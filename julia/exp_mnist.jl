@@ -98,3 +98,30 @@ function main()
     test()
     exp()
 end
+
+##############################
+## AdvAE experiments
+##############################
+
+function exp_advae_f0(lr, total_steps)
+    expID = "f0-$lr"
+    MNIST_advae_exp_helper(expID, lr, total_steps, 0)
+end
+
+function exp_advae_pretrain(lr, total_steps)
+    expID = "pretrain-$lr"
+    MNIST_advae_exp_helper(expID, lr, total_steps, 0, pretrain=true)
+end
+
+function exp_advae_f1(lr, total_steps)
+    expID = "f1-$lr"
+    MNIST_advae_exp_helper(expID, lr, total_steps, 1)
+end
+
+function test()
+    exp_advae_f0(1e-3, 2000)
+    exp_advae_f0(1e-4, 2000)
+    exp_advae_pretrain(1e-4, 2000)
+    exp_advae_pretrain(1e-3, 2000)
+    exp_advae_f1(1e-3, 2000)
+end

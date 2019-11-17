@@ -83,7 +83,7 @@ end
 
 
 # TODO learning rate?
-function test_CIFAR_ds()
+function test_CIFAR10_ds()
     ds, test_ds = load_CIFAR10_ds(batch_size=128);
     x, y = next_batch!(ds) |> gpu;
 
@@ -148,12 +148,16 @@ function test_AE()
 
     train!(cnn, opt, ds)
 
+    cnn = maybe_train("trained/pretrain-MNIST.bson", get_Madry_model(), train_fn)
+
 
     # ae = dense_AE()
     ae = CNN_AE()
     # ae = CNN2_AE()
+    size(ae(x))
 
     # FIXME opt states?
+    opt = ADAM(1e-3)
     opt = ADAM(1e-4)
     # FIXME Flux.mse(logits, x)
     # FIXME sigmoid mse?
@@ -161,8 +165,7 @@ function test_AE()
 
     evaluate_AE(ae, test_ds, cnn=cnn)
 
-    # FIXME performance overhead
-    @epochs 2 advae_train!(ae, cnn, opt, attack_PGD_k(40), ds, print_steps=20)
+    advae_train!(ae, cnn, opt, attack_PGD_k(40), ds, print_steps=20)
 
     evaluate(cnn, test_ds)
     evaluate(cnn, test_ds, attack_fn=attack_PGD_k(40))

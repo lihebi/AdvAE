@@ -13,7 +13,7 @@ function param_count(model)
 end
 
 function test_param_count()
-    param_count(get_CIFAR_CNN_model())
+    param_count(get_CIFAR10_CNN_model())
     param_count(resnet(20))
     param_count(resnet(32))
     param_count(resnet(44))
@@ -35,7 +35,7 @@ end
 function exp_res_model(expID, model_fn, total_steps; lr=1e-3)
     # 390 batch / epoch
     ds_fn = () -> load_CIFAR10_ds(batch_size=128)
-    expID = "CIFAR/model-$expID"
+    expID = "CIFAR10/model-$expID"
     nat_exp_helper(expID, lr, total_steps, model_fn, ds_fn)
 end
 
@@ -111,9 +111,10 @@ end
 
 function exp_tmp()
     exp_f1(5e-3, 500)
-    exp_f1(1e-3, 500)
-    exp_itadv(1e-3, 500)
-    exp_itadv(5e-4, 500)
+    exp_f1(3e-3, 2000)
+    exp_f1(1e-3, 2000)
+    exp_itadv(1e-3, 2000)
+    exp_itadv(5e-4, 2000)
     exp_pretrain(1e-3, 500)
 end
 

@@ -97,7 +97,8 @@ end
 
 myConv(args...; kwargs...) = Conv(args..., init=my_glorot_uniform; kwargs...)
 
-function get_CIFAR_CNN_model()
+function get_CIFAR10_CNN_model()
+    # DEPRECATED
     Chain(myConv((5,5), 3=>16, relu),
           MaxPool((2,2)),
           myConv((5,5), 16=>8, relu),

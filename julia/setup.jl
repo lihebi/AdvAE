@@ -33,6 +33,8 @@ Pkg.add("MLDatasets")
 Pkg.add("TensorBoardLogger")
 Pkg.add("LoggingExtras")
 Pkg.add("ProgressMeter")
+# for showing images
+Pkg.add("ImageMagick")
 
 
 # trying to use Flux master. The old Flux has BN gradient bug.

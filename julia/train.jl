@@ -153,10 +153,12 @@ function train!(model, opt, ds;
 
         if step % print_steps == 0
             println()
-            @info "data" loss=get(loss_metric) acc=get(acc_metric)
+            loss=get!(loss_metric)
+            acc=get!(acc_metric)
+            @info "data"  loss acc
             if typeof(logger) <: TBLogger
-                log_value(logger, "loss", get!(loss_metric), step=step)
-                log_value(logger, "acc", get!(acc_metric), step=step)
+                log_value(logger, "loss", loss, step=step)
+                log_value(logger, "acc", acc, step=step)
             end
         end
         test_cb(step)
@@ -203,13 +205,17 @@ function advtrain!(model, opt, attack_fn, ds;
 
         if step % print_steps == 0
             println()
-            @info "data" get(m_cleanloss) get(m_advloss) get(m_cleanacc) get(m_advacc)
+            natloss = get!(m_cleanloss)
+            advloss = get!(m_advloss)
+            natacc = get!(m_cleanacc)
+            advacc = get!(m_advacc)
+            @info "data" natloss advloss natacc advacc
             # TODO log training time
             if typeof(logger) <: TBLogger
-                log_value(logger, "loss/nat_loss", get!(m_cleanloss), step=step)
-                log_value(logger, "loss/adv_loss", get!(m_advloss), step=step)
-                log_value(logger, "acc/nat_acc", get!(m_cleanacc), step=step)
-                log_value(logger, "acc/adv_acc", get!(m_advacc), step=step)
+                log_value(logger, "loss/nat_loss", natloss, step=step)
+                log_value(logger, "loss/adv_loss", advloss, step=step)
+                log_value(logger, "acc/nat_acc", natacc, step=step)
+                log_value(logger, "acc/adv_acc", advacc, step=step)
             end
         end
         test_cb(step)
@@ -277,15 +283,19 @@ function create_adv_test_cb(model, test_ds; test_per_steps, test_run_steps, atta
             end
             # back into training node
             Flux.testmode!(model, false)
-            @info "test data" get(m_cleanloss) get(m_advloss) get(m_cleanacc) get(m_advacc)
+            natloss = get!(m_cleanloss)
+            advloss = get!(m_advloss)
+            natacc = get!(m_cleanacc)
+            advacc = get!(m_advacc)
+            @info "test data" natloss advloss natacc advacc
 
             # use explicit API to avoid manipulating log_step_increment
             if typeof(logger) <: TBLogger
                 @info "logging results .."
-                log_value(logger, "loss/nat_loss", get!(m_cleanloss), step=step)
-                log_value(logger, "loss/adv_loss", get!(m_advloss), step=step)
-                log_value(logger, "acc/nat_acc", get!(m_cleanacc), step=step)
-                log_value(logger, "acc/adv_acc", get!(m_advacc), step=step)
+                log_value(logger, "loss/nat_loss", natloss, step=step)
+                log_value(logger, "loss/adv_loss", advloss, step=step)
+                log_value(logger, "acc/nat_acc", natacc, step=step)
+                log_value(logger, "acc/adv_acc", advacc, step=step)
             end
         end
     end
@@ -318,13 +328,15 @@ function create_test_cb(model, test_ds; logger=nothing)
             # back into training node
             Flux.testmode!(model, false)
 
-            @info "test data" get(m_cleanloss) get(m_cleanacc)
+            loss = get!(m_cleanloss)
+            acc = get!(m_cleanacc)
+            @info "test data" loss acc
 
             # use explicit API to avoid manipulating log_step_increment
             if typeof(logger) <: TBLogger
                 @info "logging results .."
-                log_value(logger, "loss", get!(m_cleanloss), step=step)
-                log_value(logger, "acc", get!(m_cleanacc), step=step)
+                log_value(logger, "loss", loss, step=step)
+                log_value(logger, "acc", acc, step=step)
             end
         end
     end
@@ -358,13 +370,20 @@ function aetrain!(model, opt, ds;
 
         if step % print_steps == 0
             println()
-            @show get!(loss_metric)
+            @info "data" get!(loss_metric)
         end
     end
 end
 
 function advae_train!(ae, cnn, opt, attack_fn, ds;
-                      train_steps=ds.nbatch, print_steps=50)
+                      train_steps=ds.nbatch,
+                      from_steps=1,
+                      λ=0,
+                      print_steps=50,
+                      logger=nothing,
+                      save_cb=(i)->nothing,
+                      test_cb=(i)->nothing)
+    # update only ae parameter
     ps=Flux.params(ae)
 
     m_cleanloss = MeanMetric()
@@ -406,10 +425,19 @@ function advae_train!(ae, cnn, opt, attack_fn, ds;
 
         if step % print_steps == 0
             println()
-            @show get!(m_cleanloss)
-            @show get!(m_cleanacc)
-            @show get!(m_advloss)
-            @show get!(m_advacc)
+            natloss = get!(m_cleanloss)
+            advloss = get!(m_advloss)
+            natacc = get!(m_cleanacc)
+            advacc = get!(m_advacc)
+            @info "data" natloss advloss natacc advacc
+            if typeof(logger) <: TBLogger
+                log_value(logger, "loss/nat_loss", natloss, step=step)
+                log_value(logger, "loss/adv_loss", advloss, step=step)
+                log_value(logger, "acc/nat_acc", natacc, step=step)
+                log_value(logger, "acc/adv_acc", advacc, step=step)
+            end
         end
+        test_cb(step)
+        save_cb(step)
     end
 end

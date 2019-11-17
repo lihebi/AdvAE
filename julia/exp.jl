@@ -14,7 +14,7 @@ function maybe_train(model_file, model, train_fn)
         Flux.loadparams!(model, weights)
         return model
     else
-        @info "Pre-training CNN model .."
+        @info "Pre-training .."
         train_fn(model)
         @info "saving .."
         @save model_file weights=Tracker.data.(Flux.params(cpu(model)))
@@ -32,12 +32,12 @@ function maybe_load(model_file, model_fn)
         @info "loading weights"
         # NOTE: add 1 as starting step
         from_steps += 1
-        model = model_fn()[1:end-1]
+        model = model_fn()
         Flux.loadparams!(model, weights)
     else
         @info "Starting from scratch .."
         # FIXME load a pretrained model here
-        model = model_fn()[1:end-1]
+        model = model_fn()
         from_steps = 1
     end
     return model, from_steps
@@ -47,8 +47,7 @@ function MNIST_exp_helper(expID, lr, total_steps, λ; pretrain=false)
     # This put log and saved model into MNIST subfolder
     expID = "MNIST/" * expID
 
-    pretrained_model_file = "trained/pretrain-MNIST.bson"
-    model_fn = get_Madry_model
+    model_fn = () -> get_Madry_model()[1:end-1]
     ds_fn = () -> load_MNIST_ds(batch_size=50)
 
     function train_fn(model)
@@ -72,8 +71,7 @@ end
 function CIFAR10_exp_helper(expID, lr, total_steps, λ; pretrain=false)
     expID = "CIFAR10/" * expID
 
-    pretrained_model_file = "trained/pretrain-CIFAR10.bson"
-    model_fn = () -> WRN(16,4)
+    model_fn = () -> WRN(16,4)[1:end-1]
     ds_fn = () -> load_CIFAR10_ds(batch_size=128)
 
     function train_fn(model)

@@ -3,6 +3,176 @@ include("model.jl")
 include("train.jl")
 include("exp.jl")
 
+
+
+function CIFAR10_pretrain_fn(m)
+    ds_fn = () -> load_CIFAR10_ds(batch_size=128)
+    function train_fn(model)
+        ds, test_ds = ds_fn();
+        x, y = next_batch!(ds) |> gpu;
+        model(x)
+
+        # FIXME record the pretrain as well?
+        # FIXME I might want to print the test acc at the end
+        #
+        # I actually want to record the pretrain process
+        # TODO test this
+        #
+        # FIXME Remove if exist?
+        logger = TBLogger("tensorboard_logs/$expID/train", tb_append, min_level=Logging.Info)
+        test_logger = TBLogger("tensorboard_logs/$expID/test", tb_append, min_level=Logging.Info)
+        test_cb = create_test_cb(model, test_ds,
+                                 logger=test_logger,
+                                 test_per_steps=50,
+                                 test_run_steps=4)
+        opt = ADAM(1e-3);
+        train!(model, opt, ds,
+               train_steps=2000, print_steps=20,
+               logger=logger, test_cb=test_cb)
+        opt = ADAM(1e-4);
+        train!(model, opt, ds,
+               train_steps=4000, from_steps=2000, print_steps=20,
+               logger=logger, test_cb=test_cb)
+    end
+    maybe_train("trained/pretrain-CIFAR10.bson", m, train_fn)
+end
+
+function CIFAR10_pretrained_fn()
+    # test WRN(28,10) on 2080 Ti
+    model_fn = () -> WRN(16,4)
+    m = model_fn()
+    CIFAR10_pretrain_fn(m)
+end
+
+
+function CIFAR10_AE_pretrain_fn(m)
+    ds_fn = () -> load_CIFAR10_ds(batch_size=50)
+    function train_fn(model)
+        ds, test_ds = ds_fn();
+        x, y = next_batch!(ds) |> gpu;
+        model(x)
+
+        opt = ADAM(1e-3);
+        aetrain!(model, opt, ds, train_steps=5000, print_steps=100)
+    end
+    maybe_train("trained/pretrain-CIFAR10-ae.bson", m, train_fn)
+end
+
+function CIFAR10_exp_helper(expID, lr, total_steps, λ; pretrain=false)
+    expID = "CIFAR10/" * expID
+
+    model_fn = () -> WRN(16,4)
+    ds_fn = () -> load_CIFAR10_ds(batch_size=128)
+
+    adv_exp_helper(expID, lr, total_steps, λ,
+                   model_fn, ds_fn,
+                   if pretrain CIFAR10_pretrain_fn else (a)->a end,
+                   print_steps=2, save_steps=20,
+                   test_per_steps=20, test_run_steps=2,
+                   attack_fn=attack_CIFAR10_PGD_k(7))
+end
+
+
+function CIFAR10_dyattack_exp_helper(expID, lr, attack_fn, total_steps; pretrain)
+    # This put log and saved model into MNIST subfolder
+    if pretrain
+        expID = "CIFAR10-dyattack-pretrain/" * expID
+    else
+        expID = "CIFAR10-dyattack/" * expID
+    end
+
+    model_fn = () -> WRN(16,4)
+    ds_fn = () -> load_CIFAR10_ds(batch_size=50)
+
+    adv_exp_helper(expID, lr, total_steps, 0,
+                   model_fn, ds_fn,
+                   if pretrain CIFAR10_pretrain_fn else (a)->a end,
+                   print_steps=2, save_steps=20,
+                   test_per_steps=20, test_run_steps=2,
+                   attack_fn=attack_fn,
+                   test_attack_fn=attack_CIFAR10_PGD_k(7))
+end
+
+function exp_dyattack(schedule; pretrain=false)
+    # TODO IMPORTANT I'll definitely need to (HEBI: record the training time)
+    expID = replace("$schedule", " "=>"")
+    @show expID
+    for m in schedule
+        @show m
+        # TODO not only k, but (HEBI: also ε and η)
+        CIFAR10_dyattack_exp_helper(expID, 1e-3,
+                                    attack_CIFAR10_PGD_k(m[1]),
+                                    m[2],
+                                    pretrain=pretrain)
+    end
+end
+
+function exp_dymix(expID)
+    expID = replace("$schedule", " "=>"")
+    @show expID
+    for m in schedule
+        @show m
+        steps = m[2]
+        λ = m[1]
+        # FIXME when λ is large, reduce lr
+        CIFAR10_exp_helper(expID, 1e-3, steps, λ)
+    end
+end
+
+function exp_lrdecay(schedule)
+    expID = replace("$schedule", " "=>"")
+    @show expID
+    for m in schedule
+        lr = m[1]
+        steps = m[2]
+        CIFAR10_exp_helper("itadv-schedule/"*expID, lr, steps, 0)
+    end
+end
+
+function tmp()
+    # dyattack
+    exp_dyattack((0=>200, 1=>400, 2=>600, 3=>800, 4=>1000, 5=>1200, 6=>1400, 7=>2000))
+    exp_dyattack((0=>200, 1=>400, 2=>600, 3=>800, 4=>1000, 5=>1200, 6=>1400, 7=>2000), pretrain=true)
+    exp_dyattack((1=>500, 2=>1000, 3=>1500, 4=>2000, 5=>2500, 6=>3000, 7=>4000), pretrain=true)
+    # TODO (HEBI: add lr schedule)
+    exp_dyattack((1=>1000, 2=>2000, 3=>3000, 4=>4000, 5=>5000, 6=>6000, 7=>7000), pretrain=true)
+    # dymix
+    exp_dymix((5=>1000, 4=>2000, 3=>3000, 2=>4000, 1=>5000, 0=>6000))
+    # itadv baseline
+    #
+    # CIFAR10_exp_helper("baseline:itadv-1e-3", 1e-3, 2000, 0)
+    # CIFAR10_exp_helper("baseline:f1-1e-3", 1e-3, 2000, 1)
+    #
+    # Maybe reuse the first part?
+    exp_lrdecay((1e-3=>2000, 2e-4=>3000, 5e-5=>4000))
+
+    # TODO run this OVERNIGHT
+    exp_lrdecay((1e-3=>10000, 2e-4=>15000, 5e-5=>20000))
+end
+
+
+# TODO log decoded images to tensorboard
+# TODO record rec loss
+function CIFAR10_advae_exp_helper(expID, lr, total_steps; λ=0, γ=0, β=1, pretrain=false)
+    # This put log and saved model into MNIST subfolder
+    expID = "CIFAR10-advae/" * expID
+
+    # ae_model_fn = cifar10_AE
+    ae_model_fn = dunet
+    # ae_model_fn = cifar10_deep_AE
+    ds_fn = () -> load_CIFAR10_ds(batch_size=128)
+
+    advae_exp_helper(expID, lr, total_steps,
+                     ae_model_fn, ds_fn,
+                     if pretrain CIFAR10_AE_pretrain_fn else (a)->a end,
+                     λ=λ, γ=γ, β=β,
+                     CIFAR10_pretrained_fn,
+                     print_steps=2, save_steps=4,
+                     test_per_steps=20, test_run_steps=2,
+                     attack_fn=attack_CIFAR10_PGD_k(7))
+end
+
+
 function test_param_count()
     param_count(get_CIFAR10_CNN_model())
     param_count(resnet(20))

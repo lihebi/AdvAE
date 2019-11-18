@@ -87,15 +87,17 @@ function attack_PGD_k(k)
     end
 end
 
-# cifar: 8.0/255, 7, 2./255
-function CIFAR10_PGD_7(model, x, y)
+function attack_CIFAR10_PGD_k(k)
     # FIXME the model contains BN layers, and is set to test mode during
     # testing. However, I still need to perform attack during testing, which
     # requires gradient. But testing mode model cannot take gradient?
-    myPGD(model, x, y;
-          ϵ = 8/255,
-          step_size = 2/255,
-          iters = 7)
+    function attack(model, x, y)
+        # cifar: 8.0/255, 7, 2./255
+        myPGD(model, x, y;
+              ϵ = 8/255,
+              step_size = 2/255,
+              iters = k)
+    end
 end
 
 # something like tf.keras.metrics.Mean
@@ -230,7 +232,11 @@ function create_save_cb(model_file, model; save_steps)
             @info "saving .."
             # FIXME opt cannot be saved
             # FIXME logger cannot be saved
-            @time @save model_file model=cpu(model) from_steps=step
+            #
+            # FIXME sometimes user interrupt would crash the file, I'm saving it
+            # as xxx-tmp, and perform move afterwards, hopefully fix this.
+            @time @save model_file*".tmp" model=cpu(model) from_steps=step
+            mv(model_file*".tmp", model_file, force=true)
         end
     end
 end

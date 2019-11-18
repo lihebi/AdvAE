@@ -3,6 +3,123 @@ include("model.jl")
 include("train.jl")
 include("exp.jl")
 
+
+
+function MNIST_pretrain_fn(m)
+    function train_fn(model)
+        ds_fn = () -> load_MNIST_ds(batch_size=50)
+        ds, test_ds = ds_fn();
+        x, y = next_batch!(ds) |> gpu;
+        model(x)
+
+        opt = ADAM(1e-3);
+        train!(model, opt, ds, train_steps=2000, print_steps=100)
+        model
+    end
+    maybe_train("trained/pretrain-MNIST.bson", m, train_fn)
+end
+
+function MNIST_pretrained_fn()
+    m = get_Madry_model()
+    MNIST_pretrain_fn(m)
+end
+
+function MNIST_AE_pretrain_fn(m)
+    ds_fn = () -> load_MNIST_ds(batch_size=50)
+    function train_fn(model)
+        ds, test_ds = ds_fn();
+        x, y = next_batch!(ds) |> gpu;
+        model(x)
+
+        opt = ADAM(1e-3);
+        aetrain!(model, opt, ds, train_steps=2000, print_steps=100)
+    end
+    maybe_train("trained/pretrain-MNIST-ae.bson", m, train_fn)
+end
+
+
+
+function MNIST_exp_helper(expID, lr, total_steps, λ; pretrain=false)
+    # This put log and saved model into MNIST subfolder
+    expID = "MNIST/" * expID
+
+    model_fn = () -> get_Madry_model()
+    ds_fn = () -> load_MNIST_ds(batch_size=50)
+
+    adv_exp_helper(expID, lr, total_steps, λ,
+                   model_fn, ds_fn,
+                   if pretrain MNIST_pretrain_fn else (a)->a end,
+                   print_steps=20, save_steps=40,
+                   test_per_steps=100, test_run_steps=20,
+                   attack_fn=attack_PGD_k(40))
+end
+
+
+function MNIST_dyattack_exp_helper(expID, lr, attack_fn, total_steps)
+    # This put log and saved model into MNIST subfolder
+    expID = "MNIST-dyattack/" * expID
+
+    model_fn = () -> get_Madry_model()
+    ds_fn = () -> load_MNIST_ds(batch_size=50)
+
+    adv_exp_helper(expID, lr, total_steps, 0,
+                   model_fn, ds_fn,
+                   (a)->a,
+                   print_steps=20, save_steps=40,
+                   test_per_steps=100, test_run_steps=20,
+                   attack_fn=attack_fn,
+                   test_attack_fn=attack_PGD_k(40))
+end
+
+function exp_dyattack(schedule)
+    expID = replace("$schedule", " "=>"")
+    @show expID
+    for m in schedule
+        @show m
+        # TODO lr schedule, reduce lr should increase acc further
+        # TODO pretrain? Probably not.
+        MNIST_dyattack_exp_helper(expID, 1e-3, attack_PGD_k(m[1]), m[2])
+    end
+end
+
+function exp_dymix(schedule)
+    expID = replace("$schedule", " "=>"")
+    @show expID
+    for m in schedule
+        @show m
+        steps = m[2]
+        λ = m[1]
+        MNIST_exp_helper(expID, 1e-3, steps, λ)
+    end
+end
+
+function tmp()
+    # testing recording test_attack_fn using PGD-40, this would be the default one
+    # TODO tune schedule hyper-parameters
+    exp_dyattack((5=>400, 10=>800, 15=>1200, 20=>1600, 30=>2000, 40=>3000))
+    # exp_dyattack("test-$(now())")
+    exp_dymix((5=>1000, 4=>2000, 3=>3000, 2=>4000, 1=>5000, 0=>6000))
+end
+
+
+function MNIST_advae_exp_helper(expID, lr, total_steps; λ=0, γ=0, β=1, pretrain=false)
+    # This put log and saved model into MNIST subfolder
+    expID = "MNIST-advae/" * expID
+
+    ae_model_fn = CNN_AE
+    ds_fn = () -> load_MNIST_ds(batch_size=50)
+
+    advae_exp_helper(expID, lr, total_steps,
+                     ae_model_fn, ds_fn,
+                     if pretrain MNIST_AE_pretrain_fn else (a)->a end,
+                     MNIST_pretrained_fn,
+                     λ=λ, γ=γ, β=β,
+                     print_steps=20, save_steps=40,
+                     test_per_steps=100, test_run_steps=20,
+                     attack_fn=attack_PGD_k(40))
+end
+
+
 # CAUTION the function names are the same for CIFAR
 
 function exp_itadv(lr, total_steps)

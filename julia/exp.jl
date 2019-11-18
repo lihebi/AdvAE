@@ -35,96 +35,12 @@ function maybe_load(model_file, model_fn)
 end
 
 
-function MNIST_pretrain_fn(m)
-    function train_fn(model)
-        ds_fn = () -> load_MNIST_ds(batch_size=50)
-        ds, test_ds = ds_fn();
-        x, y = next_batch!(ds) |> gpu;
-        model(x)
-
-        opt = ADAM(1e-3);
-        train!(model, opt, ds, train_steps=2000, print_steps=100)
-        model
-    end
-    maybe_train("trained/pretrain-MNIST.bson", m, train_fn)
-end
-
-function MNIST_pretrained_fn()
-    m = get_Madry_model()
-    MNIST_pretrain_fn(m)
-end
-
-function MNIST_AE_pretrain_fn(m)
-    ds_fn = () -> load_MNIST_ds(batch_size=50)
-    function train_fn(model)
-        ds, test_ds = ds_fn();
-        x, y = next_batch!(ds) |> gpu;
-        model(x)
-
-        opt = ADAM(1e-3);
-        aetrain!(model, opt, ds, train_steps=2000, print_steps=100)
-    end
-    maybe_train("trained/pretrain-MNIST-ae.bson", m, train_fn)
-end
-
-function CIFAR10_pretrain_fn(m)
-    ds_fn = () -> load_CIFAR10_ds(batch_size=128)
-    function train_fn(model)
-        ds, test_ds = ds_fn();
-        x, y = next_batch!(ds) |> gpu;
-        model(x)
-
-        # FIXME I might want to print the test acc at the end
-        # FIXME record the pretrain as well?
-        opt = ADAM(1e-3);
-        train!(model, opt, ds, train_steps=2000, print_steps=20)
-        opt = ADAM(1e-4);
-        train!(model, opt, ds, train_steps=4000, from_steps=2000, print_steps=20)
-    end
-    maybe_train("trained/pretrain-CIFAR10.bson", m, train_fn)
-end
-
-function CIFAR10_pretrained_fn()
-    model_fn = () -> WRN(16,4)
-    m = model_fn()
-    CIFAR10_pretrain_fn(m)
-end
-
-
-function MNIST_exp_helper(expID, lr, total_steps, λ; pretrain=false)
-    # This put log and saved model into MNIST subfolder
-    expID = "MNIST/" * expID
-
-    model_fn = () -> get_Madry_model()
-    ds_fn = () -> load_MNIST_ds(batch_size=50)
-
-    adv_exp_helper(expID, lr, total_steps, λ,
-                   model_fn, ds_fn,
-                   if pretrain MNIST_pretrain_fn else (a)->a end,
-                   print_steps=20, save_steps=40,
-                   test_per_steps=100, test_run_steps=20,
-                   attack_fn=attack_PGD_k(40))
-end
-
-function CIFAR10_exp_helper(expID, lr, total_steps, λ; pretrain=false)
-    expID = "CIFAR10/" * expID
-
-    model_fn = () -> WRN(16,4)
-    ds_fn = () -> load_CIFAR10_ds(batch_size=128)
-
-    adv_exp_helper(expID, lr, total_steps, λ,
-                   model_fn, ds_fn,
-                   if pretrain CIFAR10_pretrain_fn else (a)->a end,
-                   print_steps=2, save_steps=4,
-                   test_per_steps=20, test_run_steps=2,
-                   attack_fn=CIFAR10_PGD_7)
-end
-
 function adv_exp_helper(expID, lr, total_steps, λ,
                         model_fn, ds_fn, pretrain_fn;
                         attack_fn,
                         print_steps, save_steps,
-                        test_per_steps, test_run_steps)
+                        test_per_steps, test_run_steps,
+                        test_attack_fn=attack_fn)
     model_file = "trained/$expID.bson"
     mkpath(dirname(model_file))
 
@@ -157,7 +73,7 @@ function adv_exp_helper(expID, lr, total_steps, λ,
     save_cb = create_save_cb(model_file, model, save_steps=save_steps)
     test_cb = create_adv_test_cb(model, test_ds,
                                  logger=test_logger,
-                                 attack_fn=attack_fn,
+                                 attack_fn=test_attack_fn,
                                  test_per_steps=test_per_steps, test_run_steps=test_run_steps)
 
     advtrain!(model, opt, attack_fn, ds,
@@ -269,55 +185,3 @@ function advae_exp_helper(expID, lr, total_steps,
 
 end
 
-
-function MNIST_advae_exp_helper(expID, lr, total_steps; λ=0, γ=0, β=1, pretrain=false)
-    # This put log and saved model into MNIST subfolder
-    expID = "MNIST-advae/" * expID
-
-    ae_model_fn = CNN_AE
-    ds_fn = () -> load_MNIST_ds(batch_size=50)
-
-    advae_exp_helper(expID, lr, total_steps,
-                     ae_model_fn, ds_fn,
-                     if pretrain MNIST_AE_pretrain_fn else (a)->a end,
-                     MNIST_pretrained_fn,
-                     λ=λ, γ=γ, β=β,
-                     print_steps=20, save_steps=40,
-                     test_per_steps=100, test_run_steps=20,
-                     attack_fn=attack_PGD_k(40))
-end
-
-
-function CIFAR10_AE_pretrain_fn(m)
-    ds_fn = () -> load_CIFAR10_ds(batch_size=50)
-    function train_fn(model)
-        ds, test_ds = ds_fn();
-        x, y = next_batch!(ds) |> gpu;
-        model(x)
-
-        opt = ADAM(1e-3);
-        aetrain!(model, opt, ds, train_steps=5000, print_steps=100)
-    end
-    maybe_train("trained/pretrain-CIFAR10-ae.bson", m, train_fn)
-end
-
-# TODO log decoded images to tensorboard
-# TODO record rec loss
-function CIFAR10_advae_exp_helper(expID, lr, total_steps; λ=0, γ=0, β=1, pretrain=false)
-    # This put log and saved model into MNIST subfolder
-    expID = "CIFAR10-advae/" * expID
-
-    # ae_model_fn = cifar10_AE
-    ae_model_fn = dunet
-    # ae_model_fn = cifar10_deep_AE
-    ds_fn = () -> load_CIFAR10_ds(batch_size=128)
-
-    advae_exp_helper(expID, lr, total_steps,
-                     ae_model_fn, ds_fn,
-                     if pretrain CIFAR10_AE_pretrain_fn else (a)->a end,
-                     λ=λ, γ=γ, β=β,
-                     CIFAR10_pretrained_fn,
-                     print_steps=2, save_steps=4,
-                     test_per_steps=20, test_run_steps=2,
-                     attack_fn=CIFAR10_PGD_7)
-end

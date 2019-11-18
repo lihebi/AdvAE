@@ -98,9 +98,9 @@ function test_CIFAR10_ds()
 
     model(x)
 
-    adv = CIFAR10_PGD_7(model, x, y);
+    adv = attack_CIFAR10_PGD_k(7)(model, x, y);
     Flux.testmode!(model)
-    adv = CIFAR10_PGD_7(model, x, y);
+    adv = attack_CIFAR10_PGD_k(7)(model, x, y);
 
     size(adv)
 

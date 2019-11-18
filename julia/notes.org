@@ -46,6 +46,7 @@
 *** TODO BoundaryAttack, BAPP
 
 * robust training
+** TODO compare with free train
 ** TODO cifar10
 
 *** DONE select the best resnet model

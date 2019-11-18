@@ -3,15 +3,6 @@ include("model.jl")
 include("train.jl")
 include("exp.jl")
 
-function param_count(model)
-    ps = Flux.params(model)
-    res = 0
-    for p in keys(ps.params.dict)
-        res += prod(size(p))
-    end
-    res / 1000 / 1000
-end
-
 function test_param_count()
     param_count(get_CIFAR10_CNN_model())
     param_count(resnet(20))
@@ -142,4 +133,50 @@ function exp()
     exp_pretrain()
     exp_f1()
     exp_tmp()
+end
+
+
+##############################
+## AdvAE experiments
+##############################
+
+function exp_advae_f0(lr, total_steps)
+    expID = "f0-$lr"
+    CIFAR10_advae_exp_helper(expID, lr, total_steps, λ=0)
+end
+
+function exp_advae_pretrain(lr, total_steps)
+    expID = "pretrain-$lr"
+    CIFAR10_advae_exp_helper(expID, lr, total_steps, λ=0, pretrain=true)
+end
+
+function exp_advae_f1(lr, total_steps)
+    expID = "f1-$lr"
+    CIFAR10_advae_exp_helper(expID, lr, total_steps, λ=1)
+end
+
+function exp_advae_f01(lr, total_steps)
+    expID = "f01-$lr"
+    CIFAR10_advae_exp_helper(expID, lr, total_steps, λ=0, γ=1)
+end
+
+function exp_advae_test(lr, total_steps; expID="test-$(now())")
+    @show expID
+    CIFAR10_advae_exp_helper(expID, lr, total_steps, λ=3, γ=3, β=1)
+end
+
+
+# FIXME parametrize cnn_model_fn and ae_model_fn
+function test()
+    exp_advae_f0(1e-3, 2000)
+    exp_advae_f0(1e-4, 2000)
+    exp_advae_pretrain(1e-4, 2000)
+    exp_advae_pretrain(1e-3, 3000)
+    exp_advae_f1(1e-3, 2000)
+    exp_advae_f1(2e-3, 2000)
+    exp_advae_f01(1e-3, 2000)
+
+    exp_advae_test(1e-3, 1000, expID="test-2019-11-17T13:28:29.278")
+    exp_advae_test(4e-4, 2000, expID="test-2019-11-18T00:15:19.833")
+    exp_advae_test(4e-4, 2000)
 end

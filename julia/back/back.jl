@@ -704,3 +704,9 @@ function test()
     evaluate(model, test_ds, attack_fn=attack_FGSM)
     evaluate(model, test_ds, attack_fn=attack_PGD_k(40))
 end
+
+
+# FIXME model cannot be easily saved and loaded, weights can, but
+# needs to get rid of CuArrays and TrackedArrays
+#
+@time @save model_file weights=Tracker.data.(Flux.params(cpu(model))) from_steps=step

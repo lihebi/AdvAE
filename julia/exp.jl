@@ -7,17 +7,14 @@ using Dates
 # only takes dataset name.
 function maybe_train(model_file, model, train_fn)
     if isfile(model_file)
-        @info "Already trained. Loading .."
-        # load the model
-        @load model_file weights
-        @info "loading weights into model"
-        Flux.loadparams!(model, weights)
-        return model
+        @info "Already trained. Loading .." model_file
+        @load model_file model
+        return gpu(model)
     else
         @info "Pre-training .."
         train_fn(model)
         @info "saving .."
-        @save model_file weights=Tracker.data.(Flux.params(cpu(model)))
+        @save model_file model=cpu(model)
         return model
     end
 end
@@ -25,55 +22,53 @@ end
 function maybe_load(model_file, model_fn)
     if isfile(model_file)
         @info "Loading from $model_file .."
-        # During load, there is no key=value, but the variable name shall match
-        # the key when saving, thus the order is not important. During saving,
-        # it can be key=value pair, or just the variable, but cannot be x.y
-        @load model_file weights from_steps
-        @info "loading weights"
+        @load model_file model from_steps
+        model = gpu(model)
         # NOTE: add 1 as starting step
         from_steps += 1
-        model = model_fn()
-        Flux.loadparams!(model, weights)
     else
         @info "Starting from scratch .."
-        # FIXME load a pretrained model here
         model = model_fn()
         from_steps = 1
     end
-    return model, from_steps
+    return gpu(model), from_steps
 end
 
-function MNIST_exp_helper(expID, lr, total_steps, λ; pretrain=false)
-    # This put log and saved model into MNIST subfolder
-    expID = "MNIST/" * expID
 
-    model_fn = () -> get_Madry_model()[1:end-1]
+function MNIST_pretrain_fn(m)
+    function train_fn(model)
+        ds_fn = () -> load_MNIST_ds(batch_size=50)
+        ds, test_ds = ds_fn();
+        x, y = next_batch!(ds) |> gpu;
+        model(x)
+
+        opt = ADAM(1e-3);
+        train!(model, opt, ds, train_steps=2000, print_steps=100)
+        model
+    end
+    maybe_train("trained/pretrain-MNIST.bson", m, train_fn)
+end
+
+function MNIST_pretrained_fn()
+    m = get_Madry_model()
+    MNIST_pretrain_fn(m)
+end
+
+function MNIST_AE_pretrain_fn(m)
     ds_fn = () -> load_MNIST_ds(batch_size=50)
-
     function train_fn(model)
         ds, test_ds = ds_fn();
         x, y = next_batch!(ds) |> gpu;
         model(x)
 
         opt = ADAM(1e-3);
-        train!(model, opt, ds, train_steps=5000, print_steps=100)
+        aetrain!(model, opt, ds, train_steps=2000, print_steps=100)
     end
-    pretrain_fn(model) = maybe_train("trained/pretrain-MNIST.bson", model, train_fn)
-
-    adv_exp_helper(expID, lr, total_steps, λ,
-                   model_fn, ds_fn,
-                   if pretrain pretrain_fn else (a)->a end,
-                   print_steps=20, save_steps=40,
-                   test_per_steps=100, test_run_steps=20,
-                   attack_fn=attack_PGD_k(40))
+    maybe_train("trained/pretrain-MNIST-ae.bson", m, train_fn)
 end
 
-function CIFAR10_exp_helper(expID, lr, total_steps, λ; pretrain=false)
-    expID = "CIFAR10/" * expID
-
-    model_fn = () -> WRN(16,4)[1:end-1]
+function CIFAR10_pretrain_fn(m)
     ds_fn = () -> load_CIFAR10_ds(batch_size=128)
-
     function train_fn(model)
         ds, test_ds = ds_fn();
         x, y = next_batch!(ds) |> gpu;
@@ -86,12 +81,40 @@ function CIFAR10_exp_helper(expID, lr, total_steps, λ; pretrain=false)
         opt = ADAM(1e-4);
         train!(model, opt, ds, train_steps=4000, from_steps=2000, print_steps=20)
     end
+    maybe_train("trained/pretrain-CIFAR10.bson", m, train_fn)
+end
 
-    pretrain_fn(model) = maybe_train("trained/pretrain-CIFAR10.bson", model, train_fn)
+function CIFAR10_pretrained_fn()
+    model_fn = () -> WRN(16,4)
+    m = model_fn()
+    CIFAR10_pretrain_fn(m)
+end
+
+
+function MNIST_exp_helper(expID, lr, total_steps, λ; pretrain=false)
+    # This put log and saved model into MNIST subfolder
+    expID = "MNIST/" * expID
+
+    model_fn = () -> get_Madry_model()
+    ds_fn = () -> load_MNIST_ds(batch_size=50)
 
     adv_exp_helper(expID, lr, total_steps, λ,
                    model_fn, ds_fn,
-                   if pretrain pretrain_fn else (a)->a end,
+                   if pretrain MNIST_pretrain_fn else (a)->a end,
+                   print_steps=20, save_steps=40,
+                   test_per_steps=100, test_run_steps=20,
+                   attack_fn=attack_PGD_k(40))
+end
+
+function CIFAR10_exp_helper(expID, lr, total_steps, λ; pretrain=false)
+    expID = "CIFAR10/" * expID
+
+    model_fn = () -> WRN(16,4)
+    ds_fn = () -> load_CIFAR10_ds(batch_size=128)
+
+    adv_exp_helper(expID, lr, total_steps, λ,
+                   model_fn, ds_fn,
+                   if pretrain CIFAR10_pretrain_fn else (a)->a end,
                    print_steps=2, save_steps=4,
                    test_per_steps=20, test_run_steps=2,
                    attack_fn=CIFAR10_PGD_7)
@@ -194,25 +217,31 @@ function nat_exp_helper(expID, lr, total_steps,
            test_cb=test_cb)
 end
 
-function advae_exp_helper(expID, lr, total_steps, λ,
+function advae_exp_helper(expID, lr, total_steps,
                           ae_model_fn, ds_fn,
                           pretrain_fn, pretrained_cnn_fn;
+                          λ, γ, β,
                           attack_fn,
                           print_steps, save_steps,
                           test_per_steps, test_run_steps)
     model_file = "trained/$expID.bson"
+    @show model_file
     mkpath(dirname(model_file))
 
     ds, test_ds = ds_fn();
     x, y = next_batch!(ds) |> gpu;
 
-    # FIXME here we have two models, AE and CNN
+    # here we have two models, AE and CNN
     ae, from_steps = maybe_load(model_file, ae_model_fn)
     if from_steps == 1
         ae = pretrain_fn(ae)
     end
     # load pretrained CNN
     cnn = pretrained_cnn_fn()
+    # set test mode
+    Flux.testmode!(cnn)
+    # warm up the model
+    cnn(ae(x))
 
     @info "Progress" total_steps from_steps
     if from_steps > total_steps return end
@@ -220,35 +249,47 @@ function advae_exp_helper(expID, lr, total_steps, λ,
     logger = TBLogger("tensorboard_logs/$expID/train", tb_append, min_level=Logging.Info)
     test_logger = TBLogger("tensorboard_logs/$expID/test", tb_append, min_level=Logging.Info)
 
-    # warm up the model
-    cnn(ae(x))
-
     opt = ADAM(lr);
 
     save_cb = create_save_cb(model_file, ae, save_steps=save_steps)
-    test_cb = create_adv_test_cb(Chain(ae, cnn), test_ds,
-                                 logger=test_logger,
-                                 attack_fn=attack_fn,
-                                 test_per_steps=test_per_steps, test_run_steps=test_run_steps)
+    test_cb = create_advae_test_cb(ae, cnn, test_ds,
+                                   logger=test_logger,
+                                   attack_fn=attack_fn,
+                                   test_per_steps=test_per_steps, test_run_steps=test_run_steps)
 
     advae_train!(ae, cnn, opt, attack_fn, ds,
                  train_steps=total_steps,
                  from_steps=from_steps,
                  print_steps=print_steps,
                  λ=λ,
+                 γ=γ,
                  logger=logger,
                  save_cb=save_cb,
                  test_cb=test_cb)
 
 end
 
-function MNIST_advae_exp_helper(expID, lr, total_steps, λ; pretrain=false)
+
+function MNIST_advae_exp_helper(expID, lr, total_steps; λ=0, γ=0, β=1, pretrain=false)
     # This put log and saved model into MNIST subfolder
     expID = "MNIST-advae/" * expID
 
     ae_model_fn = CNN_AE
     ds_fn = () -> load_MNIST_ds(batch_size=50)
 
+    advae_exp_helper(expID, lr, total_steps,
+                     ae_model_fn, ds_fn,
+                     if pretrain MNIST_AE_pretrain_fn else (a)->a end,
+                     MNIST_pretrained_fn,
+                     λ=λ, γ=γ, β=β,
+                     print_steps=20, save_steps=40,
+                     test_per_steps=100, test_run_steps=20,
+                     attack_fn=attack_PGD_k(40))
+end
+
+
+function CIFAR10_AE_pretrain_fn(m)
+    ds_fn = () -> load_CIFAR10_ds(batch_size=50)
     function train_fn(model)
         ds, test_ds = ds_fn();
         x, y = next_batch!(ds) |> gpu;
@@ -257,15 +298,26 @@ function MNIST_advae_exp_helper(expID, lr, total_steps, λ; pretrain=false)
         opt = ADAM(1e-3);
         aetrain!(model, opt, ds, train_steps=5000, print_steps=100)
     end
-    pretrain_fn(model) = maybe_train("trained/pretrain-MNIST-ae.bson", model, train_fn)
+    maybe_train("trained/pretrain-CIFAR10-ae.bson", m, train_fn)
+end
 
-    pretrained_cnn_fn() = maybe_train("trained/pretrain-MNIST.bson", get_Madry_model(), train_fn)
+# TODO log decoded images to tensorboard
+# TODO record rec loss
+function CIFAR10_advae_exp_helper(expID, lr, total_steps; λ=0, γ=0, β=1, pretrain=false)
+    # This put log and saved model into MNIST subfolder
+    expID = "CIFAR10-advae/" * expID
 
-    advae_exp_helper(expID, lr, total_steps, λ,
+    # ae_model_fn = cifar10_AE
+    ae_model_fn = dunet
+    # ae_model_fn = cifar10_deep_AE
+    ds_fn = () -> load_CIFAR10_ds(batch_size=128)
+
+    advae_exp_helper(expID, lr, total_steps,
                      ae_model_fn, ds_fn,
-                     if pretrain pretrain_fn else (a)->a end,
-                     pretrained_cnn_fn,
-                     print_steps=20, save_steps=40,
-                     test_per_steps=100, test_run_steps=20,
-                     attack_fn=attack_PGD_k(40))
+                     if pretrain CIFAR10_AE_pretrain_fn else (a)->a end,
+                     λ=λ, γ=γ, β=β,
+                     CIFAR10_pretrained_fn,
+                     print_steps=2, save_steps=4,
+                     test_per_steps=20, test_run_steps=2,
+                     attack_fn=CIFAR10_PGD_7)
 end

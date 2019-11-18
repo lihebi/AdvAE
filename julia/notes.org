@@ -21,26 +21,32 @@
 
 * AdvAE
 
-** STARTED MNIST testing and logging
-*** TODO AdvAE
-**** auto encoder
-***** Dunet
-*** HGD
+** TODO MNIST testing and logging
+*** DONE auto encoder
+    CLOSED: [2019-11-17 Sun 04:32]
+*** DONE AdvAE
+    CLOSED: [2019-11-17 Sun 04:32]
+*** TODO HGD
 
-** CIFAR10 testing
+** TODO CIFAR10 testing
+*** Dunet
 
-** STARTED GAN
+** TODO GAN
 *** GAN
 *** DefenseGAN
+*** TODO BPDA
+
+** CIFAR-100
+
+** transfer and ensemble
 
 ** attacks
 *** TODO CW
 *** TODO black-box substitute model
 *** TODO BoundaryAttack, BAPP
-*** TODO BPDA
 
 * robust training
-** STARTED cifar10
+** TODO cifar10
 
 *** DONE select the best resnet model
     CLOSED: [2019-11-16 Sat 07:06]
@@ -54,7 +60,8 @@
 
 **** TODO densenet
 
-*** STARTED adv train it
+*** DONE adv train it
+    CLOSED: [2019-11-17 Sun 04:32]
 
 *** mix clean data
 *** dynamic attacking strength
@@ -124,7 +131,7 @@ https://github.com/tensorflow/models/blob/master/official/vision/image_classific
 - metalhead resnet:
   https://github.com/FluxML/Metalhead.jl/blob/master/src/resnet.jl
 - resnet from He: https://github.com/KaimingHe/deep-residual-networks#models
-- deprecated official torch code from FAIR (but I found good)
+- deprecated official torch code from FAIR (but I found it good)
   https://github.com/facebookarchive/fb.resnet.torch
 - wide resnet official:
   https://github.com/szagoruyko/wide-residual-networks/blob/master/models/wide-resnet.lua

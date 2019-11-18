@@ -105,23 +105,51 @@ end
 
 function exp_advae_f0(lr, total_steps)
     expID = "f0-$lr"
-    MNIST_advae_exp_helper(expID, lr, total_steps, 0)
+    MNIST_advae_exp_helper(expID, lr, total_steps, λ=0)
 end
 
 function exp_advae_pretrain(lr, total_steps)
     expID = "pretrain-$lr"
-    MNIST_advae_exp_helper(expID, lr, total_steps, 0, pretrain=true)
+    MNIST_advae_exp_helper(expID, lr, total_steps, λ=0, pretrain=true)
 end
 
 function exp_advae_f1(lr, total_steps)
     expID = "f1-$lr"
-    MNIST_advae_exp_helper(expID, lr, total_steps, 1)
+    MNIST_advae_exp_helper(expID, lr, total_steps, λ=1)
+end
+
+function exp_advae_f01(lr, total_steps)
+    expID = "f01-$lr"
+    MNIST_advae_exp_helper(expID, lr, total_steps, λ=0, γ=1)
+end
+
+function exp_advae_test(lr, total_steps; expID="test-$(now())")
+    @show expID
+    MNIST_advae_exp_helper(expID, lr, total_steps, λ=1, γ=10, β=1)
 end
 
 function test()
+    exp_advae_test(2e-3, 2000, expID="test-2019-11-17T22:46:27.503")
+    exp_advae_test(2e-3, 1000)
+
+    @load "trained/pretrain-MNIST.bson" model
+    # gpu(model)(x)
     exp_advae_f0(1e-3, 2000)
     exp_advae_f0(1e-4, 2000)
     exp_advae_pretrain(1e-4, 2000)
-    exp_advae_pretrain(1e-3, 2000)
+    # this works pretty good. Two things:
+    #
+    # 1. pretraining seems to be important here. I probably want to enable
+    # pretrain by default, that does not hurt.
+    #
+    # 2. TODO IMPORTANT lr decay might help
+    # 3. what is the performance gap (both acc and time) with itadv?
+    exp_advae_pretrain(1e-3, 3000)
+    # surprisingly this does not work smoothly, it struggled until a point clean
+    # acc jumps
     exp_advae_f1(1e-3, 2000)
+    exp_advae_f1(2e-3, 2000)
+
+    # rec loss
+    exp_advae_f01(1e-3, 2000)
 end

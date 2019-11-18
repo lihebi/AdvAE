@@ -87,14 +87,14 @@ function test_CIFAR10_ds()
     ds, test_ds = load_CIFAR10_ds(batch_size=128);
     x, y = next_batch!(ds) |> gpu;
 
-    # model = get_CIFAR_CNN_model()[1:end-1]
-    model = resnet(20)[1:end-1] |> gpu
-    # model = resnet(32)[1:end-1]
+    # model = get_CIFAR_CNN_model()
+    model = resnet(20) |> gpu
+    # model = resnet(32)
     # model = resnet(56)
     # model = resnet(68)
 
-    # model = WRN(28, 10)[1:end-1] |> gpu;
-    model = WRN(16, 4)[1:end-1] |> gpu;
+    # model = WRN(28, 10) |> gpu;
+    model = WRN(16, 4) |> gpu;
 
     model(x)
 
@@ -131,14 +131,88 @@ function evaluate_AE(ae, ds; cnn=nothing)
     sample_and_view(rec, yy, cnn)
 end
 
+function test_CIFAR_ae()
+    ds, test_ds = load_CIFAR10_ds(batch_size=128);
+    x, y = next_batch!(ds) |> gpu;
+    x, y = next_batch!(test_ds) |> gpu;
+
+    # get a pretrained WRN
+    cnn = CIFAR10_pretrained_fn()
+    model = CIFAR10_pretrained_fn()
+
+    accuracy_with_logits(cnn(x), y)
+    accuracy_with_logits(model(x), y)
+    Flux.testmode!(model)
+    Flux.testmode!(model, false)
+    Flux.testmode!(cnn)
+    Flux.testmode!(cnn, false)
+
+    params(cnn[2].μ)
+
+    cnn(x)
+
+    onecold(cpu(cnn(x)))
+
+    model[2].μ
+    cnn[2].μ
+    cnn[2].σ²
+
+    cnn
+
+    train!(cnn, opt, ds)
+
+    @save "test.bson" MMM=cpu(cnn) opt
+    @load "test.bson" MMM
+
+    MMM=gpu(MMM);
+
+    fieldnames(typeof(cnn[5]))
+    cnn[5].norm_layers[1].σ²
+
+    # get the AE
+
+    # ae = cifar10_AE()
+    ae = dunet()
+    encoder, decoder = cifar10_deep_AE()
+
+    ae = Chain(encoder, decoder)
+
+    rx = randn(Float32, 32, 32, 3, 16) |> gpu;
+    size(encoder(rx))
+    size(decoder(encoder(rx)))
+    size(ae(rx))
+
+
+
+    opt = ADAM(1e-3)
+    # train the AE
+    aetrain!(ae, opt, ds)
+
+    evaluate_AE(ae, test_ds, cnn=cnn)
+
+    param_count(ae)
+    param_count(cnn)
+end
+
 function test_AE()
     ds, test_ds = load_MNIST_ds(batch_size=50);
     x, y = next_batch!(ds) |> gpu;
 
-    cnn = get_Madry_model()[1:end-1]
-    cnn(x)
+    cnn = get_Madry_model()
+    @show size(cnn(x))
 
     opt = ADAM(1e-3)
+
+    Flux.testmode!(cnn, false)
+    cnn = MNIST_pretrained_fn()
+
+    accuracy_with_logits(cnn(x), y)
+
+    cnn(x)
+
+    size(cnn[1](x))
+
+    typeof(cnn)
 
     # TODO schedule lr simply by setting field of opt, and maintain the
     # state. FIXME But it seems that the state is maintained by a dict with key

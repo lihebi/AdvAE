@@ -67,6 +67,10 @@ function myPGD(model, x, y;
     return x_adv
 end
 
+function attack_FGSM(model, x, y)
+    x_adv = myFGSM(model, x, y; ϵ = 0.3)
+end
+
 function attack_PGD(model, x, y)
     x_adv = myPGD(model, x, y;
                   ϵ = 0.3,
@@ -74,17 +78,6 @@ function attack_PGD(model, x, y)
                   iters = 40)
 end
 
-function CIFAR10_PGD_7(model, x, y)
-    # FIXME the model contains BN layers, and is set to test mode during
-    # testing. However, I still need to perform attack during testing, which
-    # requires gradient. But testing mode model cannot take gradient?
-    myPGD(model, x, y;
-          ϵ = 8/255,
-          step_size = 2/255,
-          iters = 7)
-end
-
-# cifar: 8.0/255, 7, 2./255
 function attack_PGD_k(k)
     (model, x, y) -> begin
         x_adv = myPGD(model, x, y;
@@ -94,9 +87,15 @@ function attack_PGD_k(k)
     end
 end
 
-
-function attack_FGSM(model, x, y)
-    x_adv = myFGSM(model, x, y; ϵ = 0.3)
+# cifar: 8.0/255, 7, 2./255
+function CIFAR10_PGD_7(model, x, y)
+    # FIXME the model contains BN layers, and is set to test mode during
+    # testing. However, I still need to perform attack during testing, which
+    # requires gradient. But testing mode model cannot take gradient?
+    myPGD(model, x, y;
+          ϵ = 8/255,
+          step_size = 2/255,
+          iters = 7)
 end
 
 # something like tf.keras.metrics.Mean
@@ -227,25 +226,34 @@ include("model.jl")
 
 function create_save_cb(model_file, model; save_steps)
     function save_cb(step)
-        # FIXME as config, should be Integer multiple of print_steps
-        # save_steps = 40
         if step % save_steps == 0
             @info "saving .."
             # FIXME opt cannot be saved
             # FIXME logger cannot be saved
-            #
-            # FIXME model cannot be easily saved and loaded, weights can, but
-            # needs to get rid of CuArrays and TrackedArrays
-            @time @save model_file weights=Tracker.data.(Flux.params(cpu(model))) from_steps=step
+            @time @save model_file model=cpu(model) from_steps=step
         end
     end
 end
 
-function create_adv_test_cb(model, test_ds; test_per_steps, test_run_steps, attack_fn, logger=nothing)
+function create_advae_test_cb(ae, cnn, test_ds; kwargs...)
+    testmode_fn() = Flux.testmode!(ae)
+    testmode_exit_fn() = Flux.testmode!(ae, false)
+    create_adv_test_cb_impl(Chain(ae, cnn), test_ds,
+                            testmode_fn, testmode_exit_fn;
+                            kwargs...)
+end
+
+function create_adv_test_cb(model, test_ds; kwargs...)
+    testmode_fn() = Flux.testmode!(model)
+    testmode_exit_fn() = Flux.testmode!(model, false)
+    create_adv_test_cb_impl(model, test_ds,
+                            testmode_fn, testmode_exit_fn;
+                            kwargs...)
+end
+
+function create_adv_test_cb_impl(model, test_ds, testmode_fn, testmode_exit_fn;
+                                 test_per_steps, test_run_steps, attack_fn, logger=nothing)
     function test_cb(step)
-        # test_per_steps = 100
-        # I'm only testing a fraction of data
-        # test_run_steps = 20
         if step % test_per_steps == 0
             println()
             @info "testing for $test_run_steps steps .."
@@ -254,20 +262,7 @@ function create_adv_test_cb(model, test_ds; test_per_steps, test_run_steps, atta
             m_advloss = MeanMetric()
             m_advacc = MeanMetric()
 
-            # into testing mode
-            #
-            # FIXME IMPORTANT CIFAR using BN when setting this, it crashes while
-            # attacker is taking gradient
-            #
-            # If this is not set, two consequences:
-            #
-            # 1. testing statistics will be accumulated, which is OK, won't
-            # affect training acc
-            #
-            # 2. only current batch of testing statistic is used for testing,
-            # which might reduce test acc
-            #
-            Flux.testmode!(model)
+            testmode_fn()
             @showprogress 0.1 "Inner testing..." for i in 1:test_run_steps
                 x, y = next_batch!(test_ds) |> gpu
                 # this computation won't affect model parameter gradients
@@ -281,8 +276,8 @@ function create_adv_test_cb(model, test_ds; test_per_steps, test_run_steps, atta
                 add!(m_cleanloss, clean_loss.data)
                 add!(m_cleanacc, accuracy_with_logits(clean_logits.data, y))
             end
-            # back into training node
-            Flux.testmode!(model, false)
+            testmode_exit_fn()
+
             natloss = get!(m_cleanloss)
             advloss = get!(m_advloss)
             natacc = get!(m_cleanacc)
@@ -304,7 +299,6 @@ end
 function create_test_cb(model, test_ds; logger=nothing)
     function test_cb(step)
         test_per_steps = 100
-        # I'm only testing a fraction of data
         test_run_steps = 20
 
         if step % test_per_steps == 0
@@ -342,8 +336,6 @@ function create_test_cb(model, test_ds; logger=nothing)
     end
 end
 
-
-
 ##############################
 ## AE train
 ##############################
@@ -379,7 +371,9 @@ end
 function advae_train!(ae, cnn, opt, attack_fn, ds;
                       train_steps=ds.nbatch,
                       from_steps=1,
+                      β=1,
                       λ=0,
+                      γ=0,
                       print_steps=50,
                       logger=nothing,
                       save_cb=(i)->nothing,
@@ -391,11 +385,9 @@ function advae_train!(ae, cnn, opt, attack_fn, ds;
     m_cleanacc = MeanMetric()
     m_advloss = MeanMetric()
     m_advacc = MeanMetric()
+    m_recloss = MeanMetric()
 
     full_model = Chain(ae, cnn)
-    # cnn is always in test mode, even in training. In testing, the whole model
-    # is set to testing mode.
-    Flux.testmode!(cnn)
 
     @info "Training for $train_steps steps, printing every $print_steps steps .."
     @showprogress 0.1 "Training..." for step in from_steps:train_steps
@@ -410,21 +402,15 @@ function advae_train!(ae, cnn, opt, attack_fn, ds;
             clean_logits = full_model(x)
             clean_loss = my_xent(clean_logits, y)
 
-            # DEBUG
             rec_loss = my_mse(ae(x), x)
-            # rec_loss = my_mse(rec, x_adv)
 
             add!(m_advloss, adv_loss.data)
             add!(m_advacc, accuracy_with_logits(adv_logits.data, y))
             add!(m_cleanloss, clean_loss.data)
             add!(m_cleanacc, accuracy_with_logits(clean_logits.data, y))
+            add!(m_recloss, rec_loss.data)
 
-            # FIXME what should be the loss?
-            # l = adv_loss + rec_loss
-            # l = rec_loss
-            # l = clean_loss
-            l = adv_loss + λ * clean_loss
-            # l = adv_loss
+            l = adv_loss + λ * clean_loss + γ * rec_loss
         end
         # FIXME clean up cnn parameter gradients?
         Flux.Tracker.update!(opt, ps, gs)
@@ -433,12 +419,14 @@ function advae_train!(ae, cnn, opt, attack_fn, ds;
             println()
             natloss = get!(m_cleanloss)
             advloss = get!(m_advloss)
+            recloss = get!(m_recloss)
             natacc = get!(m_cleanacc)
             advacc = get!(m_advacc)
-            @info "data" natloss advloss natacc advacc
+            @info "data" natloss advloss natacc advacc recloss
             if typeof(logger) <: TBLogger
                 log_value(logger, "loss/nat_loss", natloss, step=step)
                 log_value(logger, "loss/adv_loss", advloss, step=step)
+                log_value(logger, "loss/rec_loss", recloss, step=step)
                 log_value(logger, "acc/nat_acc", natacc, step=step)
                 log_value(logger, "acc/adv_acc", advacc, step=step)
             end

@@ -37,12 +37,89 @@ using Base.Iterators: partition
 # for padarray and Fill
 using Images
 
-using EmacsREPL
-
 export load_MNIST, load_CIFAR10
 
 
 using MLDatasets
+
+import Base.show
+import Base.display
+using FileIO
+using FileIO: @format_str
+using Images: channelview, colorview, RGB
+
+struct MyImage
+    arr::AbstractArray
+end
+
+"""Write a 3-channel array to PNG stream
+
+"""
+function Base.show(io::IO, ::MIME"image/png", x::MyImage)
+    img = cpu(x.arr)
+    size(img)[3] in [1, 3] || error("Unsupported channel size: ", size(img)[3])
+    if size(img)[3] == 3
+        getRGB(X) = colorview(RGB, permutedims(X, (3,1,2)))
+        img = getRGB(img)
+    end
+    FileIO.save(FileIO.Stream(format"PNG", io), img)
+    # FileIO.save(File(format"PNG", path * ".png"), img)
+end
+
+struct EmacsDisplay <: AbstractDisplay end
+
+"""Display a PNG by writing it to tmp file and show the filename. The filename
+would be replaced by an Emacs plugin.
+
+"""
+function Base.display(d::EmacsDisplay, mime::MIME"image/png", x)
+    # path, io = Base.Filesystem.mktemp()
+    # path * ".png"
+    path = tempname() * ".png"
+    open(path, "w") do io
+        show(io, mime, x)
+    end
+
+    println("$(path)")
+    println("#<Image: $(path)>")
+end
+function display(d::EmacsDisplay, x)
+    display(d, "image/png", x)
+end
+
+function register_EmacsDisplay_backend()
+    for d in Base.Multimedia.displays
+        if typeof(d) <: EmacsDisplay
+            return
+        end
+    end
+    # register as backend
+    pushdisplay(EmacsDisplay())
+    # popdisplay()
+    nothing
+end
+
+register_EmacsDisplay_backend()
+
+function test_display()
+    ds, test_ds = load_CIFAR10_ds(batch_size=128);
+    ds, test_ds = load_MNIST_ds(batch_size=128);
+    x, y = next_batch!(ds) |> gpu;
+    img = x[:,:,:,1];
+
+    # display
+    displayable("image/png")
+    display(MyImage(img))
+
+    # explicit on a (new) EmacsDisplay
+    displayable(EmacsDisplay(), "image/png")
+    display(EmacsDisplay(), MyImage(img));
+
+    # showable
+    Base.showable(MIME("image/png"), MyImage(img))
+    Base.showable(MIME("image/png"), img)
+end
+
 
 function test()
     train_x, train_y = MLDatasets.MNIST.traindata();
@@ -264,5 +341,3 @@ function sample_and_view(x, y=nothing, model=nothing)
     end
     nothing
 end
-
-

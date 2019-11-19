@@ -13,8 +13,6 @@ using Base.Iterators: partition
 
 using CuArrays
 
-using EmacsREPL
-
 include("data.jl")
 include("model.jl")
 include("train.jl")
@@ -247,4 +245,19 @@ function test_AE()
     evaluate(Chain(ae, cnn), test_ds)
     evaluate(Chain(ae, cnn), test_ds, attack_fn=attack_FGSM)
     evaluate(Chain(ae, cnn), test_ds, attack_fn=attack_PGD_k(40))
+end
+
+function test_log_image()
+    logger = TBLogger("tensorboard_logs/test/image", tb_append, min_level=Logging.Info)
+
+    ds, test_ds = load_CIFAR10_ds(batch_size=128);
+    x, y = next_batch!(ds) |> gpu;
+    img = x[:,:,:,1];
+
+    # CAUTION if pass in raw img, the error message contains the whole array,
+    # which is very slow
+    showable("image/png", MyImage(img))
+    log_image(logger, "testimage", MyImage(img));
+
+    display(MyImage(img))
 end

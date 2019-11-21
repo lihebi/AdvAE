@@ -54,6 +54,23 @@ function MNIST_exp_helper(expID, lr, total_steps, λ; pretrain=false)
                    attack_fn=attack_PGD_k(40))
 end
 
+function MNIST_free_exp_helper(expID, lr, total_steps)
+    expID = "MNIST-free/" * expID
+
+    model_fn = () -> get_Madry_model()
+    ds_fn = () -> load_MNIST_ds(batch_size=50)
+    free_exp_helper(expID, lr, total_steps, 0.3,
+                    model_fn, ds_fn,
+                    (a)->a,
+                    print_steps=20, save_steps=40,
+                    test_per_steps=100, test_run_steps=20,
+                    test_attack_fn=attack_PGD_k(40))
+end
+
+function exp_free()
+    MNIST_free_exp_helper("test-$(now)", 1e-3, 1000)
+end
+
 
 function MNIST_dyattack_exp_helper(expID, lr, attack_fn, total_steps)
     # This put log and saved model into MNIST subfolder

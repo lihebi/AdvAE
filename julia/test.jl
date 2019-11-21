@@ -116,6 +116,19 @@ function test_CIFAR10_ds()
 
 end
 
+function test_free_train()
+    ds, test_ds = load_MNIST_ds(batch_size=50);
+    x, y = next_batch!(ds) |> gpu;
+
+    model = get_Madry_model()
+    model(x)
+    opt = ADAM(1e-3)
+
+    size(gpu(zeros(size(x)...)) + x)
+
+    free_train!(model, opt, ds, 0.3)
+end
+
 
 
 function evaluate_AE(ae, ds; cnn=nothing)
@@ -209,8 +222,6 @@ function test_AE()
     cnn(x)
 
     size(cnn[1](x))
-
-    typeof(cnn)
 
     # TODO schedule lr simply by setting field of opt, and maintain the
     # state. FIXME But it seems that the state is maintained by a dict with key

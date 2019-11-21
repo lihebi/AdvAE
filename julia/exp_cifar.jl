@@ -72,6 +72,31 @@ function CIFAR10_exp_helper(expID, lr, total_steps, λ; pretrain=false)
                    attack_fn=attack_CIFAR10_PGD_k(7))
 end
 
+function CIFAR10_free_exp_helper(expID, lr, total_steps)
+    expID = "CIFAR10-free/" * expID
+    @show expID
+
+    model_fn = () -> WRN(16,4)
+    ds_fn = () -> load_CIFAR10_ds(batch_size=50)
+    free_exp_helper(expID, lr, total_steps, 8/255,
+                    model_fn, ds_fn,
+                    (a)->a,
+                    print_steps=2, save_steps=20,
+                    test_per_steps=20, test_run_steps=2,
+                    test_attack_fn=attack_CIFAR10_PGD_k(7))
+end
+
+function exp_warmup()
+    expID="warmup/test-$(now())"
+    CIFAR10_exp_helper(expID, 1e-3, 1, 0)
+end
+
+function exp_free()
+    # TODO add schedule
+    CIFAR10_free_exp_helper("test-$(now())", 1e-3, 5000)
+end
+
+
 
 function CIFAR10_dyattack_exp_helper(expID, lr, attack_fn, total_steps; pretrain)
     # This put log and saved model into MNIST subfolder

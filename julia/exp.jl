@@ -186,3 +186,48 @@ function advae_exp_helper(expID, lr, total_steps,
 
 end
 
+
+function free_exp_helper(expID, lr, total_steps, ε,
+                         model_fn, ds_fn, pretrain_fn;
+                         print_steps, save_steps,
+                         test_per_steps, test_run_steps,
+                         test_attack_fn=attack_fn)
+    model_file = "trained/$expID.bson"
+    mkpath(dirname(model_file))
+
+    ds, test_ds = ds_fn();
+    x, y = next_batch!(ds) |> gpu;
+
+    model, from_steps = maybe_load(model_file, model_fn)
+    if from_steps == 1
+        model = pretrain_fn(model)
+    end
+
+    @info "Progress" total_steps from_steps
+    # stops here to avoid model warming up overhead
+    if from_steps > total_steps return end
+
+    logger = TBLogger("tensorboard_logs/$expID/train", tb_append, min_level=Logging.Info)
+    test_logger = TBLogger("tensorboard_logs/$expID/test", tb_append, min_level=Logging.Info)
+
+    # warm up the model
+    model(x)
+
+    # FIXME opt states
+    opt = ADAM(lr);
+
+    save_cb = create_save_cb(model_file, model, save_steps=save_steps)
+    test_cb = create_adv_test_cb(model, test_ds,
+                                 logger=test_logger,
+                                 attack_fn=test_attack_fn,
+                                 test_per_steps=test_per_steps, test_run_steps=test_run_steps)
+
+    free_train!(model, opt, ds, ε,
+                train_steps=total_steps,
+                from_steps=from_steps,
+                print_steps=print_steps,
+                logger=logger,
+                save_cb=save_cb,
+                test_cb=test_cb)
+
+end

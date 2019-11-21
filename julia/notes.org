@@ -46,8 +46,40 @@
 *** TODO BoundaryAttack, BAPP
 
 * robust training
+** robust way of recording training running time
+- maybe run julia script in terminal and overnight to remove env noise
+- run more testing steps to obtain stable testing acc
+- use steps as a measure?
+
+** run free and cifar_challenge to their best parameter
+- to verify their results
+- to see when the low nat acc is fixed in free train
+  - IMPORTANT this might be the most significant advantage of dy-attack: nat acc
+    converges early.
+  - This means the convergence of free training is way later in training
+
 ** TODO compare with free train
-** TODO cifar10
+https://github.com/ashafahi/free_adv_train/
+
+So how to implement it?
+
+#+begin_example julia
+x, y = next_batch(ds)
+for i in 1:replay_m
+  gs = gradient(ps, px) do
+    logits = model(x+δ)
+    loss = xent(logits, y)
+  end
+  gm = gs[θ]
+  gx = gs[x]
+  update!(opt, gm, ps)
+  δ += ε * sign(gx)
+  δ = clamp.(δ, -ε, ε)
+end
+#+end_example
+** TODO CIFAR-100
+
+** TODO CIFAR-10
 
 *** DONE select the best resnet model
     CLOSED: [2019-11-16 Sat 07:06]

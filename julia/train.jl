@@ -192,6 +192,12 @@ function advtrain!(model, opt, attack_fn, ds;
             adv_logits = model(x_adv)
             adv_loss = my_xent(adv_logits, y)
 
+            # TODO add l2 regularizers
+            #
+            # l1(x) = sum(abs.(x))
+            # l2(x) = sum(x.^2)
+            # l2_decay = sum(l2, weight_params(model))
+
             clean_logits = model(x)
             clean_loss = my_xent(clean_logits, y)
 
@@ -224,7 +230,63 @@ function advtrain!(model, opt, attack_fn, ds;
     end
 end
 
-include("model.jl")
+function free_train!(model, opt, ds, ε;
+                     train_steps=ds.nbatch,
+                     from_steps=1,
+                     print_steps=50,
+                     logger=nothing,
+                     λ = 0,
+                     replay_m=8,
+                     save_cb=(i)->nothing,
+                     test_cb=(i)->nothing)
+    ps=Flux.params(model)
+
+    m_cleanloss = MeanMetric()
+    m_cleanacc = MeanMetric()
+    m_advloss = MeanMetric()
+    m_advacc = MeanMetric()
+    @info "Training for $train_steps steps, printing every $print_steps steps .."
+    @showprogress 0.1 "Training..." for step in from_steps:train_steps
+        x, y = next_batch!(ds) |> gpu
+
+        # comment out to use "warm up"
+        δ = gpu(zeros(size(x)...))
+        # FIXME which is one step?
+        for i in 1:replay_m
+            xx = x + δ
+            px = Flux.param(xx)
+            gs = Flux.Tracker.gradient(ps) do
+                logits = model(px)
+                loss = my_xent(logits, y)
+                # record statistics
+                add!(m_advloss, loss.data)
+                add!(m_advacc, accuracy_with_logits(logits.data, y))
+                loss
+            end
+            Flux.Tracker.update!(opt, ps, gs)
+            δ += Float32(ε) * sign.(px.grad)
+            δ = clamp.(δ, -Float32(ε), Float32(ε))
+        end
+
+        if step % print_steps == 0
+            println()
+            natloss = get!(m_cleanloss)
+            advloss = get!(m_advloss)
+            natacc = get!(m_cleanacc)
+            advacc = get!(m_advacc)
+            @info "data" natloss advloss natacc advacc
+            # TODO log training time
+            if typeof(logger) <: TBLogger
+                log_value(logger, "loss/nat_loss", natloss, step=step)
+                log_value(logger, "loss/adv_loss", advloss, step=step)
+                log_value(logger, "acc/nat_acc", natacc, step=step)
+                log_value(logger, "acc/adv_acc", advacc, step=step)
+            end
+        end
+        test_cb(step)
+        save_cb(step)
+    end
+end
 
 function create_save_cb(model_file, model; save_steps)
     function save_cb(step)

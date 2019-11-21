@@ -60,6 +60,7 @@ end
 
 function CIFAR10_exp_helper(expID, lr, total_steps, λ; pretrain=false)
     expID = "CIFAR10/" * expID
+    @show expID
 
     model_fn = () -> WRN(16,4)
     ds_fn = () -> load_CIFAR10_ds(batch_size=128)
@@ -124,10 +125,13 @@ function exp_dyattack(schedule; pretrain=false)
     @show expID
     for m in schedule
         @show m
+        k = m[1][1]
+        lr = m[1][2]
+        steps = m[2]
         # TODO not only k, but (HEBI: also ε and η)
-        CIFAR10_dyattack_exp_helper(expID, 1e-3,
-                                    attack_CIFAR10_PGD_k(m[1]),
-                                    m[2],
+        CIFAR10_dyattack_exp_helper(expID, lr,
+                                    attack_CIFAR10_PGD_k(k),
+                                    steps,
                                     pretrain=pretrain)
     end
 end
@@ -155,14 +159,32 @@ function exp_lrdecay(schedule)
 end
 
 function tmp()
+    exp_warmup()
     # dyattack
     exp_dyattack((0=>200, 1=>400, 2=>600, 3=>800, 4=>1000, 5=>1200, 6=>1400, 7=>2000))
     exp_dyattack((0=>200, 1=>400, 2=>600, 3=>800, 4=>1000, 5=>1200, 6=>1400, 7=>2000), pretrain=true)
     exp_dyattack((1=>500, 2=>1000, 3=>1500, 4=>2000, 5=>2500, 6=>3000, 7=>4000), pretrain=true)
-    # TODO (HEBI: add lr schedule)
     exp_dyattack((1=>1000, 2=>2000, 3=>3000, 4=>4000, 5=>5000, 6=>6000, 7=>7000), pretrain=true)
     # dymix
     exp_dymix((5=>1000, 4=>2000, 3=>3000, 2=>4000, 1=>5000, 0=>6000))
+    exp_dyattack((0=>2000,
+                  1=>3000,
+                  2=>4000,
+                  3=>5000,
+                  4=>6000,
+                  7=>8000))
+    # TODO (HEBI: add lr schedule)
+    exp_dyattack(((1,1e-3)=>1000,
+                  (1,2e-4)=>2000,
+                  (2,1e-3)=>3000,
+                  (2,2e-4)=>4000,
+                  (3,1e-3)=>5000,
+                  (3,2e-4)=>6000,
+                  (4,1e-3)=>7000,
+                  (4,2e-4)=>8000,
+                  (7,1e-3)=>12000,
+                  (7,2e-4)=>16000),
+                 pretrain=true)
     # itadv baseline
     #
     # CIFAR10_exp_helper("baseline:itadv-1e-3", 1e-3, 2000, 0)
@@ -175,6 +197,16 @@ function tmp()
     exp_lrdecay((1e-3=>10000, 2e-4=>15000, 5e-5=>20000))
 end
 
+
+function main()
+    # the exact learning rate schedule
+    # [[0, 0.1], [40000, 0.01], [60000, 0.001]], 80000
+    # 0.1 / 255
+    # FIXME weight decay, 0.0002
+    exp_lrdecay((4e-4=>40000,
+                 4e-5=>60000,
+                 4e-6=>80000))
+end
 
 # TODO log decoded images to tensorboard
 # TODO record rec loss

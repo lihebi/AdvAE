@@ -272,3 +272,156 @@ function test_log_image()
 
     display(MyImage(img))
 end
+
+
+function sha_arr(x)
+    # assuming 3 channel images in a batch
+    res = map(collect(1:size(x)[end])) do i
+        img = x[:,:,:,i]
+        bytes2hex(sha256(repr(img)))
+    end
+    res
+end
+
+function get_wrong_sha(model, ds)
+    # evaluate model, and get the wrong sample shas
+    res = []
+    @showprogress for i in 1:ds.nbatch
+        x, y = next_batch!(ds) |> gpu
+        logits = model(x)
+        wrong_idx = onecold(cpu(logits)) .!= onecold(cpu(y))
+        if length(wrong_idx) > 0
+            # get sha
+            shas = sha_arr(cpu(x)[:,:,:,wrong_idx])
+            push!(res, shas...)
+        end
+    end
+    res
+end
+
+function load_trained_model(file)
+    @load file model
+    return gpu(model)
+end
+
+# https://github.com/FluxML/Flux.jl/issues/160
+function weight_params(m::Chain, ps=Flux.Params())
+    map((l)->weight_params(l, ps), m.layers)
+    ps
+end
+weight_params(m::Dense, ps=Flux.Params()) = push!(ps, m.W)
+weight_params(m::Conv, ps=Flux.Params()) = push!(ps, m.weight)
+weight_params(m::ConvTranspose, ps=Flux.Params()) = push!(ps, m.weight)
+weight_params(m, ps=Flux.Params()) = ps
+
+function test_weight_params()
+    # get model
+    weight_params(model)
+end
+
+
+function test_boundary()
+    # test whether all the nail households
+    model = CIFAR10_pretrained_fn()
+    ds, test_ds = load_CIFAR10_ds(batch_size=128);
+
+    itM = load_trained_model(
+        "trained/CIFAR10/itadv-schedule/(0.0004=>40000,4.0e-5=>60000,4.0e-6=>80000).bson")
+    dyM = load_trained_model(
+        "trained/CIFAR10-dyattack/(0=>2000,1=>3000,2=>4000,3=>5000,4=>6000,7=>8000).bson")
+    freeM = load_trained_model("trained/CIFAR10-free/test-2019-11-18T16:57:55.947.bson")
+
+    sha_it = get_wrong_sha(itM, test_ds);
+    sha_dy = get_wrong_sha(dyM, test_ds);
+    sha_free = get_wrong_sha(freeM, test_ds);
+
+    size(sha_it)
+    size(unique(sha_it))
+    @show length(sha_it) length(sha_dy) length(sha_free)
+    @show length(unique(sha_it)) length(unique(sha_dy)) length(unique(sha_free))
+    @show size(intersect(sha_it, sha_dy, sha_free))
+    @show size(intersect(sha_it, sha_dy, sha_free))
+
+    ps = params(model);
+
+    model[1].weight in ps
+
+
+    model
+
+    Flux.mapparams(model) do p
+        @show typeof(p)
+        p
+    end
+
+
+    model(x)
+    typeof(ps)
+    typeof(keys(ps.params.dict))
+    keytype(ps.params.dict)
+
+    shas[1]
+    size(shas)
+    size(unique(shas))
+    size(unique(shas2))
+    # overlap
+    size(intersect(shas, shas2))
+end
+
+function test()
+    ds, test_ds = load_CIFAR10_ds(batch_size=128);
+    x, y = next_batch!(ds) |> gpu;
+    x, y = next_batch!(test_ds) |> gpu;
+    model = load()
+    model[2].μ
+    # Flux.testmode!(model, false)
+    model(x)
+
+    # hash the x
+    img = x[:,:,:,1];
+    size(img)
+
+    # using SHA
+    @time bytes2hex(sha256("test"))
+
+    @time bytes2hex(sha256(repr(img)))
+
+    cat(res..., dims=4)
+    size(res)
+    res[1]
+    size(unique(res))
+    res[1]
+
+    ss = map(x) do img
+        bytes2hex(sha256(repr(img)))
+    end
+
+    for i in 1:10
+        i
+    end
+
+    accuracy_with_logits(model(x), y)
+
+    sum(onecold(cpu(model(x))) .== onecold(cpu(y)))
+
+
+    adv = attack_CIFAR10_PGD_k(7)(model, x, y);
+
+    view_preds(model, x, y)
+    view_preds(model, adv, y)
+
+    sample_and_view(wrong, cpu(y)[])
+    sample_and_view(right)
+    displayable("image/png")
+end
+
+function view_preds(model, x, y)
+    @show accuracy_with_logits(model(x), y)
+    right_idx = onecold(cpu(model(x))) .== onecold(cpu(y));
+    wrong_idx = onecold(cpu(model(x))) .!= onecold(cpu(y));
+    @info "right predictions:"
+    sample_and_view(cpu(x)[:,:,:,right_idx], cpu(y)[:,right_idx], model)
+    @info "wrong predictions:"
+    sample_and_view(cpu(x)[:,:,:,wrong_idx], cpu(y)[:,wrong_idx], model)
+    nothing
+end

@@ -33,6 +33,8 @@ Pkg.add("MLDatasets")
 Pkg.add("TensorBoardLogger")
 Pkg.add("LoggingExtras")
 Pkg.add("ProgressMeter")
+Pkg.add("Plots")
+Pkg.add("FileIO")
 # for showing images
 Pkg.add("ImageMagick")
 

@@ -329,14 +329,16 @@ function sample_and_view(x, y=nothing, model=nothing)
         error("Image size $(size(x)[1]) not correct size. Currently support 28 or 32.")
     num = min(size(x)[4], 10)
     @info "Showing $num images .."
+    if num == 0 return end
     imgs = cpu(hcat([x[:,:,:,i] for i in 1:num]...))
-    viewrepl(imgs)
+    # viewrepl(imgs)
+    display(MyImage(imgs))
     if y != nothing
         labels = onecold(cpu(y[:,1:num]), 0:9)
         @show labels
     end
     if model != nothing
-        preds = onecold(cpu(model(x)[:,1:num]), 0:9)
+        preds = onecold(cpu(model(gpu(x))[:,1:num]), 0:9)
         @show preds
     end
     nothing

@@ -5,8 +5,9 @@ protect a vulnerable base classifier.
 
 The algorithm is implemented in four frameworks, source code can be found in the
 following folders:
-
-- [[file:tf1][tf1]]: using tensorflow v1 framework, most complete implementation
+- [[file:python][python]]: using tensorflow v1 and keras, most complete
+  implementation including BPDA
+# - [[file:tf1][tf1]]: using tensorflow v1
 - [[file:tf2][tf2]]: using tensorflow v2
 - [[file:pytorch][pytorch]]: using pytorch
 - [[file:julia][julia]]: using Julia and Flux, best code quality, recommanded

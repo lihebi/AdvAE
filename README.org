@@ -1,13 +1,14 @@
 #+TITLE: Adversarially trained auto-encoders
 
-This code is not release-ready, can be a bit messy. See AdvAE.org for
-more detailed notes about this paper.
+We propose to *iteratively* adversarially train an *external* auto-encoder to
+protect a vulnerable base classifier.
 
-The major python files are:
+The algorithm is implemented in four frameworks, source code can be found in the
+following folders:
 
-- main.py
-- models.py
-- ae_models.py
-- cnn_models.py
+- [[file:tf1][tf1]]: using tensorflow v1 framework, most complete implementation
+- [[file:tf2][tf2]]: using tensorflow v2
+- [[file:pytorch][pytorch]]: using pytorch
+- [[file:julia][julia]]: using Julia and Flux, best code quality, recommanded
 
-
+License of code: MIT
